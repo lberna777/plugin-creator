@@ -1,0 +1,27 @@
+{
+  "_comment": "Esempio. input = sorgente PNG-alpha @2x; output = asset finale embeddato in BinaryData. 'expect' = dimensioni attese (assert anti-regresso).",
+  "assets": [
+    {
+      "input": "../template/source/assets/src/knob_src.png",
+      "ops": ["autocrop", "rotate_to_top", "square"],
+      "output": "../template/source/assets/knob.png",
+      "expect": [256, 256]
+    },
+    {
+      "input": "../template/source/assets/src/fader_cap_src.png",
+      "ops": ["autocrop"],
+      "output": "../template/source/assets/fader_cap.png"
+    },
+    {
+      "input": "../template/source/assets/src/switch_on_src.png",
+      "ops": ["autocrop"],
+      "output": "../template/source/assets/switch_on.png"
+    },
+    {
+      "input": "../template/source/assets/src/background_src.png",
+      "expect_alpha": false,
+      "ops": [],
+      "output": "../template/source/assets/background.png"
+    }
+  ]
+}
