@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://myplugins.com/vocal-forge/intent.schema.json",
+  "title": "VOCAL FORGE — Intent",
+  "description": "Il testo dell'utente interpretato in assi numerici. Le regole leggono SOLO questo, mai il testo grezzo.",
+  "type": "object",
+  "required": ["schema_version", "prompt", "axes", "pitch_class", "delivery", "loudness_target_lufs", "unknown_terms", "matched_terms"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "prompt": { "type": "string", "description": "Il testo originale, non normalizzato." },
+    "language_hint": { "type": "string", "enum": ["it", "en", "mixed", "unknown"] },
+    "genre": { "type": ["string", "null"], "description": "Genere riconosciuto (chiave di lexicon.genre) o null." },
+    "axes": {
+      "type": "object",
+      "required": ["brightness", "weight", "aggression", "density", "character", "intimacy", "cleanliness", "vintage", "sibilance_control"],
+      "additionalProperties": false,
+      "properties": {
+        "brightness":        { "type": "number", "minimum": -1, "maximum": 1 },
+        "weight":            { "type": "number", "minimum": -1, "maximum": 1 },
+        "aggression":        { "type": "number", "minimum": -1, "maximum": 1 },
+        "density":           { "type": "number", "minimum": 0,  "maximum": 1 },
+        "character":         { "type": "number", "minimum": 0,  "maximum": 1 },
+        "intimacy":          { "type": "number", "minimum": -1, "maximum": 1 },
+        "cleanliness":       { "type": "number", "minimum": 0,  "maximum": 1 },
+        "vintage":           { "type": "number", "minimum": 0,  "maximum": 1 },
+        "sibilance_control": { "type": "number", "minimum": 0,  "maximum": 1 }
+      }
+    },
+    "pitch_class": { "type": "string", "enum": ["low", "mid", "high"] },
+    "delivery": { "type": "string", "enum": ["spoken", "rapped", "sung", "screamed", "whispered"] },
+    "loudness_target_lufs": { "type": "number", "minimum": -30, "maximum": -5 },
+    "matched_terms": {
+      "type": "array",
+      "description": "Termini riconosciuti, con il contributo applicato. Serve alla UI per spiegare.",
+      "items": {
+        "type": "object",
+        "required": ["term", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "term":     { "type": "string" },
+          "kind":     { "type": "string", "enum": ["genre", "descriptor", "delivery", "pitch", "usage"] },
+          "negated":  { "type": "boolean" },
+          "scale":    { "type": "number" },
+          "applied":  { "type": "object", "additionalProperties": { "type": "number" } }
+        }
+      }
+    },
+    "unknown_terms": {
+      "type": "array",
+      "description": "Termini non nel vocabolario. La UI li dichiara: non si inventa un intento.",
+      "items": { "type": "string" }
+    }
+  }
+}

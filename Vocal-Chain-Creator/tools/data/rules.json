@@ -1,0 +1,342 @@
+{
+  "version": "1.0.0",
+  "notes": "TUTTI i numeri del dominio stanno qui. Il codice non contiene valori DSP. Le espressioni sono valutate su un contesto piatto (assi + profilo di sorgente) con funzioni: clamp, min, max, abs, round, lerp, pos, neg.",
+
+  "intent_defaults": {
+    "axes": {
+      "brightness": 0.0, "weight": 0.0, "aggression": 0.0, "density": 0.35,
+      "character": 0.15, "intimacy": 0.0, "cleanliness": 0.45, "vintage": 0.0,
+      "sibilance_control": 0.45
+    },
+    "pitch_class": "mid",
+    "delivery": "sung",
+    "loudness_target_lufs": -14.0
+  },
+
+  "axis_ranges": {
+    "brightness": [-1, 1], "weight": [-1, 1], "aggression": [-1, 1], "density": [0, 1],
+    "character": [0, 1], "intimacy": [-1, 1], "cleanliness": [0, 1], "vintage": [0, 1],
+    "sibilance_control": [0, 1]
+  },
+
+  "modifiers": {
+    "negation": ["non", "no", "meno", "senza", "not", "less", "without", "nessun", "nessuna", "niente"],
+    "intensifier": { "terms": ["molto", "super", "tanto", "parecchio", "troppo", "very", "really", "extremely", "iper", "ultra"], "scale": 1.5 },
+    "diminisher": { "terms": ["poco", "leggermente", "un po", "appena", "slightly", "a bit", "lieve"], "scale": 0.5 },
+    "window": 3
+  },
+
+  "io_defaults": { "declared_latency_ms": 2.0, "true_peak_ceiling_dbfs": -1.0 },
+
+  "pitch_factors": { "low": 0.85, "mid": 1.0, "high": 1.15 },
+
+  "lexicon": {
+    "genre": {
+      "trap":      { "aliases": ["trap", "drill"], "axes": { "aggression": 0.5, "density": 0.6, "character": 0.4, "brightness": 0.2, "sibilance_control": 0.15 }, "loudness_target_lufs": -9 },
+      "rap":       { "aliases": ["rap", "hip hop", "hiphop", "hip-hop", "boom bap"], "delivery": "rapped", "axes": { "aggression": 0.35, "density": 0.55, "character": 0.3, "intimacy": 0.2 }, "loudness_target_lufs": -10 },
+      "pop":       { "aliases": ["pop", "mainstream"], "axes": { "brightness": 0.35, "density": 0.55, "character": 0.25, "cleanliness": 0.2 }, "loudness_target_lufs": -11 },
+      "rnb":       { "aliases": ["rnb", "r&b", "soul", "neo soul"], "axes": { "weight": 0.25, "density": 0.45, "character": 0.35, "intimacy": 0.35, "brightness": 0.1 }, "loudness_target_lufs": -12 },
+      "rock":      { "aliases": ["rock", "punk", "grunge"], "axes": { "aggression": 0.45, "character": 0.5, "density": 0.4, "brightness": 0.15 }, "loudness_target_lufs": -10 },
+      "metal":     { "aliases": ["metal", "hardcore", "screamo"], "delivery": "screamed", "axes": { "aggression": 0.7, "character": 0.55, "density": 0.6, "sibilance_control": 0.2 }, "loudness_target_lufs": -9 },
+      "indie":     { "aliases": ["indie", "lo-fi", "lofi", "bedroom"], "axes": { "character": 0.45, "vintage": 0.4, "brightness": -0.15, "density": 0.3 }, "loudness_target_lufs": -13 },
+      "cantautore":{ "aliases": ["cantautore", "folk", "acustico", "singer songwriter", "songwriter"], "axes": { "intimacy": 0.4, "density": 0.25, "character": 0.15, "cleanliness": 0.15 }, "loudness_target_lufs": -14 },
+      "jazz":      { "aliases": ["jazz", "crooner", "swing"], "axes": { "weight": 0.3, "vintage": 0.5, "density": 0.2, "brightness": -0.1, "character": 0.25 }, "loudness_target_lufs": -16 },
+      "edm":       { "aliases": ["edm", "dance", "house", "techno"], "axes": { "brightness": 0.45, "density": 0.65, "character": 0.3, "aggression": 0.2 }, "loudness_target_lufs": -9 },
+      "podcast":   { "aliases": ["podcast", "intervista", "talk"], "delivery": "spoken", "axes": { "density": 0.6, "cleanliness": 0.55, "brightness": 0.15, "character": -0.05, "intimacy": 0.25 }, "loudness_target_lufs": -16 },
+      "voiceover": { "aliases": ["voiceover", "speakeraggio", "narrazione", "audiolibro", "audiobook", "vo"], "delivery": "spoken", "axes": { "density": 0.55, "cleanliness": 0.6, "weight": 0.2, "brightness": 0.1 }, "loudness_target_lufs": -18 }
+    },
+
+    "descriptors": {
+      "caldo":       { "aliases": ["caldo", "calda", "warm", "corposa", "corposo", "full", "piena"], "axes": { "weight": 0.35, "brightness": -0.1 } },
+      "scuro":       { "aliases": ["scuro", "scura", "dark", "ovattata", "ovattato", "muffled"], "axes": { "brightness": -0.4 } },
+      "brillante":   { "aliases": ["brillante", "bright", "cristallina", "crisp", "luminosa"], "axes": { "brightness": 0.4 } },
+      "ariosa":      { "aliases": ["ariosa", "arioso", "airy", "aria", "air", "eterea"], "axes": { "brightness": 0.3, "intimacy": 0.15 } },
+      "stridula":    { "aliases": ["stridula", "stridulo", "harsh", "aspra", "aspro", "tagliente", "sibilante", "fastidiosa"], "axes": { "brightness": 0.35, "sibilance_control": -0.25 } },
+      "nasale":      { "aliases": ["nasale", "nasal", "honky"], "axes": { "cleanliness": 0.2, "weight": -0.1 } },
+      "magra":       { "aliases": ["magra", "magro", "thin", "sottile", "esile"], "axes": { "weight": -0.4 } },
+      "aggressiva":  { "aliases": ["aggressiva", "aggressivo", "aggressive", "cattiva", "incazzata", "energica", "in faccia"], "axes": { "aggression": 0.4, "density": 0.2, "character": 0.15 } },
+      "morbida":     { "aliases": ["morbida", "morbido", "smooth", "dolce", "delicata", "gentile"], "axes": { "aggression": -0.35, "brightness": -0.1, "character": -0.1 } },
+      "presente":    { "aliases": ["presente", "avanti", "upfront", "in primo piano", "radiofonica", "radio", "broadcast"], "axes": { "brightness": 0.25, "density": 0.3, "intimacy": 0.2 } },
+      "intima":      { "aliases": ["intima", "intimo", "intimate", "vicina", "close", "confidenziale"], "axes": { "intimacy": 0.45, "weight": 0.15, "density": 0.15 } },
+      "distante":    { "aliases": ["distante", "distant", "lontana", "far"], "axes": { "intimacy": -0.4 } },
+      "compressa":   { "aliases": ["compressa", "compresso", "compressed", "schiacciata", "densa", "controllata", "incollata", "glued"], "axes": { "density": 0.35 } },
+      "dinamica":    { "aliases": ["dinamica", "dinamico", "dynamic", "naturale", "aperta", "respirata", "natural"], "axes": { "density": -0.3, "character": -0.1 } },
+      "punchy":      { "aliases": ["punchy", "punch", "grintosa", "incisiva"], "axes": { "aggression": 0.25, "density": 0.2 } },
+      "pulita":      { "aliases": ["pulita", "pulito", "clean", "trasparente", "transparent", "chirurgica", "precisa"], "axes": { "character": -0.3, "cleanliness": 0.35 } },
+      "sporca":      { "aliases": ["sporca", "sporco", "dirty", "grezza", "saturata", "distorta", "gritty"], "axes": { "character": 0.45, "aggression": 0.25 } },
+      "nastro":      { "aliases": ["nastro", "tape", "analogica", "analogico", "analog"], "axes": { "character": 0.35, "vintage": 0.45, "brightness": -0.1 } },
+      "valvolare":   { "aliases": ["valvolare", "tube", "valvola", "valvolato"], "axes": { "character": 0.35, "weight": 0.2, "vintage": 0.3 } },
+      "vintage":     { "aliases": ["vintage", "retro", "anni 70", "anni 60", "old school", "oldschool"], "axes": { "vintage": 0.5, "brightness": -0.2, "character": 0.25 } },
+      "moderna":     { "aliases": ["moderna", "moderno", "modern", "attuale", "digitale", "digital"], "axes": { "vintage": -0.4, "brightness": 0.2, "cleanliness": 0.15 } },
+      "silenziosa":  { "aliases": ["senza rumore", "no noise", "silenziosa", "rumore di fondo", "ventola", "rumorosa", "noisy"], "axes": { "cleanliness": 0.4 } },
+      "desibilata":  { "aliases": ["esse", "sibilanti", "de-esser", "deesser", "sibilance", "lisca"], "axes": { "sibilance_control": 0.35 } }
+    },
+
+    "delivery": {
+      "rapped":    { "aliases": ["rappata", "rappato", "rap", "rapped", "flow"] },
+      "sung":      { "aliases": ["cantata", "cantato", "sung", "melodica", "melodico", "singing"] },
+      "screamed":  { "aliases": ["urlata", "urlato", "screamed", "scream", "gridata", "shout"] },
+      "whispered": { "aliases": ["sussurrata", "sussurrato", "whispered", "whisper", "soffiata"] },
+      "spoken":    { "aliases": ["parlata", "parlato", "spoken", "voce parlata", "speech", "narrata"] }
+    },
+
+    "pitch": {
+      "low":  { "aliases": ["voce bassa", "baritono", "basso", "grave", "maschile profonda", "deep", "low voice"] },
+      "mid":  { "aliases": ["media", "tenore", "mid"] },
+      "high": { "aliases": ["voce alta", "acuta", "soprano", "femminile acuta", "high voice", "sottile acuta"] }
+    },
+
+    "usage": {
+      "streaming": { "aliases": ["streaming", "spotify", "apple music", "release", "distribuzione"], "loudness_target_lufs": -14 },
+      "youtube":   { "aliases": ["youtube", "video", "social", "tiktok", "instagram", "reel"], "loudness_target_lufs": -14 },
+      "podcast_t": { "aliases": ["per podcast", "podcasting"], "loudness_target_lufs": -16 },
+      "club":      { "aliases": ["club", "loud", "competitivo", "cassa dritta forte"], "loudness_target_lufs": -9 },
+      "demo":      { "aliases": ["demo", "provino", "bozza"], "loudness_target_lufs": -16 }
+    }
+  },
+
+  "source_profiles": {
+    "untreated_room_focusrite_scarlett": {
+      "id": "untreated_room_focusrite_scarlett",
+      "room": { "treated": false, "size": "small", "noise_floor_dbfs": -50, "modes_hz": [92, 184, 246], "boxy_band_hz": [150, 400], "flutter_band_hz": [1000, 4000] },
+      "mic": { "brand": "focusrite", "type": "condenser", "pattern": "cardioid", "distance_cm": 10, "proximity_boost_db": 5, "sibilance_center_hz": 7000, "presence_peak": 1 },
+      "interface": { "brand": "focusrite", "model": "scarlett_2i2", "inputs": 2, "preamp_character": "clean", "target_peak_dbfs": -12, "assumed_peak_dbfs": -6 },
+      "io": { "stereo_is_dual_mono": true }
+    },
+    "treated_room": {
+      "id": "treated_room",
+      "room": { "treated": true, "size": "medium", "noise_floor_dbfs": -65, "modes_hz": [70, 150, 220], "boxy_band_hz": [180, 350], "flutter_band_hz": [1500, 3500] },
+      "mic": { "brand": "generic", "type": "condenser", "pattern": "cardioid", "distance_cm": 20, "proximity_boost_db": 2, "sibilance_center_hz": 7000, "presence_peak": 0 },
+      "interface": { "brand": "generic", "model": "generic", "inputs": 2, "preamp_character": "clean", "target_peak_dbfs": -12, "assumed_peak_dbfs": -10 },
+      "io": { "stereo_is_dual_mono": false }
+    },
+    "neutral": {
+      "id": "neutral",
+      "room": { "treated": true, "size": "unknown", "noise_floor_dbfs": -70, "modes_hz": [80, 160, 240], "boxy_band_hz": [200, 400], "flutter_band_hz": [1500, 4000] },
+      "mic": { "brand": "unknown", "type": "unknown", "pattern": "unknown", "distance_cm": 20, "proximity_boost_db": 0, "sibilance_center_hz": 7000, "presence_peak": 0 },
+      "interface": { "brand": "unknown", "model": "unknown", "inputs": 2, "preamp_character": "clean", "target_peak_dbfs": -12, "assumed_peak_dbfs": -12 },
+      "io": { "stereo_is_dual_mono": false }
+    }
+  },
+
+  "chain": [
+    {
+      "id": "trim",
+      "label": "Input Trim / Polarity",
+      "enabled": "true",
+      "why_on": "Il gain della Scarlett viene quasi sempre impostato a occhio: porto il segnale al livello di lavoro prima che qualunque soglia in dB abbia senso.",
+      "params": {
+        "inTrim":   { "expr": "clamp(target_peak - assumed_peak, -24, 24)", "round": 1, "unit": "dB", "why": "porta i picchi stimati ({assumed_peak} dBFS) al target di lavoro ({target_peak} dBFS)" },
+        "polarity": { "value": false, "why": "nessun secondo microfono da allineare: la polarità resta dritta" }
+      }
+    },
+    {
+      "id": "gate",
+      "label": "Gate (key-filtered)",
+      "enabled": "treated == 0 or cleanliness > 0.5",
+      "why_on": "Stanza non trattata: il noise floor sta a {noise_floor} dBFS e tutto quello che viene dopo lo amplificherebbe. Il detector è filtrato sulla banda di voce, così ronzii e ventole non lo aprono.",
+      "why_off": "Stanza trattata e richiesta poco chirurgica: il gate farebbe più danni del rumore.",
+      "params": {
+        "gateThresh": { "expr": "clamp(noise_floor + 6 + 10 * cleanliness, -80, 0)", "round": 1, "unit": "dB", "why": "6 dB sopra il noise floor stimato, più {cleanliness} di severità richiesta" },
+        "gateRange":  { "expr": "clamp(6 + 16 * cleanliness, 0, 40)", "round": 1, "unit": "dB", "why": "attenuazione parziale: chiudere del tutto si sente più del rumore" },
+        "gateAtk":    { "expr": "clamp(2.0 - 1.5 * pos(aggression), 0.1, 20)", "round": 2, "unit": "ms", "why": "apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti" },
+        "gateRel":    { "expr": "clamp(160 - 60 * pos(aggression) + 80 * pos(intimacy), 10, 1000)", "round": 0, "unit": "ms", "why": "rilascio lungo per non troncare le code di parola" },
+        "gateKeyLo":  { "expr": "clamp(120 * pitch_factor, 60, 400)", "round": 0, "unit": "Hz", "why": "il detector ignora sotto la fondamentale: rumore di traffico e ronzii non aprono il gate" },
+        "gateKeyHi":  { "expr": "clamp(4000 * pitch_factor, 1000, 12000)", "round": 0, "unit": "Hz", "why": "il detector ignora sopra la banda di intelligibilità: ventole e fruscio non aprono il gate" }
+      }
+    },
+    {
+      "id": "hpf",
+      "label": "High-Pass Filter",
+      "enabled": "true",
+      "why_on": "Ripresa ravvicinata su cardioide: effetto prossimità (+{proximity_boost} dB) e plosive vanno tolti PRIMA dei detector dinamici.",
+      "params": {
+        "hpfFreq":  { "expr": "clamp((80 + 4 * proximity_boost) * pitch_factor - 15 * weight, 70, 140)", "round": 0, "unit": "Hz", "why": "compensa la prossimità sul registro {pitch_class}, alzato/abbassato secondo il corpo richiesto" },
+        "hpfSlope": { "expr": "24", "round": 0, "unit": "dB/oct", "why": "pendenza ripida: senza filtro anti-pop le plosive sono transienti di decine di dB" }
+      }
+    },
+    {
+      "id": "room",
+      "label": "Room Tamer (notch dinamici)",
+      "enabled": "treated == 0",
+      "why_on": "I modi della stanza si eccitano solo su certe note: tre notch stretti che agiscono SOLO sopra soglia, per non togliere corpo a tutto il resto.",
+      "why_off": "Stanza trattata: nessuna risonanza da inseguire.",
+      "params": {
+        "room1Freq":  { "expr": "mode1", "round": 0, "unit": "Hz", "why": "modo assiale stimato della stanza" },
+        "room1Q":     { "expr": "6", "round": 1, "unit": "Q", "why": "stretto: correzione, non gusto" },
+        "room1Depth": { "expr": "clamp(-2.0 - 4.0 * cleanliness, -8, 0)", "round": 1, "unit": "dB", "why": "attenuazione massima quando la risonanza supera la soglia" },
+        "room2Freq":  { "expr": "mode2", "round": 0, "unit": "Hz", "why": "secondo modo / boxiness bassa" },
+        "room2Q":     { "expr": "5", "round": 1, "unit": "Q", "why": "stretto" },
+        "room2Depth": { "expr": "clamp(-2.5 - 4.0 * cleanliness + 1.5 * pos(weight), -8, 0)", "round": 1, "unit": "dB", "why": "meno profondo se è stato chiesto corpo" },
+        "room3Freq":  { "expr": "mode3", "round": 0, "unit": "Hz", "why": "terzo modo / scatola" },
+        "room3Q":     { "expr": "5", "round": 1, "unit": "Q", "why": "stretto" },
+        "room3Depth": { "expr": "clamp(-2.0 - 3.5 * cleanliness + 1.5 * pos(weight), -8, 0)", "round": 1, "unit": "dB", "why": "attenuazione dinamica sulla scatola" },
+        "roomThresh": { "expr": "clamp(-30 + 6 * cleanliness, -60, 0)", "round": 1, "unit": "dB", "why": "sotto questa soglia i notch non lavorano: la voce resta intera" }
+      }
+    },
+    {
+      "id": "eqSub",
+      "label": "EQ sottrattiva",
+      "enabled": "true",
+      "why_on": "Prima togli, poi aggiungi: ogni dB tolto qui è headroom per i due compressori.",
+      "params": {
+        "sub1Freq": { "expr": "clamp(boxy_lo * 1.6 * pitch_factor, 60, 8000)", "round": 0, "unit": "Hz", "why": "centro della boxiness della stanza ({boxy_lo}–{boxy_hi} Hz)" },
+        "sub1Q":    { "expr": "2.0", "round": 1, "unit": "Q", "why": "banda media: è fango, non una risonanza singola" },
+        "sub1Gain": { "expr": "clamp(-1.5 - 3.0 * cleanliness + 2.0 * pos(weight), -12, 0)", "round": 1, "unit": "dB", "why": "toglie fango, ma restituisce corpo se il testo lo ha chiesto" },
+        "sub2Freq": { "expr": "clamp(1000 * pitch_factor, 60, 8000)", "round": 0, "unit": "Hz", "why": "banda nasale del registro {pitch_class}" },
+        "sub2Q":    { "expr": "3.0", "round": 1, "unit": "Q", "why": "stretto: la nasalità è localizzata" },
+        "sub2Gain": { "expr": "clamp(-1.0 - 2.5 * cleanliness, -12, 0)", "round": 1, "unit": "dB", "why": "toglie il naso senza spegnere l'intelligibilità" },
+        "sub3Freq": { "expr": "clamp(2800 * pitch_factor, 60, 8000)", "round": 0, "unit": "Hz", "why": "banda del flutter echo della stanza ({flutter_lo}–{flutter_hi} Hz)" },
+        "sub3Q":    { "expr": "2.5", "round": 1, "unit": "Q", "why": "medio" },
+        "sub3Gain": { "expr": "clamp(-0.5 - 3.0 * neg(brightness) - 1.5 * (treated == 0), -12, 0)", "round": 1, "unit": "dB", "why": "asprezza della stanza, più quella tolta su richiesta esplicita" }
+      }
+    },
+    {
+      "id": "ds1",
+      "label": "De-esser 1 (pre-compressione)",
+      "enabled": "true",
+      "why_on": "Protegge il detector dei compressori: senza, ogni 's' innesca una riduzione che abbassa la parola intera.",
+      "params": {
+        "ds1Freq":   { "expr": "clamp(sib_center * 0.95 * pitch_factor, 3000, 12000)", "round": 0, "unit": "Hz", "why": "centro sibilanza stimato del microfono sul registro {pitch_class}" },
+        "ds1Thresh": { "expr": "clamp(-14 - 12 * sibilance_control, -40, 0)", "round": 1, "unit": "dB", "why": "quanto in basso agganciare le esse" },
+        "ds1Range":  { "expr": "clamp(3 + 5 * sibilance_control, 0, 12)", "round": 1, "unit": "dB", "why": "attenuazione contenuta: il grosso lo fa il secondo de-esser" },
+        "ds1Mode":   { "value": "split", "why": "modo split: agisce solo sulla banda alta, non abbassa tutta la voce" }
+      }
+    },
+    {
+      "id": "comp1",
+      "label": "Compressore 1 (veloce)",
+      "enabled": "true",
+      "why_on": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.",
+      "params": {
+        "c1Thresh": { "expr": "clamp(-12 - 8 * density - 4 * pos(aggression), -40, 0)", "round": 1, "unit": "dB", "why": "profondità di lavoro secondo densità ({density}) e aggressività richieste" },
+        "c1Ratio":  { "expr": "clamp(2.0 + 2.0 * pos(aggression) + 1.5 * density, 1, 10)", "round": 1, "unit": ":1", "why": "rapporto moderato, il livellamento vero lo fa il secondo stadio" },
+        "c1Atk":    { "expr": "clamp(8 - 6 * pos(aggression), 0.1, 30)", "round": 2, "unit": "ms", "why": "più aggressivo = attacco più corto = più controllo sui transienti" },
+        "c1Rel":    { "expr": "clamp(80 - 30 * pos(aggression) + 60 * (1 - density), 10, 300)", "round": 0, "unit": "ms", "why": "rilascio legato alla densità richiesta" },
+        "c1Knee":   { "expr": "clamp(6 - 4 * pos(aggression), 0, 12)", "round": 1, "unit": "dB", "why": "ginocchio morbido salvo richiesta aggressiva" },
+        "c1Makeup": { "expr": "clamp(2.0 + 3.0 * density, 0, 18)", "round": 1, "unit": "dB", "why": "recupero del livello perso, stimato sulla riduzione attesa" }
+      }
+    },
+    {
+      "id": "comp2",
+      "label": "Compressore 2 (lento, glue)",
+      "enabled": "density > 0.15",
+      "why_on": "Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante.",
+      "why_off": "È stata chiesta una voce dinamica: il secondo stadio la schiaccerebbe.",
+      "params": {
+        "c2Thresh": { "expr": "clamp(-18 - 6 * density, -40, 0)", "round": 1, "unit": "dB", "why": "aggancia il corpo della frase, non i picchi" },
+        "c2Ratio":  { "expr": "clamp(1.5 + 1.5 * density, 1, 6)", "round": 1, "unit": ":1", "why": "rapporto basso: colla, non controllo" },
+        "c2Atk":    { "expr": "clamp(25 + 25 * (1 - density), 5, 100)", "round": 0, "unit": "ms", "why": "attacco lento: lascia passare i transienti" },
+        "c2Rel":    { "expr": "clamp(300 - 120 * density, 50, 1000)", "round": 0, "unit": "ms", "why": "rilascio lungo, segue la frase" },
+        "c2Knee":   { "expr": "8", "round": 1, "unit": "dB", "why": "ginocchio morbido: deve essere invisibile" },
+        "c2Makeup": { "expr": "clamp(1.5 + 2.0 * density, 0, 18)", "round": 1, "unit": "dB", "why": "recupero del livello dello stadio lento" }
+      }
+    },
+    {
+      "id": "sat",
+      "label": "Saturazione",
+      "enabled": "character > 0.1",
+      "why_on": "Dopo la dinamica il livello che la attacca è stabile, quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.",
+      "why_off": "È stata chiesta una voce trasparente: nessuna colorazione.",
+      "params": {
+        "satDrive": { "expr": "clamp(15 + 55 * character, 0, 100)", "round": 0, "unit": "%", "why": "quantità di carattere richiesta dal testo ({character})" },
+        "satType":  { "choices": [ { "when": "vintage > 0.5", "value": "tape" }, { "when": "aggression > 0.3 and character > 0.4", "value": "transistor" }, { "value": "tube" } ], "why": "tipo di armoniche coerente con vintage/aggressività richieste" },
+        "satTilt":  { "expr": "clamp(3.0 * brightness, -6, 6)", "round": 1, "unit": "dB", "why": "inclina lo spettro delle armoniche verso il timbro richiesto" }
+      }
+    },
+    {
+      "id": "eqTone",
+      "label": "EQ tonale",
+      "enabled": "true",
+      "why_on": "Qui si aggiunge, su un segnale già pulito e già denso: i boost non riportano su fango o rumore.",
+      "params": {
+        "tone1Freq": { "expr": "clamp(180 * pitch_factor, 80, 16000)", "round": 0, "unit": "Hz", "why": "corpo del registro {pitch_class}" },
+        "tone1Q":    { "expr": "0.8", "round": 1, "unit": "Q", "why": "campana larga: è timbro, non correzione" },
+        "tone1Gain": { "expr": "clamp(2.5 * weight, -9, 9)", "round": 1, "unit": "dB", "why": "corpo richiesto dal testo" },
+        "tone2Freq": { "expr": "clamp(3200 * pitch_factor, 80, 16000)", "round": 0, "unit": "Hz", "why": "presenza / intelligibilità" },
+        "tone2Q":    { "expr": "1.2", "round": 1, "unit": "Q", "why": "campana media" },
+        "tone2Gain": { "expr": "clamp(2.5 * brightness * (1 - 0.3 * presence_peak) + 1.0 * pos(intimacy), -9, 9)", "round": 1, "unit": "dB", "why": "ridotto perché il microfono ha già un suo picco di presenza" },
+        "tone3Freq": { "expr": "clamp(8000 * pitch_factor, 80, 16000)", "round": 0, "unit": "Hz", "why": "brillantezza alta" },
+        "tone3Q":    { "expr": "1.0", "round": 1, "unit": "Q", "why": "campana media" },
+        "tone3Gain": { "expr": "clamp(2.0 * brightness * (1 - vintage), -9, 9)", "round": 1, "unit": "dB", "why": "annullata se è stato chiesto un timbro vintage" },
+        "airOn":     { "expr": "brightness > 0.05 and vintage < 0.6", "why": "aria solo se richiesta e se non contraddice il vintage" },
+        "airGain":   { "expr": "clamp(3.0 * pos(brightness) * (1 - vintage), 0, 6)", "round": 1, "unit": "dB", "why": "shelf alta, tenuta bassa: la stanza non trattata ha già fruscio" }
+      }
+    },
+    {
+      "id": "ds2",
+      "label": "De-esser 2 (post-saturazione)",
+      "enabled": "character > 0.1 or brightness > 0.05",
+      "why_on": "Saturazione e boost di presenza rigenerano sibilanti: un solo de-esser all'inizio non basta.",
+      "why_off": "Nessuna colorazione né boost alti: le esse restano come le ha lasciate il primo de-esser.",
+      "params": {
+        "ds2Freq":   { "expr": "clamp(sib_center * 1.05 * pitch_factor, 3000, 12000)", "round": 0, "unit": "Hz", "why": "leggermente più in alto del primo: qui si trattano le armoniche generate" },
+        "ds2Thresh": { "expr": "clamp(-10 - 8 * sibilance_control - 4 * character, -40, 0)", "round": 1, "unit": "dB", "why": "tiene conto delle armoniche aggiunte dalla saturazione" },
+        "ds2Range":  { "expr": "clamp(2 + 3 * sibilance_control + 2 * character, 0, 12)", "round": 1, "unit": "dB", "why": "rifinitura, non correzione principale" },
+        "ds2Mode":   { "value": "wide", "why": "modo wide: rifinisce l'insieme dopo la colorazione" }
+      }
+    },
+    {
+      "id": "limiter",
+      "label": "Limiter",
+      "enabled": "true",
+      "why_on": "Tetto di sicurezza, non effetto: se lavora più di 2–3 dB sono sbagliati gli stadi prima.",
+      "params": {
+        "limCeiling": { "expr": "-1.0", "round": 1, "unit": "dBFS", "why": "1 dB di margine per i true peak dopo la codifica lossy" },
+        "limRelease": { "expr": "clamp(120 - 60 * pos(aggression), 10, 500)", "round": 0, "unit": "ms", "why": "rilascio coerente con l'energia richiesta" }
+      }
+    },
+    {
+      "id": "out",
+      "label": "Output / Mix",
+      "enabled": "true",
+      "why_on": "Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
+      "params": {
+        "outGain": { "expr": "clamp(loudness_target + 14, -24, 12)", "round": 1, "unit": "dB", "why": "stima iniziale per il target di {loudness_target} LUFS, poi corretta dal meter" },
+        "mix":     { "expr": "clamp(100 - 45 * pos(density - 0.7), 60, 100)", "round": 0, "unit": "%", "why": "un filo di segnale non compresso quando la densità richiesta è alta" }
+      }
+    }
+  ],
+
+  "sends": [
+    {
+      "type": "reverb",
+      "enabled": "true",
+      "why": "La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.",
+      "settings": {
+        "size_ms":  { "expr": "clamp(900 + 600 * pos(intimacy) * -1 + 400 * (1 - density), 400, 2500)", "round": 0, "unit": "ms" },
+        "predelay": { "expr": "clamp(20 + 20 * pos(intimacy), 0, 80)", "round": 0, "unit": "ms" },
+        "hpf":      { "expr": "clamp(300 * pitch_factor, 100, 800)", "round": 0, "unit": "Hz" },
+        "lpf":      { "expr": "clamp(6000 - 2000 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
+        "send_db":  { "expr": "clamp(-22 + 6 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+      }
+    },
+    {
+      "type": "delay",
+      "enabled": "aggression > 0.2 or genre_is_rhythmic == 1",
+      "why": "Delay a tempo al posto di più riverbero: mantiene l'intelligibilità su esecuzioni ritmiche.",
+      "settings": {
+        "division": { "value": "1/8 dotted" },
+        "feedback": { "expr": "clamp(15 + 15 * pos(aggression), 0, 45)", "round": 0, "unit": "%" },
+        "lpf":      { "expr": "clamp(4000 - 1500 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
+        "send_db":  { "expr": "clamp(-26 + 8 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
+      }
+    }
+  ],
+
+  "logic_recipe": [
+    { "module": "trim",    "plugin": "Gain",         "note": "Gain = inTrim; Phase Invert = polarity" },
+    { "module": "gate",    "plugin": "Noise Gate",   "note": "attiva Side Chain Filter (HP=gateKeyLo, LP=gateKeyHi) e Hysteresis −6 dB" },
+    { "module": "hpf",     "plugin": "Channel EQ",   "note": "banda 1 in modo High Pass, slope 24 dB/oct" },
+    { "module": "room",    "plugin": "Channel EQ",   "note": "APPROSSIMAZIONE: i notch stock sono statici, non dinamici. Usa metà della profondità indicata." },
+    { "module": "eqSub",   "plugin": "Channel EQ",   "note": "bande 2–4, campane" },
+    { "module": "ds1",     "plugin": "DeEsser 2",    "note": "modo Split, prima del compressore" },
+    { "module": "comp1",   "plugin": "Compressor",   "note": "circuito FET (Platinum se preferisci più trasparenza)" },
+    { "module": "comp2",   "plugin": "Compressor",   "note": "circuito VCA o Opto" },
+    { "module": "sat",     "plugin": "Phat FX",      "note": "solo la sezione Distortion; tape→Tape saturation, tube→Tube, transistor→Transistor" },
+    { "module": "eqTone",  "plugin": "Channel EQ",   "note": "seconda istanza, bande a campana + shelf alta per airGain" },
+    { "module": "ds2",     "plugin": "DeEsser 2",    "note": "modo Wide, dopo la saturazione" },
+    { "module": "limiter", "plugin": "Limiter",      "note": "Output Level = limCeiling" },
+    { "module": "out",     "plugin": "Gain",         "note": "Gain = outGain (il MIX non ha equivalente stock: usa un bus parallelo)" }
+  ]
+}
