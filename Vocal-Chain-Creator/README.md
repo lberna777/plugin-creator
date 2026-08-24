@@ -6,6 +6,14 @@ girare **dentro Logic Pro**.
 
 Idea completa e fasi: [`IDEA.md`](IDEA.md). Prompt del giorno 1: [`SEED_PROMPT.md`](SEED_PROMPT.md).
 
+## Usarlo su Logic, subito
+
+```bash
+cd plugin && ./build_mac.sh --fast     # compila e installa AU + VST3 + Standalone, poi valida con auval
+```
+Guida passo passo: **[`plugin/INSTALL_MAC.md`](plugin/INSTALL_MAC.md)**.
+Senza compilare niente: le ricette con i soli plugin stock di Logic sono già in [`examples/`](examples/).
+
 ## Come si avvia
 
 1. Leggi `../Plugin-Creator/CLAUDE.md` (vincolante) e poi `CLAUDE.md` di qui (aggiunte di dominio).
@@ -40,6 +48,12 @@ Vocal-Chain-Creator/
 │   ├── chain_compiler.py       ← testo → intent → preset → ricetta Logic
 │   ├── data/rules.json         ← TUTTE le regole, fuori dal codice
 │   └── tests/                  ← test deterministici sulle regole
+├── plugin/                     ← il plugin vero (JUCE): AU + VST3 + Standalone
+│   ├── INSTALL_MAC.md          ← installazione veloce su Mac/Logic
+│   ├── build_mac.sh            ← build + installazione + auval in un comando
+│   ├── CMakeLists.txt
+│   ├── source/                 ← RulesEngine (parità col Python), ChainDsp, Processor, Editor
+│   └── tools/                  ← vocalforge_parity, vocalforge_selftest (headless)
 ├── examples/                   ← preset + ricette generati da prompt d'esempio
 └── reference/                  ← foto di riferimento della UI
 ```
