@@ -97,7 +97,7 @@ class TestDspInvariants(unittest.TestCase):
             self.assertNotIn("reverb", ids)
             self.assertNotIn("delay", ids)
             for send in preset["sends"]:
-                self.assertIn(send["type"], ("reverb", "delay"))
+                self.assertIn(send["group"], ("reverb", "delay"))
 
 
 class TestIntentDrivesTheChain(unittest.TestCase):
@@ -129,6 +129,60 @@ class TestIntentDrivesTheChain(unittest.TestCase):
     def test_untreated_room_always_warns_about_early_reflections(self):
         for preset in PRESETS:
             self.assertTrue(any("riflessioni" in w for w in preset["warnings"]), preset["prompt"])
+
+
+class TestSends(unittest.TestCase):
+    """I send sono bus paralleli: uno solo per gruppo, mai dentro la catena."""
+
+    def test_at_most_one_variant_per_group(self):
+        for preset in PRESETS:
+            groups = [s["group"] for s in preset["sends"]]
+            self.assertEqual(len(groups), len(set(groups)), preset["prompt"])
+
+    def test_every_send_declares_group_label_plugin_and_why(self):
+        for preset in PRESETS:
+            for send in preset["sends"]:
+                for field in ("id", "group", "label", "plugin_logic", "why"):
+                    self.assertTrue(str(send[field]).strip(), f'{preset["prompt"]}/{field}')
+                self.assertIn(send["group"], ("reverb", "delay"))
+
+    def test_every_send_is_filtered_ducked_and_leveled(self):
+        for preset in PRESETS:
+            for send in preset["sends"]:
+                st = send["settings"]
+                for field in ("hpf", "lpf", "duck_db", "send_db"):
+                    self.assertIn(field, st, f'{send["id"]}: manca {field}')
+                self.assertLess(st["hpf"], st["lpf"], send["id"])
+                self.assertLessEqual(st["send_db"], -6, "una mandata non può stare al livello della voce")
+
+    def test_surgical_spoken_request_gets_no_reverb_at_all(self):
+        preset = compile_preset("podcast, voce parlata pulita, senza rumore di fondo", rules=RULES)
+        self.assertEqual([s for s in preset["sends"] if s["group"] == "reverb"], [])
+
+    def test_spoken_gets_short_ambience_not_a_hall(self):
+        preset = compile_preset("podcast, voce parlata", rules=RULES)
+        reverbs = [s for s in preset["sends"] if s["group"] == "reverb"]
+        self.assertEqual([s["id"] for s in reverbs], ["rev_ambience"])
+        self.assertLessEqual(reverbs[0]["settings"]["decay_s"], 1.0)
+
+    def test_vintage_picks_room_and_slapback(self):
+        preset = compile_preset("voce vintage a nastro", rules=RULES)
+        ids = {s["id"] for s in preset["sends"]}
+        self.assertIn("rev_room", ids)
+        self.assertIn("dly_slap", ids)
+
+    def test_intimate_picks_the_long_hall(self):
+        preset = compile_preset("voce sussurrata intima", rules=RULES)
+        self.assertIn("rev_hall", {s["id"] for s in preset["sends"]})
+
+    def test_rhythmic_delivery_gets_the_dotted_delay(self):
+        preset = compile_preset("rap, flow serrato", rules=RULES)
+        delays = [s for s in preset["sends"] if s["group"] == "delay"]
+        self.assertEqual([s["id"] for s in delays], ["dly_eighth"])
+
+    def test_send_selection_is_mutually_exclusive_by_priority(self):
+        preset = compile_preset("voce vintage a nastro intima", rules=RULES)   # room e hall entrambe vere
+        self.assertEqual([s["id"] for s in preset["sends"] if s["group"] == "reverb"], ["rev_room"])
 
 
 class TestDeterminismAndExamples(unittest.TestCase):

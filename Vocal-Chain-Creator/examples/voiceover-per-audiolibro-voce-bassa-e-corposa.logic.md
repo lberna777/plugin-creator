@@ -22,8 +22,8 @@ Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
 
 | parametro | valore | perché |
 |---|---|---|
-| `gateThresh` | -34.0 dB | 6 dB sopra il noise floor stimato, più 1 di severità richiesta |
-| `gateRange` | 22.0 dB | attenuazione parziale: chiudere del tutto si sente più del rumore |
+| `gateThresh` | -35.5 dB | 6 dB sopra il noise floor stimato, più 0.85 di severità richiesta |
+| `gateRange` | 19.6 dB | attenuazione parziale: chiudere del tutto si sente più del rumore |
 | `gateAtk` | 2.0 ms | apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti |
 | `gateRel` | 160 ms | rilascio lungo per non troncare le code di parola |
 | `gateKeyLo` | 102 Hz | il detector ignora sotto la fondamentale: rumore di traffico e ronzii non aprono il gate |
@@ -48,14 +48,14 @@ Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
 |---|---|---|
 | `room1Freq` | 92 Hz | modo assiale stimato della stanza |
 | `room1Q` | 6.0 Q | stretto: correzione, non gusto |
-| `room1Depth` | -6.0 dB | attenuazione massima quando la risonanza supera la soglia |
+| `room1Depth` | -5.4 dB | attenuazione massima quando la risonanza supera la soglia |
 | `room2Freq` | 184 Hz | secondo modo / boxiness bassa |
 | `room2Q` | 5.0 Q | stretto |
-| `room2Depth` | -5.7 dB | meno profondo se è stato chiesto corpo |
+| `room2Depth` | -5.1 dB | meno profondo se è stato chiesto corpo |
 | `room3Freq` | 246 Hz | terzo modo / scatola |
 | `room3Q` | 5.0 Q | stretto |
-| `room3Depth` | -4.7 dB | attenuazione dinamica sulla scatola |
-| `roomThresh` | -24.0 dB | sotto questa soglia i notch non lavorano: la voce resta intera |
+| `room3Depth` | -4.1 dB | attenuazione dinamica sulla scatola |
+| `roomThresh` | -24.9 dB | sotto questa soglia i notch non lavorano: la voce resta intera |
 
 ## 5. Channel EQ — EQ sottrattiva
 *Prima togli, poi aggiungi: ogni dB tolto qui è headroom per i due compressori.*
@@ -66,10 +66,10 @@ Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
 |---|---|---|
 | `sub1Freq` | 204 Hz | centro della boxiness della stanza (150–400 Hz) |
 | `sub1Q` | 2.0 Q | banda media: è fango, non una risonanza singola |
-| `sub1Gain` | -3.4 dB | toglie fango, ma restituisce corpo se il testo lo ha chiesto |
+| `sub1Gain` | -2.9 dB | toglie fango, ma restituisce corpo se il testo lo ha chiesto |
 | `sub2Freq` | 850 Hz | banda nasale del registro low |
 | `sub2Q` | 3.0 Q | stretto: la nasalità è localizzata |
-| `sub2Gain` | -3.5 dB | toglie il naso senza spegnere l'intelligibilità |
+| `sub2Gain` | -3.1 dB | toglie il naso senza spegnere l'intelligibilità |
 | `sub3Freq` | 2380 Hz | banda del flutter echo della stanza (1000–4000 Hz) |
 | `sub3Q` | 2.5 Q | medio |
 | `sub3Gain` | -2.0 dB | asprezza della stanza, più quella tolta su richiesta esplicita |
@@ -176,10 +176,23 @@ Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
 | `outGain` | -4.0 dB | stima iniziale per il target di -18.0 LUFS, poi corretta dal meter |
 | `mix` | 91 % | un filo di segnale non compresso quando la densità richiesta è alta |
 
-## Mandate (bus aux — MAI in serie sulla voce)
+## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
-- **ChromaVerb** — `size_ms` = 940, `predelay` = 20, `hpf` = 255, `lpf` = 6000, `send_db` = -22.0
-  <br>La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.
+### Ambience corta — ChromaVerb (Room)
+*Voce parlata: un filo di ambienza corta per non farla suonare sotto vuoto, senza toccare l'intelligibilità.*
+
+| parametro | valore |
+|---|---|
+| `decay_s` | 0.5 |
+| `predelay` | 10 |
+| `size_pct` | 35 |
+| `hpf` | 340 |
+| `lpf` | 5000 |
+| `width_pct` | 60 |
+| `duck_db` | 5.7 |
+| `send_db` | -30.0 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
 ## Avvisi
 

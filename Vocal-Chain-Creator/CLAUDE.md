@@ -30,8 +30,10 @@ In caso di conflitto vince la regola **più restrittiva**.
 - **Compressione in due stadi**: nessuno stadio da solo può superare **6 dB** di riduzione.
 - **Gain staging esplicito**: input trim porta al target di lavoro, output porta al target di loudness dichiarato
   nel preset. Nessuno stadio interno può clippare con ingresso a −6 dBFS di picco.
-- Il **riverbero/delay NON è dentro la catena**: la voce esce asciutta, gli effetti di ambiente sono
-  **mandate** suggerite nella ricetta Logic. (In una stanza non trattata l'ambiente lo aggiungi tu, non lo subisci.)
+- Il **riverbero/delay non è mai in serie**: la voce esce asciutta dalla catena e gli effetti di ambiente
+  vivono su **due bus paralleli** (uno reverb, uno delay), ognuno filtrato HP+LP e duckato dalla voce.
+  Un send non può superare −6 dB. Il gruppo sceglie **una sola** variante, per priorità, in modo deterministico.
+  `sendsMode = internal` li fa girare nel plugin, `sendsMode = logic` li spegne e li esporta come bus aux.
 - Latenza: solo il lookahead del limiter, **dichiarata** con `setLatencySamples`.
 
 ## Sorgente

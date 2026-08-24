@@ -139,10 +139,23 @@ Target: **-14.0 LUFS**, ceiling **-1.0 dBFS**.
 | `outGain` | 0.0 dB | stima iniziale per il target di -14.0 LUFS, poi corretta dal meter |
 | `mix` | 100 % | un filo di segnale non compresso quando la densità richiesta è alta |
 
-## Mandate (bus aux — MAI in serie sulla voce)
+## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
-- **ChromaVerb** — `size_ms` = 1060, `predelay` = 28, `hpf` = 300, `lpf` = 6000, `send_db` = -22.0
-  <br>La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.
+### Hall lunga — ChromaVerb (Hall) o Space Designer
+*Esecuzione intima o poco compressa: una coda lunga e filtrata da' respiro senza dover schiacciare la voce.*
+
+| parametro | valore |
+|---|---|
+| `decay_s` | 2.52 |
+| `predelay` | 38 |
+| `size_pct` | 76 |
+| `hpf` | 350 |
+| `lpf` | 6500 |
+| `width_pct` | 100 |
+| `duck_db` | 4.0 |
+| `send_db` | -23.6 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
 ## Avvisi
 

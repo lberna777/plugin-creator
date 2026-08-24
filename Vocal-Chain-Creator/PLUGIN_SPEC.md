@@ -17,7 +17,8 @@
   `in → trim/polarity → gate (key-filtered) → HPF → room-tamer (3 notch dinamici) → EQ sottrattiva (3 bande)
    → de-esser 1 → comp 1 (veloce) → comp 2 (lento) → saturazione → EQ tonale (3 bande) → de-esser 2 → limiter → out`
 - Il **prompt testuale** non è un effetto: è un generatore di preset. Il DSP resta lo stesso, cambiano i valori.
-- Riverbero e delay **non sono nella catena**: sono mandate suggerite (vedi `knowledge/LOGIC_INTEGRATION.md`).
+- Riverbero e delay **non sono nella catena**: sono due **bus paralleli** (send), filtrati e duckati,
+  attivabili dentro il plugin o esportabili come bus aux di Logic. Vedi `knowledge/CHAIN_ARCHITECTURE.md`.
 
 ## 3. Parametri (APVTS, id congelati)
 ### Globali
@@ -44,6 +45,9 @@
 | eqTone | `eqToneOn`, `tone1Freq/Q/Gain` … `tone3Freq/Q/Gain` (80…16000 Hz log, Q 0.4…6, Gain −9…+9 dB), `airOn`, `airGain` (0…6 dB) |
 | ds2 | `ds2On`, `ds2Freq`, `ds2Thresh`, `ds2Range` |
 | limiter | `limOn`, `limCeiling` (−6…0 dBFS), `limRelease` (10…500 ms, log) |
+| send reverb | `revOn`, `revVariant` (none/ambience/room/hall/plate), `revDecay` (0.2…4 s, log), `revPredelay` (0…80 ms), `revSize` (10…100 %), `revHpf` (100…900 Hz, log), `revLpf` (2…12 kHz, log), `revWidth` (0…100 %), `revDuck` (0…9 dB), `revSend` (−40…−6 dB) |
+| send delay | `dlyOn`, `dlyVariant` (slap/eighth/quarter), `dlySync` (bool), `dlyTime` (60…1500 ms, log), `dlyDivision` (choice), `dlyFeedback` (0…45 %), `dlyHpf` (100…900 Hz, log), `dlyLpf` (1.5…8 kHz, log), `dlyDuck` (0…9 dB), `dlySend` (−40…−8 dB) |
+| send mode | `sendsMode` (choice: internal / logic) — `internal` fa girare i bus nel plugin, `logic` li spegne e li esporta |
 
 ### Prompt (non automatizzabili)
 | id | tipo | note |

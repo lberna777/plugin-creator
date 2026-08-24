@@ -68,14 +68,18 @@
     },
     "sends": {
       "type": "array",
-      "description": "Mandate SUGGERITE (non fanno parte della catena: la voce esce asciutta).",
+      "description": "Mandate: bus PARALLELI, mai in serie sulla voce. Una sola variante per gruppo (reverb, delay), scelta in modo deterministico per priorità.",
       "items": {
         "type": "object",
-        "required": ["type", "why"],
+        "required": ["id", "group", "label", "plugin_logic", "settings", "why"],
+        "additionalProperties": false,
         "properties": {
-          "type":     { "type": "string", "enum": ["reverb", "delay"] },
-          "settings": { "type": "object" },
-          "why":      { "type": "string" }
+          "id":           { "type": "string" },
+          "group":        { "type": "string", "enum": ["reverb", "delay"] },
+          "label":        { "type": "string" },
+          "plugin_logic": { "type": "string", "description": "Plugin stock di Logic equivalente per il bus aux." },
+          "settings":     { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean"] } },
+          "why":          { "type": "string", "minLength": 1 }
         }
       }
     },

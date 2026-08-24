@@ -542,25 +542,37 @@
   },
   "sends": [
     {
-      "type": "reverb",
+      "id": "dly_eighth",
+      "group": "delay",
+      "label": "1/8 puntato",
+      "plugin_logic": "Tape Delay o Stereo Delay (sync on)",
       "settings": {
-        "size_ms": 900,
-        "predelay": 20,
-        "hpf": 300,
-        "lpf": 6000,
-        "send_db": -22.0
-      },
-      "why": "La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo."
-    },
-    {
-      "type": "delay",
-      "settings": {
+        "sync": true,
         "division": "1/8 dotted",
         "feedback": 28,
+        "hpf": 350,
         "lpf": 4000,
+        "duck_db": 8.0,
         "send_db": -18.8
       },
-      "why": "Delay a tempo al posto di più riverbero: mantiene l'intelligibilità su esecuzioni ritmiche."
+      "why": "Esecuzione ritmica: il puntato riempie tra le parole senza mangiare l'intelligibilità come farebbe piu' riverbero."
+    },
+    {
+      "id": "rev_plate",
+      "group": "reverb",
+      "label": "Plate moderna",
+      "plugin_logic": "ChromaVerb (Plate) o Silververb",
+      "settings": {
+        "decay_s": 1.0,
+        "predelay": 20,
+        "size_pct": 55,
+        "hpf": 300,
+        "lpf": 7000,
+        "width_pct": 85,
+        "duck_db": 8.0,
+        "send_db": -24.9
+      },
+      "why": "Default cantato: la plate resta dietro la voce e non impasta le medie della stanza già presenti nel segnale."
     }
   ],
   "warnings": [

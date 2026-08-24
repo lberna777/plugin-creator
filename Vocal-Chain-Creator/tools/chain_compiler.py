@@ -288,6 +288,8 @@ def build_context(intent, profile, rules):
         "assumed_peak": iface["assumed_peak_dbfs"],
         "genre_is_rhythmic": 1 if (intent["genre"] in RHYTHMIC_GENRES) else 0,
     })
+    for name in ("spoken", "rapped", "sung", "screamed", "whispered"):
+        ctx[f"delivery_is_{name}"] = 1 if intent["delivery"] == name else 0
     # variabili solo testuali, per i template delle motivazioni
     ctx_text = {"pitch_class": intent["pitch_class"], "delivery": intent["delivery"], "genre": intent["genre"]}
     return ctx, ctx_text
@@ -349,13 +351,17 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
         modules.append({"id": spec["id"], "label": spec["label"], "enabled": enabled,
                         "why": why, "params": params})
 
-    sends = []
-    for spec in rules["sends"]:
-        if not evaluate(spec["enabled"], ctx):
+    sends, chosen_groups = [], set()
+    for spec in sorted(rules["sends"], key=lambda s: (s["group"], s["priority"])):
+        if spec["group"] in chosen_groups or not evaluate(spec["enabled"], ctx):
+            continue
+        chosen_groups.add(spec["group"])
+        if spec.get("skip"):          # il gruppo si chiude senza mandata: è una scelta, non un buco
             continue
         settings = {pid: _resolve_param(dict(p, why=p.get("why", spec["why"])), ctx, ctx_text)["value"]
                     for pid, p in spec["settings"].items()}
-        sends.append({"type": spec["type"], "settings": settings,
+        sends.append({"id": spec["id"], "group": spec["group"], "label": spec["label"],
+                      "plugin_logic": spec["plugin_logic"], "settings": settings,
                       "why": _fmt_why(spec["why"], ctx, ctx_text)})
 
     warnings = []
@@ -406,7 +412,8 @@ def render_text(preset):
             lines.append(f'         {pid:<11} {str(_fmt_value(p["value"])):>9} {unit:<7} — {p["why"]}')
         lines.append("")
     for send in preset["sends"]:
-        lines.append(f'[ SEND ] {send["type"]}: ' + ", ".join(f"{k}={v}" for k, v in send["settings"].items()))
+        lines.append(f'[ SEND ] {send["group"].upper()} — {send["label"]}  ({send["plugin_logic"]})')
+        lines.append('         ' + ", ".join(f"{k}={_fmt_value(v)}" for k, v in send["settings"].items()))
         lines.append(f'         {send["why"]}')
     if preset["warnings"]:
         lines += ["", "AVVISI:"] + [f"  - {w}" for w in preset["warnings"]]
@@ -434,12 +441,13 @@ def render_logic_recipe(preset, rules=None):
             out.append(f'| `{pid}` | {_fmt_value(p["value"])} {p.get("unit", "")} | {p["why"]} |')
         out.append("")
     if preset["sends"]:
-        out += ["## Mandate (bus aux — MAI in serie sulla voce)", ""]
+        out += ["## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)", ""]
         for send in preset["sends"]:
-            plugin = "ChromaVerb" if send["type"] == "reverb" else "Tape Delay"
-            out += [f'- **{plugin}** — ' + ", ".join(f"`{k}` = {v}" for k, v in send["settings"].items()),
-                    f'  <br>{send["why"]}']
-        out.append("")
+            out += [f'### {send["label"]} — {send["plugin_logic"]}', f'*{send["why"]}*', "",
+                    "| parametro | valore |", "|---|---|"]
+            out += [f'| `{k}` | {_fmt_value(v)} |' for k, v in send["settings"].items()]
+            out += ["", f'> Manda la voce a un bus aux e imposta il livello di send a `send_db`. '
+                        f'Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.', ""]
     if preset["warnings"]:
         out += ["## Avvisi", ""] + [f"- {w}" for w in preset["warnings"]]
     return "\n".join(out)

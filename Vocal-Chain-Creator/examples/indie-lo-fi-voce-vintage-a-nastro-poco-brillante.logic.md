@@ -176,10 +176,38 @@ Target: **-13.0 LUFS**, ceiling **-1.0 dBFS**.
 | `outGain` | 1.0 dB | stima iniziale per il target di -13.0 LUFS, poi corretta dal meter |
 | `mix` | 100 % | un filo di segnale non compresso quando la densità richiesta è alta |
 
-## Mandate (bus aux — MAI in serie sulla voce)
+## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
-- **ChromaVerb** — `size_ms` = 1040, `predelay` = 20, `hpf` = 300, `lpf` = 4000, `send_db` = -22.0
-  <br>La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.
+### Slapback — Tape Delay (sync off)
+*Carattere vintage: una sola ripetizione corta al posto della coda, tiene la voce avanti e asciutta.*
+
+| parametro | valore |
+|---|---|
+| `sync` | off |
+| `time_ms` | 110 |
+| `feedback` | 8 |
+| `hpf` | 300 |
+| `lpf` | 2300 |
+| `duck_db` | 5.0 |
+| `send_db` | -26.0 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
+
+### Room vintage — ChromaVerb (Room / Chamber)
+*Timbro vintage richiesto: una camera corta e scura invece di un riverbero moderno, coerente con il carattere a nastro.*
+
+| parametro | valore |
+|---|---|
+| `decay_s` | 1.0 |
+| `predelay` | 15 |
+| `size_pct` | 45 |
+| `hpf` | 320 |
+| `lpf` | 3000 |
+| `width_pct` | 70 |
+| `duck_db` | 5.6 |
+| `send_db` | -24.0 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
 ## Avvisi
 

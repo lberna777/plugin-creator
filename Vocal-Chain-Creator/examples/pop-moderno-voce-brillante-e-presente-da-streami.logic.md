@@ -176,10 +176,38 @@ Target: **-14.0 LUFS**, ceiling **-1.0 dBFS**.
 | `outGain` | 0.0 dB | stima iniziale per il target di -14.0 LUFS, poi corretta dal meter |
 | `mix` | 86 % | un filo di segnale non compresso quando la densità richiesta è alta |
 
-## Mandate (bus aux — MAI in serie sulla voce)
+## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
-- **ChromaVerb** — `size_ms` = 780, `predelay` = 24, `hpf` = 300, `lpf` = 6000, `send_db` = -22.0
-  <br>La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.
+### 1/4 largo — Stereo Delay (sync on, ping-pong)
+*Voce brillante e densa: ripetizioni lunghe e filtrate allargano senza aggiungere fango nelle medie.*
+
+| parametro | valore |
+|---|---|
+| `sync` | on |
+| `division` | 1/4 |
+| `feedback` | 30 |
+| `hpf` | 400 |
+| `lpf` | 5000 |
+| `duck_db` | 9.0 |
+| `send_db` | -22.0 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
+
+### Plate moderna — ChromaVerb (Plate) o Silververb
+*Default cantato: la plate resta dietro la voce e non impasta le medie della stanza già presenti nel segnale.*
+
+| parametro | valore |
+|---|---|
+| `decay_s` | 1.0 |
+| `predelay` | 24 |
+| `size_pct` | 70 |
+| `hpf` | 300 |
+| `lpf` | 8500 |
+| `width_pct` | 100 |
+| `duck_db` | 8.0 |
+| `send_db` | -24.9 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
 ## Avvisi
 

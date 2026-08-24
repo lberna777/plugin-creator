@@ -165,11 +165,6 @@ Target: **-16.0 LUFS**, ceiling **-1.0 dBFS**.
 | `outGain` | -2.0 dB | stima iniziale per il target di -16.0 LUFS, poi corretta dal meter |
 | `mix` | 89 % | un filo di segnale non compresso quando la densità richiesta è alta |
 
-## Mandate (bus aux — MAI in serie sulla voce)
-
-- **ChromaVerb** — `size_ms` = 770, `predelay` = 25, `hpf` = 300, `lpf` = 6000, `send_db` = -22.0
-  <br>La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.
-
 ## Avvisi
 
 - Termini non nel vocabolario (ignorati): fondo

@@ -529,15 +529,21 @@
   },
   "sends": [
     {
-      "type": "reverb",
+      "id": "rev_hall",
+      "group": "reverb",
+      "label": "Hall lunga",
+      "plugin_logic": "ChromaVerb (Hall) o Space Designer",
       "settings": {
-        "size_ms": 830,
-        "predelay": 29,
-        "hpf": 300,
-        "lpf": 6000,
-        "send_db": -22.0
+        "decay_s": 2.26,
+        "predelay": 39,
+        "size_pct": 77,
+        "hpf": 350,
+        "lpf": 6500,
+        "width_pct": 100,
+        "duck_db": 6.0,
+        "send_db": -23.3
       },
-      "why": "La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo."
+      "why": "Esecuzione intima o poco compressa: una coda lunga e filtrata da' respiro senza dover schiacciare la voce."
     }
   ],
   "warnings": [

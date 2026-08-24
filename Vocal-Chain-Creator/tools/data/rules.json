@@ -42,8 +42,8 @@
       "cantautore":{ "aliases": ["cantautore", "folk", "acustico", "singer songwriter", "songwriter"], "axes": { "intimacy": 0.4, "density": 0.25, "character": 0.15, "cleanliness": 0.15 }, "loudness_target_lufs": -14 },
       "jazz":      { "aliases": ["jazz", "crooner", "swing"], "axes": { "weight": 0.3, "vintage": 0.5, "density": 0.2, "brightness": -0.1, "character": 0.25 }, "loudness_target_lufs": -16 },
       "edm":       { "aliases": ["edm", "dance", "house", "techno"], "axes": { "brightness": 0.45, "density": 0.65, "character": 0.3, "aggression": 0.2 }, "loudness_target_lufs": -9 },
-      "podcast":   { "aliases": ["podcast", "intervista", "talk"], "delivery": "spoken", "axes": { "density": 0.6, "cleanliness": 0.55, "brightness": 0.15, "character": -0.05, "intimacy": 0.25 }, "loudness_target_lufs": -16 },
-      "voiceover": { "aliases": ["voiceover", "speakeraggio", "narrazione", "audiolibro", "audiobook", "vo"], "delivery": "spoken", "axes": { "density": 0.55, "cleanliness": 0.6, "weight": 0.2, "brightness": 0.1 }, "loudness_target_lufs": -18 }
+      "podcast":   { "aliases": ["podcast", "intervista", "talk"], "delivery": "spoken", "axes": { "density": 0.6, "cleanliness": 0.35, "brightness": 0.15, "character": -0.05, "intimacy": 0.25 }, "loudness_target_lufs": -16 },
+      "voiceover": { "aliases": ["voiceover", "speakeraggio", "narrazione", "audiolibro", "audiobook", "vo"], "delivery": "spoken", "axes": { "density": 0.55, "cleanliness": 0.4, "weight": 0.2, "brightness": 0.1 }, "loudness_target_lufs": -18 }
     },
 
     "descriptors": {
@@ -298,28 +298,147 @@
     }
   ],
 
+  "sends_notes": "I send sono bus PARALLELI, mai in serie sulla voce (vedi knowledge/CHAIN_ARCHITECTURE.md). Ogni gruppo (reverb, delay) sceglie la PRIMA variante la cui condizione e' vera, in ordine di priority: la selezione e' deterministica e mutuamente esclusiva.",
+
   "sends": [
     {
-      "type": "reverb",
-      "enabled": "true",
-      "why": "La voce esce asciutta: in una stanza non trattata l'ambiente lo scegli tu in mandata, dove puoi filtrarlo.",
+      "id": "rev_none",
+      "group": "reverb",
+      "priority": 0,
+      "skip": true,
+      "label": "Nessun riverbero",
+      "plugin_logic": "—",
+      "enabled": "delivery_is_spoken == 1 and cleanliness >= 0.95",
+      "why": "Voce parlata con richiesta chirurgica: nessun riverbero. In una stanza non trattata un po' di ambiente è già nel segnale."
+    },
+    {
+      "id": "rev_ambience",
+      "group": "reverb",
+      "priority": 1,
+      "label": "Ambience corta",
+      "plugin_logic": "ChromaVerb (Room)",
+      "enabled": "delivery_is_spoken == 1",
+      "why": "Voce parlata: un filo di ambienza corta per non farla suonare sotto vuoto, senza toccare l'intelligibilità.",
       "settings": {
-        "size_ms":  { "expr": "clamp(900 + 600 * pos(intimacy) * -1 + 400 * (1 - density), 400, 2500)", "round": 0, "unit": "ms" },
-        "predelay": { "expr": "clamp(20 + 20 * pos(intimacy), 0, 80)", "round": 0, "unit": "ms" },
-        "hpf":      { "expr": "clamp(300 * pitch_factor, 100, 800)", "round": 0, "unit": "Hz" },
-        "lpf":      { "expr": "clamp(6000 - 2000 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
-        "send_db":  { "expr": "clamp(-22 + 6 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+        "decay_s":    { "expr": "clamp(0.5 + 0.2 * neg(intimacy), 0.2, 1.0)", "round": 2, "unit": "s" },
+        "predelay":   { "expr": "clamp(10 + 10 * pos(intimacy), 0, 80)", "round": 0, "unit": "ms" },
+        "size_pct":   { "expr": "35", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(400 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(5000 - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
+        "width_pct":  { "expr": "60", "round": 0, "unit": "%" },
+        "duck_db":    { "expr": "clamp(3 + 3 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-30 + 4 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB" }
       }
     },
     {
-      "type": "delay",
-      "enabled": "aggression > 0.2 or genre_is_rhythmic == 1",
-      "why": "Delay a tempo al posto di più riverbero: mantiene l'intelligibilità su esecuzioni ritmiche.",
+      "id": "rev_room",
+      "group": "reverb",
+      "priority": 2,
+      "label": "Room vintage",
+      "plugin_logic": "ChromaVerb (Room / Chamber)",
+      "enabled": "vintage >= 0.5",
+      "why": "Timbro vintage richiesto: una camera corta e scura invece di un riverbero moderno, coerente con il carattere a nastro.",
       "settings": {
-        "division": { "value": "1/8 dotted" },
-        "feedback": { "expr": "clamp(15 + 15 * pos(aggression), 0, 45)", "round": 0, "unit": "%" },
-        "lpf":      { "expr": "clamp(4000 - 1500 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
-        "send_db":  { "expr": "clamp(-26 + 8 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
+        "decay_s":    { "expr": "clamp(1.0 + 0.6 * neg(intimacy), 0.4, 2.5)", "round": 2, "unit": "s" },
+        "predelay":   { "expr": "clamp(15 + 15 * pos(intimacy), 0, 80)", "round": 0, "unit": "ms" },
+        "size_pct":   { "expr": "clamp(45 + 15 * neg(intimacy), 10, 100)", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(320 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(4500 - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
+        "width_pct":  { "expr": "clamp(70 + 20 * neg(intimacy), 0, 100)", "round": 0, "unit": "%" },
+        "duck_db":    { "expr": "clamp(3 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-24 + 5 * neg(intimacy) - 4 * pos(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+      }
+    },
+    {
+      "id": "rev_hall",
+      "group": "reverb",
+      "priority": 3,
+      "label": "Hall lunga",
+      "plugin_logic": "ChromaVerb (Hall) o Space Designer",
+      "enabled": "intimacy >= 0.45 or density < 0.3",
+      "why": "Esecuzione intima o poco compressa: una coda lunga e filtrata da' respiro senza dover schiacciare la voce.",
+      "settings": {
+        "decay_s":    { "expr": "clamp(2.2 + 0.8 * pos(intimacy) - 0.6 * density, 1.0, 4.0)", "round": 2, "unit": "s" },
+        "predelay":   { "expr": "clamp(30 + 20 * pos(intimacy), 0, 80)", "round": 0, "unit": "ms" },
+        "size_pct":   { "expr": "clamp(70 + 15 * pos(intimacy), 10, 100)", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(350 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(6500 - 2000 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
+        "width_pct":  { "expr": "100", "round": 0, "unit": "%" },
+        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-26 + 6 * pos(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+      }
+    },
+    {
+      "id": "rev_plate",
+      "group": "reverb",
+      "priority": 4,
+      "label": "Plate moderna",
+      "plugin_logic": "ChromaVerb (Plate) o Silververb",
+      "enabled": "true",
+      "why": "Default cantato: la plate resta dietro la voce e non impasta le medie della stanza già presenti nel segnale.",
+      "settings": {
+        "decay_s":    { "expr": "clamp(1.4 + 0.6 * neg(density) - 0.4 * density, 0.6, 3.0)", "round": 2, "unit": "s" },
+        "predelay":   { "expr": "clamp(20 + 20 * pos(intimacy), 0, 80)", "round": 0, "unit": "ms" },
+        "size_pct":   { "expr": "clamp(55 + 15 * pos(brightness), 10, 100)", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(300 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(7000 - 2000 * vintage + 1500 * pos(brightness), 2000, 12000)", "round": 0, "unit": "Hz" },
+        "width_pct":  { "expr": "clamp(85 + 15 * pos(brightness), 0, 100)", "round": 0, "unit": "%" },
+        "duck_db":    { "expr": "clamp(3 + 5 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-24 + 6 * neg(intimacy) - 3 * pos(density - 0.7), -40, -6)", "round": 1, "unit": "dB" }
+      }
+    },
+    {
+      "id": "dly_slap",
+      "group": "delay",
+      "priority": 1,
+      "label": "Slapback",
+      "plugin_logic": "Tape Delay (sync off)",
+      "enabled": "vintage >= 0.5",
+      "why": "Carattere vintage: una sola ripetizione corta al posto della coda, tiene la voce avanti e asciutta.",
+      "settings": {
+        "sync":       { "value": false },
+        "time_ms":    { "expr": "clamp(110 - 20 * pos(aggression), 60, 160)", "round": 0, "unit": "ms" },
+        "feedback":   { "expr": "clamp(8 + 7 * pos(aggression), 0, 45)", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(300 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(3500 - 1200 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
+        "duck_db":    { "expr": "clamp(3 + 3 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-26 + 6 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
+      }
+    },
+    {
+      "id": "dly_eighth",
+      "group": "delay",
+      "priority": 2,
+      "label": "1/8 puntato",
+      "plugin_logic": "Tape Delay o Stereo Delay (sync on)",
+      "enabled": "genre_is_rhythmic == 1 or aggression > 0.2 or delivery_is_rapped == 1",
+      "why": "Esecuzione ritmica: il puntato riempie tra le parole senza mangiare l'intelligibilità come farebbe piu' riverbero.",
+      "settings": {
+        "sync":       { "value": true },
+        "division":   { "value": "1/8 dotted" },
+        "feedback":   { "expr": "clamp(15 + 15 * pos(aggression), 0, 45)", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(350 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(4000 - 1500 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
+        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-26 + 8 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
+      }
+    },
+    {
+      "id": "dly_quarter",
+      "group": "delay",
+      "priority": 3,
+      "label": "1/4 largo",
+      "plugin_logic": "Stereo Delay (sync on, ping-pong)",
+      "enabled": "brightness > 0.25 and density > 0.5",
+      "why": "Voce brillante e densa: ripetizioni lunghe e filtrate allargano senza aggiungere fango nelle medie.",
+      "settings": {
+        "sync":       { "value": true },
+        "division":   { "value": "1/4" },
+        "feedback":   { "expr": "clamp(20 + 10 * pos(brightness), 0, 45)", "round": 0, "unit": "%" },
+        "hpf":        { "expr": "clamp(400 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":        { "expr": "clamp(5000 - 1500 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
+        "duck_db":    { "expr": "clamp(5 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-28 + 6 * pos(brightness), -40, -8)", "round": 1, "unit": "dB" }
       }
     }
   ],

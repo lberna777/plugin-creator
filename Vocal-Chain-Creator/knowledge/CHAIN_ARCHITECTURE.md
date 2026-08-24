@@ -39,9 +39,36 @@ out
 | 12 | Limiter | tetto, non effetto. Se il limiter lavora più di 2–3 dB, sono sbagliati gli stadi prima. |
 | 13 | Output + Mix | il MIX è compressione parallela di tutta la catena: la via di fuga quando "troppo lavorato". |
 
+## I send (riverbero e delay): bus PARALLELI, mai in serie
+
+La voce **esce asciutta dalla catena**: la regola non cambia. Riverbero e delay stanno su **due bus paralleli**
+alimentati dall'uscita della catena, ognuno con il proprio livello di send, i propri filtri e il proprio ducking.
+
+```
+                       ┌─────────────► [ SEND REVERB ]  HP→LP→riverbero→duck ─┐
+out della catena (dry) ┤                                                       ├─► somma
+                       ├─────────────► [ SEND DELAY  ]  HP→LP→delay→duck ─────┘
+                       └─────────────────────────────── dry ───────────────────►
+```
+
+Regole dei send:
+- **Una sola variante per gruppo.** Il compilatore sceglie la prima condizione vera in ordine di priorità:
+  la selezione è deterministica e mutuamente esclusiva (`tools/data/rules.json` → `sends`).
+- Gruppo **reverb**: `rev_none` (parlato chirurgico) · `rev_ambience` (parlato) · `rev_room` (vintage) ·
+  `rev_hall` (intimo o poco compresso) · `rev_plate` (default cantato).
+- Gruppo **delay**: `dly_slap` (vintage, una ripetizione) · `dly_eighth` (1/8 puntato, esecuzioni ritmiche) ·
+  `dly_quarter` (1/4 largo, voci brillanti e dense).
+- **Ogni send è filtrato** (HP + LP): in una stanza non trattata l'ambiente aggiunto non deve sommarsi
+  al fango che la catena ha appena tolto.
+- **Ogni send è duckato** dalla voce (`duck_db`): l'effetto si sente tra le parole, non sopra.
+- Un send non può mai stare al livello della voce: `send_db` ≤ −6 dB.
+- **Due modi**, scelti dal parametro `sendsMode`:
+  - `internal` (default) — i bus girano dentro il plugin: la chain è utilizzabile su una traccia sola;
+  - `logic` — i bus interni si spengono e il preset esporta i valori per due **bus aux** di Logic.
+  In entrambi i casi il percorso della voce resta identico e asciutto.
+
 ## Cosa NON c'è dentro, e perché
-- **Riverbero / delay**: la voce esce asciutta. In una stanza non trattata l'ambiente lo scegli tu,
-  in mandata, dove puoi filtrarlo e temporizzarlo. Dentro la chain sarebbe ambiente su ambiente.
+- **Riverbero / delay in serie**: mai. Vedi sopra: sono bus paralleli, e in `logic` escono proprio dal plugin.
 - **Tuning / pitch correction**: dominio diverso, latenza diversa, va prima o dopo secondo il gusto → resta fuori.
 - **Width / stereo**: la voce è centrale, e su Scarlett a due ingressi lo "stereo" è quasi sempre dual-mono.
 - **Riduzione di rumore spettrale**: rischio di artefatti alto e beneficio incerto su una fonte già gated. Fuori dalla v1.
