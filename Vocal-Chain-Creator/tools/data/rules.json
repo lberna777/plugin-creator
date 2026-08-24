@@ -31,6 +31,93 @@
   "pitch_factors": { "low": 0.85, "mid": 1.0, "high": 1.15 },
 
   "lexicon": {
+    "artists": {
+      "sfera_ebbasta": {
+        "aliases": ["sfera ebbasta", "sfera", "ebbasta"],
+        "genre": "trap", "delivery": "sung", "pitch_class": "mid", "loudness_target_lufs": -9,
+        "axes": { "brightness": 0.45, "density": 0.70, "character": 0.35, "aggression": 0.20,
+                  "intimacy": 0.15, "sibilance_control": 0.55, "cleanliness": 0.25 },
+        "sends": { "reverb": "rev_plate", "delay": "dly_eighth", "fx": "fx_doubler" },
+        "sound": "Trap melodica lucida: voce molto avanti, brillante, doppiaggi larghi e autotune marcato che diventa timbro.",
+        "production": {
+          "tuning": "Pitch Correction / Auto-Tune in scala del pezzo, retune 0–5 ms, 100% — l'autotune QUI è timbro, non correzione.",
+          "doubles": "Doppia la strofa e panna 100 L/R a −6 dB sotto la main. I doppiaggi vanno de-essati più della main.",
+          "adlib": "Ad-lib su traccia separata: più delay puntato, meno riverbero, spesso hard-panned.",
+          "extra": "Throw delay (1/4, feedback 45%) automatizzato solo sull'ultima parola del verso."
+        }
+      },
+      "shiva": {
+        "aliases": ["shiva"],
+        "genre": "trap", "delivery": "rapped", "pitch_class": "mid", "loudness_target_lufs": -9,
+        "axes": { "brightness": 0.10, "aggression": 0.60, "density": 0.70, "character": 0.40,
+                  "cleanliness": 0.40, "sibilance_control": 0.35, "weight": 0.15 },
+        "sends": { "reverb": "rev_ambience", "delay": "dly_eighth", "fx": "fx_doubler" },
+        "sound": "Drill italiana: voce asciutta e in faccia, poco riverbero, medio-bassi presenti, poca aria.",
+        "production": {
+          "tuning": "Poco o niente autotune: al massimo una correzione leggera (retune 20–40 ms) per tenere l'intonazione.",
+          "doubles": "Doppia solo le battute chiave, panning stretto (60 L/R): la voce deve restare compatta e centrale.",
+          "adlib": "Ad-lib scuri e bassi, filtrati sotto i 6 kHz, quasi asciutti.",
+          "extra": "Niente coda lunga: l'ambiente è corto, la voce deve stare davanti alla 808."
+        }
+      },
+      "tony_boy": {
+        "aliases": ["tony boy", "tonyboy", "tony"],
+        "genre": "trap", "delivery": "sung", "pitch_class": "mid", "loudness_target_lufs": -10,
+        "axes": { "brightness": 0.30, "weight": 0.25, "intimacy": 0.40, "density": 0.55,
+                  "character": 0.30, "aggression": 0.10, "sibilance_control": 0.45 },
+        "sends": { "reverb": "rev_hall", "delay": "dly_eighth", "fx": "fx_doubler" },
+        "sound": "Trap melodica calda e sognante: voce vicina, coda lunga e filtrata, autotune presente ma morbido.",
+        "production": {
+          "tuning": "Auto-Tune in scala, retune 10–20 ms: si sente ma non squadra le note.",
+          "doubles": "Doppiaggi e armonizzazioni (terze sopra) a −10 dB, molto filtrati sotto i 300 Hz.",
+          "adlib": "Ad-lib melodici dentro lo stesso riverbero della main, non su un bus separato.",
+          "extra": "Il riverbero è parte del timbro: mandata più alta del solito, ma con HP a 350 Hz."
+        }
+      },
+      "glockyy": {
+        "aliases": ["glockyy", "glocky", "glock"],
+        "genre": "trap", "delivery": "rapped", "pitch_class": "low", "loudness_target_lufs": -9,
+        "axes": { "brightness": -0.05, "aggression": 0.65, "density": 0.65, "character": 0.45,
+                  "cleanliness": 0.50, "weight": 0.20, "sibilance_control": 0.30 },
+        "sends": { "reverb": "rev_ambience", "delay": "dly_slap", "fx": "fx_doubler" },
+        "sound": "Drill scura e ruvida: registro basso, saturazione evidente, ambiente quasi assente.",
+        "production": {
+          "tuning": "Nessun autotune percepibile. Se serve, correzione trasparente (retune 40 ms).",
+          "doubles": "Doppia in punch (solo le ultime parole della barra), stretto e forte.",
+          "adlib": "Ad-lib gravi, saturati, con slapback corto invece del delay ritmico.",
+          "extra": "La ruvidità è saturazione, non distorsione: se sfrigola, il drive è troppo."
+        }
+      },
+      "gue": {
+        "aliases": ["gue pequeno", "gue", "guè", "guè pequeno", "pequeno"],
+        "genre": "rap", "delivery": "rapped", "pitch_class": "low", "loudness_target_lufs": -10,
+        "axes": { "weight": 0.30, "aggression": 0.25, "density": 0.50, "character": 0.40,
+                  "vintage": 0.35, "brightness": 0.10, "cleanliness": 0.35 },
+        "sends": { "reverb": "rev_room", "delay": "dly_slap", "fx": "fx_none" },
+        "sound": "Rap classico: voce baritonale, asciutta e autorevole, carattere analogico, niente effetti vistosi.",
+        "production": {
+          "tuning": "Niente autotune. La voce è parlata-rappata: l'intonazione non è il punto.",
+          "doubles": "Doppia solo le rime finali, centrata, a −8 dB. Nessun allargamento.",
+          "adlib": "Ad-lib asciutti e centrati, stesso trattamento della main ma 6 dB sotto.",
+          "extra": "Il carattere sta nella saturazione a valvola e nel corpo sui 180 Hz, non nell'aria."
+        }
+      },
+      "capo_plaza": {
+        "aliases": ["capo plaza", "capoplaza", "capo"],
+        "genre": "trap", "delivery": "sung", "pitch_class": "mid", "loudness_target_lufs": -9,
+        "axes": { "brightness": 0.35, "aggression": 0.40, "density": 0.70, "character": 0.35,
+                  "sibilance_control": 0.50, "intimacy": 0.10 },
+        "sends": { "reverb": "rev_plate", "delay": "dly_eighth", "fx": "fx_doubler" },
+        "sound": "Trap energica e melodica: voce spinta, brillante ma non stridula, doppiaggi netti e delay ritmico.",
+        "production": {
+          "tuning": "Auto-Tune in scala, retune 5–10 ms: netto sulle tenute, naturale sulle parti rappate.",
+          "doubles": "Doppia tutta la strofa, panning 80 L/R, più compressa della main.",
+          "adlib": "Ad-lib brillanti e corti, con delay 1/8 puntato e riverbero plate corto.",
+          "extra": "Attenzione alle esse: brillantezza alta + doppiaggi = sibilanti al quadrato."
+        }
+      }
+    },
+
     "genre": {
       "trap":      { "aliases": ["trap", "drill"], "axes": { "aggression": 0.5, "density": 0.6, "character": 0.4, "brightness": 0.2, "sibilance_control": 0.15 }, "loudness_target_lufs": -9 },
       "rap":       { "aliases": ["rap", "hip hop", "hiphop", "hip-hop", "boom bap"], "delivery": "rapped", "axes": { "aggression": 0.35, "density": 0.55, "character": 0.3, "intimacy": 0.2 }, "loudness_target_lufs": -10 },
@@ -301,6 +388,35 @@
   "sends_notes": "I send sono bus PARALLELI, mai in serie sulla voce (vedi knowledge/CHAIN_ARCHITECTURE.md). Ogni gruppo (reverb, delay) sceglie la PRIMA variante la cui condizione e' vera, in ordine di priority: la selezione e' deterministica e mutuamente esclusiva.",
 
   "sends": [
+    {
+      "id": "fx_none",
+      "group": "fx",
+      "priority": 0,
+      "skip": true,
+      "label": "Nessun doppiaggio",
+      "plugin_logic": "—",
+      "enabled": "delivery_is_spoken == 1 or density < 0.45",
+      "why": "Voce che deve restare una sola: nessun doppiaggio artificiale."
+    },
+    {
+      "id": "fx_doubler",
+      "group": "fx",
+      "priority": 1,
+      "label": "Doubler largo",
+      "plugin_logic": "Stereo Delay (tempi diversi L/R) o Modulation Delay",
+      "enabled": "genre_is_rhythmic == 1 or density > 0.6",
+      "why": "Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808.",
+      "settings": {
+        "time_l_ms":     { "expr": "clamp(19 + 6 * pos(brightness), 8, 45)", "round": 0, "unit": "ms" },
+        "time_r_ms":     { "expr": "clamp(28 + 8 * pos(brightness), 8, 45)", "round": 0, "unit": "ms" },
+        "detune_cents":  { "expr": "clamp(6 + 6 * character, 0, 18)", "round": 0, "unit": "cent" },
+        "width_pct":     { "expr": "clamp(60 + 35 * pos(brightness) - 25 * pos(intimacy), 0, 100)", "round": 0, "unit": "%" },
+        "hpf":           { "expr": "clamp(300 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
+        "lpf":           { "expr": "clamp(7000 - 2000 * neg(brightness) - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
+        "duck_db":       { "expr": "clamp(2 + 3 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":       { "expr": "clamp(-14 - 6 * neg(density - 0.6), -30, -6)", "round": 1, "unit": "dB" }
+      }
+    },
     {
       "id": "rev_none",
       "group": "reverb",

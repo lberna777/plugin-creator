@@ -1,4 +1,8 @@
-# Ricetta Logic — "voce trap aggressiva ma non stridula"
+# Ricetta Logic — "capo plaza, voce molto brillante"
+
+**Mock-up del suono di Capo Plaza.** Trap energica e melodica: voce spinta, brillante ma non stridula, doppiaggi netti e delay ritmico.
+
+> Non è la catena reale dell'artista — nessuno la conosce fuori dal suo studio. È una ricostruzione del *risultato* che si sente sui dischi, partendo dal tuo segnale: stanza non trattata, microfono Focusrite, Scarlett a due ingressi.
 
 Generata da `chain_compiler.py` (regole v1.0.0) sul profilo `untreated_room_focusrite_scarlett`.
 Solo plugin **stock** di Logic Pro, nella strip della traccia vocale, in quest'ordine.
@@ -24,8 +28,8 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 |---|---|---|
 | `gateThresh` | -39.5 dB | 6 dB sopra il noise floor stimato, più 0.45 di severità richiesta |
 | `gateRange` | 13.2 dB | attenuazione parziale: chiudere del tutto si sente più del rumore |
-| `gateAtk` | 0.65 ms | apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti |
-| `gateRel` | 106 ms | rilascio lungo per non troncare le code di parola |
+| `gateAtk` | 1.4 ms | apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti |
+| `gateRel` | 144 ms | rilascio lungo per non troncare le code di parola |
 | `gateKeyLo` | 120 Hz | il detector ignora sotto la fondamentale: rumore di traffico e ronzii non aprono il gate |
 | `gateKeyHi` | 4000 Hz | il detector ignora sopra la banda di intelligibilità: ventole e fruscio non aprono il gate |
 
@@ -72,7 +76,7 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `sub2Gain` | -2.1 dB | toglie il naso senza spegnere l'intelligibilità |
 | `sub3Freq` | 2800 Hz | banda del flutter echo della stanza (1000–4000 Hz) |
 | `sub3Q` | 2.5 Q | medio |
-| `sub3Gain` | -2.5 dB | asprezza della stanza, più quella tolta su richiesta esplicita |
+| `sub3Gain` | -2.0 dB | asprezza della stanza, più quella tolta su richiesta esplicita |
 
 ## 6. DeEsser 2 — De-esser 1 (pre-compressione)
 *Protegge il detector dei compressori: senza, ogni 's' innesca una riduzione che abbassa la parola intera.*
@@ -82,8 +86,8 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | parametro | valore | perché |
 |---|---|---|
 | `ds1Freq` | 6650 Hz | centro sibilanza stimato del microfono sul registro mid |
-| `ds1Thresh` | -24.2 dB | quanto in basso agganciare le esse |
-| `ds1Range` | 7.2 dB | attenuazione contenuta: il grosso lo fa il secondo de-esser |
+| `ds1Thresh` | -25.4 dB | quanto in basso agganciare le esse |
+| `ds1Range` | 7.8 dB | attenuazione contenuta: il grosso lo fa il secondo de-esser |
 | `ds1Mode` | split  | modo split: agisce solo sulla banda alta, non abbassa tutta la voce |
 
 ## 7. Compressor — Compressore 1 (veloce)
@@ -93,11 +97,11 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 
 | parametro | valore | perché |
 |---|---|---|
-| `c1Thresh` | -23.6 dB | profondità di lavoro secondo densità (1) e aggressività richieste |
-| `c1Ratio` | 5.3 :1 | rapporto moderato, il livellamento vero lo fa il secondo stadio |
-| `c1Atk` | 2.6 ms | più aggressivo = attacco più corto = più controllo sui transienti |
-| `c1Rel` | 53 ms | rilascio legato alla densità richiesta |
-| `c1Knee` | 2.4 dB | ginocchio morbido salvo richiesta aggressiva |
+| `c1Thresh` | -21.6 dB | profondità di lavoro secondo densità (1) e aggressività richieste |
+| `c1Ratio` | 4.3 :1 | rapporto moderato, il livellamento vero lo fa il secondo stadio |
+| `c1Atk` | 5.6 ms | più aggressivo = attacco più corto = più controllo sui transienti |
+| `c1Rel` | 68 ms | rilascio legato alla densità richiesta |
+| `c1Knee` | 4.4 dB | ginocchio morbido salvo richiesta aggressiva |
 | `c1Makeup` | 5.0 dB | recupero del livello perso, stimato sulla riduzione attesa |
 
 ## 8. Compressor — Compressore 2 (lento, glue)
@@ -121,9 +125,9 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 
 | parametro | valore | perché |
 |---|---|---|
-| `satDrive` | 54 % | quantità di carattere richiesta dal testo (0.7) |
+| `satDrive` | 42 % | quantità di carattere richiesta dal testo (0.5) |
 | `satType` | transistor  | tipo di armoniche coerente con vintage/aggressività richieste |
-| `satTilt` | -0.4 dB | inclina lo spettro delle armoniche verso il timbro richiesto |
+| `satTilt` | 2.8 dB | inclina lo spettro delle armoniche verso il timbro richiesto |
 
 ## 10. Channel EQ — EQ tonale
 *Qui si aggiunge, su un segnale già pulito e già denso: i boost non riportano su fango o rumore.*
@@ -137,12 +141,12 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `tone1Gain` | 0.0 dB | corpo richiesto dal testo |
 | `tone2Freq` | 3200 Hz | presenza / intelligibilità |
 | `tone2Q` | 1.2 Q | campana media |
-| `tone2Gain` | -0.3 dB | ridotto perché il microfono ha già un suo picco di presenza |
+| `tone2Gain` | 1.8 dB | ridotto perché il microfono ha già un suo picco di presenza |
 | `tone3Freq` | 8000 Hz | brillantezza alta |
 | `tone3Q` | 1.0 Q | campana media |
-| `tone3Gain` | -0.3 dB | annullata se è stato chiesto un timbro vintage |
-| `airOn` | off  | aria solo se richiesta e se non contraddice il vintage |
-| `airGain` | 0.0 dB | shelf alta, tenuta bassa: la stanza non trattata ha già fruscio |
+| `tone3Gain` | 1.9 dB | annullata se è stato chiesto un timbro vintage |
+| `airOn` | on  | aria solo se richiesta e se non contraddice il vintage |
+| `airGain` | 2.8 dB | shelf alta, tenuta bassa: la stanza non trattata ha già fruscio |
 
 ## 11. DeEsser 2 — De-esser 2 (post-saturazione)
 *Saturazione e boost di presenza rigenerano sibilanti: un solo de-esser all'inizio non basta.*
@@ -153,7 +157,7 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 |---|---|---|
 | `ds2Freq` | 7350 Hz | leggermente più in alto del primo: qui si trattano le armoniche generate |
 | `ds2Thresh` | -19.6 dB | tiene conto delle armoniche aggiunte dalla saturazione |
-| `ds2Range` | 5.9 dB | rifinitura, non correzione principale |
+| `ds2Range` | 5.8 dB | rifinitura, non correzione principale |
 | `ds2Mode` | wide  | modo wide: rifinisce l'insieme dopo la colorazione |
 
 ## 12. Limiter — Limiter
@@ -164,7 +168,7 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | parametro | valore | perché |
 |---|---|---|
 | `limCeiling` | -1.0 dBFS | 1 dB di margine per i true peak dopo la codifica lossy |
-| `limRelease` | 66 ms | rilascio coerente con l'energia richiesta |
+| `limRelease` | 96 ms | rilascio coerente con l'energia richiesta |
 
 ## 13. Gain — Output / Mix
 *Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.*
@@ -179,51 +183,60 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 ## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
 ### 1/8 puntato — Tape Delay o Stereo Delay (sync on)
-*Esecuzione ritmica: il puntato riempie tra le parole senza mangiare l'intelligibilità come farebbe piu' riverbero.*
+*Scelta dal profilo Capo Plaza. Esecuzione ritmica: il puntato riempie tra le parole senza mangiare l'intelligibilità come farebbe piu' riverbero.*
 
 | parametro | valore |
 |---|---|
 | `sync` | on |
 | `division` | 1/8 dotted |
-| `feedback` | 28 |
+| `feedback` | 21 |
 | `hpf` | 350 |
 | `lpf` | 4000 |
 | `duck_db` | 8.0 |
-| `send_db` | -18.8 |
+| `send_db` | -22.8 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
 ### Doubler largo — Stereo Delay (tempi diversi L/R) o Modulation Delay
-*Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808.*
+*Scelta dal profilo Capo Plaza. Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808.*
 
 | parametro | valore |
 |---|---|
-| `time_l_ms` | 19 |
-| `time_r_ms` | 28 |
-| `detune_cents` | 10 |
-| `width_pct` | 60 |
+| `time_l_ms` | 25 |
+| `time_r_ms` | 36 |
+| `detune_cents` | 9 |
+| `width_pct` | 91 |
 | `hpf` | 300 |
-| `lpf` | 6700 |
+| `lpf` | 7000 |
 | `duck_db` | 5.0 |
 | `send_db` | -14.0 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
 ### Plate moderna — ChromaVerb (Plate) o Silververb
-*Default cantato: la plate resta dietro la voce e non impasta le medie della stanza già presenti nel segnale.*
+*Scelta dal profilo Capo Plaza. Default cantato: la plate resta dietro la voce e non impasta le medie della stanza già presenti nel segnale.*
 
 | parametro | valore |
 |---|---|
 | `decay_s` | 1.0 |
-| `predelay` | 20 |
-| `size_pct` | 55 |
+| `predelay` | 22 |
+| `size_pct` | 69 |
 | `hpf` | 300 |
-| `lpf` | 7000 |
-| `width_pct` | 85 |
+| `lpf` | 8425 |
+| `width_pct` | 99 |
 | `duck_db` | 8.0 |
 | `send_db` | -24.9 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
+
+## Produzione — quello che il plugin non fa
+
+La catena tratta il suono. Questi passaggi stanno *fuori* dal plugin e sono quelli che rendono riconoscibile il riferimento.
+
+- **Intonazione / Auto-Tune** — Auto-Tune in scala, retune 5–10 ms: netto sulle tenute, naturale sulle parti rappate.
+- **Doppiaggi** — Doppia tutta la strofa, panning 80 L/R, più compressa della main.
+- **Ad-lib** — Ad-lib brillanti e corti, con delay 1/8 puntato e riverbero plate corto.
+- **Extra** — Attenzione alle esse: brillantezza alta + doppiaggi = sibilanti al quadrato.
 
 ## Avvisi
 

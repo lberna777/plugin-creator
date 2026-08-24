@@ -3,6 +3,12 @@
 Rigenerati con `python3 tools/chain_compiler.py --examples`.
 Sono il riferimento per la **parità Python ↔ C++** (vedi CHECKLIST.md).
 
+- `voce-tipo-sfera-ebbasta` — "voce tipo sfera ebbasta"
+- `shiva` — "shiva"
+- `tony-boy-ma-meno-riverbero` — "tony boy, ma meno riverbero"
+- `glockyy` — "glockyy"
+- `gue-pequeno` — "gue pequeno"
+- `capo-plaza-voce-molto-brillante` — "capo plaza, voce molto brillante"
 - `voce-trap-aggressiva-ma-non-stridula` — "voce trap aggressiva ma non stridula"
 - `pop-moderno-voce-brillante-e-presente-da-streami` — "pop moderno, voce brillante e presente, da streaming"
 - `r-b-intimo-voce-calda-e-morbida` — "r&b intimo, voce calda e morbida"

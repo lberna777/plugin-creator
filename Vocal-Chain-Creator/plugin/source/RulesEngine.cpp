@@ -274,6 +274,29 @@ juce::StringArray RulesEngine::getProfileIds() const
     return ids;
 }
 
+std::vector<RulesEngine::ArtistEntry> RulesEngine::getArtists() const
+{
+    std::vector<ArtistEntry> artists;
+    if (auto* obj = rules.getProperty ("lexicon", {}).getProperty ("artists", {}).getDynamicObject())
+        for (auto& prop : obj->getProperties())
+        {
+            ArtistEntry entry;
+            entry.key   = prop.name.toString();
+            entry.sound = prop.value.getProperty ("sound", {}).toString();
+
+            if (auto* aliases = prop.value.getProperty ("aliases", {}).getArray())
+                if (! aliases->isEmpty())
+                    entry.prompt = (*aliases)[0].toString();
+            if (entry.prompt.isEmpty()) entry.prompt = entry.key.replace ("_", " ");
+
+            for (auto word : juce::StringArray::fromTokens (entry.prompt, " ", ""))
+                entry.displayName << (entry.displayName.isEmpty() ? "" : " ")
+                                  << word.substring (0, 1).toUpperCase() << word.substring (1);
+            artists.push_back (std::move (entry));
+        }
+    return artists;
+}
+
 //==============================================================================
 namespace
 {
@@ -399,9 +422,37 @@ Intent RulesEngine::parseIntent (const juce::String& prompt) const
             consumed[static_cast<size_t> (k)] = true;
     };
 
-    // 1) genere — solo il primo sposta gli assi
+    // 0) artista — il preset di partenza più forte: sposta tutto e può FORZARE le mandate
+    AliasTable artists; artists.build (lexicon.getProperty ("artists", {}));
+    bool haveArtist = false;
+    for (auto& hit : artists.findIn (tokens))
+    {
+        const bool first = ! haveArtist;
+        if (first)
+        {
+            haveArtist = true;
+            intent.artist      = hit.key;
+            intent.artistSound = hit.definition.getProperty ("sound", {}).toString();
+            intent.genre       = hit.definition.getProperty ("genre", {}).toString();
+            if (hit.definition.hasProperty ("loudness_target_lufs"))
+                intent.loudnessTargetLufs = static_cast<double> (hit.definition.getProperty ("loudness_target_lufs", {}));
+            if (hit.definition.hasProperty ("delivery"))    intent.delivery   = hit.definition.getProperty ("delivery", {}).toString();
+            if (hit.definition.hasProperty ("pitch_class")) intent.pitchClass = hit.definition.getProperty ("pitch_class", {}).toString();
+
+            if (auto* sendsObj = hit.definition.getProperty ("sends", {}).getDynamicObject())
+                for (auto& prop : sendsObj->getProperties())
+                    intent.forcedSends[prop.name.toString()] = prop.value.toString();
+
+            if (auto* notes = hit.definition.getProperty ("production", {}).getDynamicObject())
+                for (auto& prop : notes->getProperties())
+                    intent.productionNotes.emplace_back (prop.name.toString(), prop.value.toString());
+        }
+        record (hit.phrase, hit.index, first ? hit.definition.getProperty ("axes", {}) : juce::var(), 1.0);
+    }
+
+    // 1) genere — solo il primo sposta gli assi, e solo se non c'è già un artista
     AliasTable genres;   genres.build (lexicon.getProperty ("genre", {}));
-    bool haveGenre = false;
+    bool haveGenre = haveArtist;
     for (auto& hit : genres.findIn (tokens))
     {
         const bool first = ! haveGenre;
@@ -636,6 +687,8 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
 
     const auto profile = rules.getProperty ("source_profiles", {}).getProperty (profileId, {});
     preset.intent = parseIntent (prompt);
+    preset.artist      = preset.intent.artist;
+    preset.artistSound = preset.intent.artistSound;
     const auto ctx = buildContext (preset.intent, profile);
 
     if (auto* chain = rules.getProperty ("chain", {}).getArray())
@@ -675,7 +728,17 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
         {
             const auto group = spec.getProperty ("group", {}).toString();
             if (chosenGroups.contains (group)) continue;
-            if (expr::evaluate (spec.getProperty ("enabled", {}).toString(), ctx.vars) == 0.0) continue;
+
+            const auto forced = preset.intent.forcedSends.find (group);
+            if (forced != preset.intent.forcedSends.end())
+            {
+                // il profilo artista sceglie la variante: le condizioni non si applicano
+                if (spec.getProperty ("id", {}).toString() != forced->second) continue;
+            }
+            else if (expr::evaluate (spec.getProperty ("enabled", {}).toString(), ctx.vars) == 0.0)
+            {
+                continue;
+            }
 
             chosenGroups.add (group);
             if (static_cast<bool> (spec.getProperty ("skip", false)))
@@ -686,7 +749,15 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
             send.group       = group;
             send.label       = spec.getProperty ("label", {}).toString();
             send.pluginLogic = spec.getProperty ("plugin_logic", {}).toString();
-            send.why         = formatWhy (spec.getProperty ("why", {}).toString(), ctx);
+            send.why = formatWhy (spec.getProperty ("why", {}).toString(), ctx);
+            if (forced != preset.intent.forcedSends.end())
+            {
+                auto artistName = preset.intent.artist.replace ("_", " ");
+                juce::String titled;
+                for (auto word : juce::StringArray::fromTokens (artistName, " ", ""))
+                    titled << (titled.isEmpty() ? "" : " ") << word.substring (0, 1).toUpperCase() << word.substring (1);
+                send.why = "Scelta dal profilo " + titled + ". " + send.why;
+            }
 
             if (auto* settings = spec.getProperty ("settings", {}).getDynamicObject())
                 for (auto& prop : settings->getProperties())

@@ -193,6 +193,22 @@ Target: **-13.0 LUFS**, ceiling **-1.0 dBFS**.
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
+### Doubler largo — Stereo Delay (tempi diversi L/R) o Modulation Delay
+*Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808.*
+
+| parametro | valore |
+|---|---|
+| `time_l_ms` | 19 |
+| `time_r_ms` | 28 |
+| `detune_cents` | 12 |
+| `width_pct` | 60 |
+| `hpf` | 300 |
+| `lpf` | 5000 |
+| `duck_db` | 4.0 |
+| `send_db` | -14.0 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
+
 ### Room vintage — ChromaVerb (Room / Chamber)
 *Timbro vintage richiesto: una camera corta e scura invece di un riverbero moderno, coerente con il carattere a nastro.*
 

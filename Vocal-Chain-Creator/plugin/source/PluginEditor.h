@@ -38,6 +38,8 @@ private:
 
     void timerCallback() override;
     void forgeFromPrompt();
+    void forgeFromArtist (int menuIndex);
+    std::vector<vf::RulesEngine::ArtistEntry> artists;
     void selectModule (int index);
     void rebuildControls();
     void refreshFromPreset();
@@ -47,8 +49,8 @@ private:
 
     juce::TextEditor   promptBox;
     juce::TextButton   forgeButton { "FORGE" };
-    juce::ComboBox     profileBox, sendsModeBox;
-    juce::Label        titleLabel, statusLabel, whyTitle, whyLabel, sendsLabel;
+    juce::ComboBox     profileBox, sendsModeBox, artistBox;
+    juce::Label        titleLabel, statusLabel, whyTitle, whyLabel, sendsLabel, artistLabel;
     juce::TextEditor   whyBox, sendsBox;
     juce::Viewport     controlsViewport;
     juce::Component    controlsHolder;

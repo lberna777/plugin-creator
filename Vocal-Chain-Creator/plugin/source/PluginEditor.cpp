@@ -150,6 +150,19 @@ VocalForgeEditor::VocalForgeEditor (VocalForgeProcessor& p)
         processor.apvts, "sendsMode", sendsModeBox);
     addAndMakeVisible (sendsModeBox);
 
+    artistLabel.setText ("ARTISTA", juce::dontSendNotification);
+    artistLabel.setFont (juce::Font (juce::FontOptions (11.0f)).boldened());
+    artistLabel.setColour (juce::Label::textColourId, accent);
+    addAndMakeVisible (artistLabel);
+
+    artists = processor.rulesEngine.getArtists();
+    artistBox.addItem ("— scegli un riferimento —", 1);
+    for (size_t i = 0; i < artists.size(); ++i)
+        artistBox.addItem (artists[i].displayName, static_cast<int> (i) + 2);
+    artistBox.setSelectedId (1, juce::dontSendNotification);
+    artistBox.onChange = [this] { forgeFromArtist (artistBox.getSelectedId()); };
+    addAndMakeVisible (artistBox);
+
     statusLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
     statusLabel.setColour (juce::Label::textColourId, inkDim);
     addAndMakeVisible (statusLabel);
@@ -208,6 +221,16 @@ VocalForgeEditor::~VocalForgeEditor()
 void VocalForgeEditor::forgeFromPrompt()
 {
     processor.applyPrompt (promptBox.getText(), profileBox.getText());
+}
+
+void VocalForgeEditor::forgeFromArtist (int menuIndex)
+{
+    const auto index = static_cast<size_t> (menuIndex - 2);
+    if (menuIndex < 2 || index >= artists.size()) return;
+
+    // il riferimento riempie il prompt: resta testo, quindi lo puoi correggere a parole
+    promptBox.setText (artists[index].prompt, juce::dontSendNotification);
+    forgeFromPrompt();
 }
 
 void VocalForgeEditor::selectModule (int index)
@@ -287,6 +310,8 @@ juce::String VocalForgeEditor::statusText() const
         return "nessuna catena generata — scrivi una richiesta e premi FORGE";
 
     juce::String text;
+    if (preset.artist.isNotEmpty())
+        text << "riferimento: " << preset.artist.replace ("_", " ") << "   ·   ";
     text << "genere: " << (preset.intent.genre.isNotEmpty() ? preset.intent.genre : juce::String ("—"))
          << "   ·   registro: " << preset.intent.pitchClass
          << "   ·   esecuzione: " << preset.intent.delivery
@@ -319,6 +344,18 @@ void VocalForgeEditor::refreshFromPreset()
         why << juce::newLine << "———— tutta la catena ————" << juce::newLine;
         for (const auto& module : preset.modules)
             why << (module.enabled ? "[ON ] " : "[off] ") << module.label << " — " << module.why << juce::newLine;
+
+        if (! preset.intent.productionNotes.empty())
+        {
+            why << juce::newLine << "———— produzione: quello che il plugin NON fa ————" << juce::newLine;
+            if (preset.artistSound.isNotEmpty())
+                why << preset.artistSound << juce::newLine << juce::newLine;
+            for (const auto& note : preset.intent.productionNotes)
+                why << "· " << note.first << ": " << note.second << juce::newLine;
+            why << juce::newLine
+                << "Questa non è la catena reale dell'artista: è una ricostruzione del risultato "
+                << "che si sente sui dischi, a partire dal tuo segnale." << juce::newLine;
+        }
 
         if (! preset.warnings.isEmpty())
         {
@@ -396,9 +433,9 @@ void VocalForgeEditor::paint (juce::Graphics& g)
     g.fillAll (plateDark);
     auto area = getLocalBounds();
 
-    drawPlate (g, area.removeFromTop (108).reduced (10, 8), plateMid, 8.0f);
+    drawPlate (g, area.removeFromTop (126).reduced (10, 8), plateMid, 8.0f);
 
-    auto body = getLocalBounds().withTrimmedTop (108).reduced (10, 4);
+    auto body = getLocalBounds().withTrimmedTop (126).reduced (10, 4);
     auto rack = body.removeFromLeft (250);
     drawPlate (g, rack, plateDark.brighter (0.03f), 8.0f);
 
@@ -424,7 +461,7 @@ void VocalForgeEditor::resized()
 {
     auto area = getLocalBounds().reduced (10, 8);
 
-    auto header = area.removeFromTop (100);
+    auto header = area.removeFromTop (118);
     titleLabel.setBounds (header.removeFromTop (30).removeFromLeft (240).translated (8, 0));
 
     auto promptRow = header.removeFromTop (34).reduced (8, 0);
@@ -436,7 +473,10 @@ void VocalForgeEditor::resized()
     promptRow.removeFromRight (8);
     promptBox.setBounds (promptRow.reduced (0, 2));
 
-    statusLabel.setBounds (header.removeFromTop (22).reduced (10, 0));
+    auto artistRow = header.removeFromTop (26).reduced (8, 0);
+    artistLabel.setBounds (artistRow.removeFromLeft (58));
+    artistBox.setBounds (artistRow.removeFromLeft (260).reduced (0, 3));
+    statusLabel.setBounds (artistRow.withTrimmedLeft (12));
 
     auto body = area.withTrimmedTop (8);
     body.removeFromBottom (22);

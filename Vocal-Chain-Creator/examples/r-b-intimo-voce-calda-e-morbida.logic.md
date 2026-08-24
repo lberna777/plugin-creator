@@ -178,6 +178,22 @@ Target: **-12.0 LUFS**, ceiling **-1.0 dBFS**.
 
 ## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
+### Doubler largo — Stereo Delay (tempi diversi L/R) o Modulation Delay
+*Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808.*
+
+| parametro | valore |
+|---|---|
+| `time_l_ms` | 19 |
+| `time_r_ms` | 28 |
+| `detune_cents` | 8 |
+| `width_pct` | 40 |
+| `hpf` | 300 |
+| `lpf` | 6800 |
+| `duck_db` | 4.8 |
+| `send_db` | -14.0 |
+
+> Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
+
 ### Hall lunga — ChromaVerb (Hall) o Space Designer
 *Esecuzione intima o poco compressa: una coda lunga e filtrata da' respiro senza dover schiacciare la voce.*
 

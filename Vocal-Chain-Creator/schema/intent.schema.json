@@ -11,6 +11,11 @@
     "prompt": { "type": "string", "description": "Il testo originale, non normalizzato." },
     "language_hint": { "type": "string", "enum": ["it", "en", "mixed", "unknown"] },
     "genre": { "type": ["string", "null"], "description": "Genere riconosciuto (chiave di lexicon.genre) o null." },
+    "artist": { "type": ["string", "null"], "description": "Profilo artista riconosciuto (chiave di lexicon.artists) o null." },
+    "artist_sound": { "type": "string" },
+    "forced_sends": { "type": "object", "description": "Mandate imposte dal profilo artista: gruppo → id della variante.",
+                      "additionalProperties": { "type": "string" } },
+    "production_notes": { "type": "object", "additionalProperties": { "type": "string" } },
     "axes": {
       "type": "object",
       "required": ["brightness", "weight", "aggression", "density", "character", "intimacy", "cleanliness", "vintage", "sibilance_control"],
@@ -39,7 +44,7 @@
         "additionalProperties": false,
         "properties": {
           "term":     { "type": "string" },
-          "kind":     { "type": "string", "enum": ["genre", "descriptor", "delivery", "pitch", "usage"] },
+          "kind":     { "type": "string", "enum": ["artist", "genre", "descriptor", "delivery", "pitch", "usage"] },
           "negated":  { "type": "boolean" },
           "scale":    { "type": "number" },
           "applied":  { "type": "object", "additionalProperties": { "type": "number" } }

@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "indie lo-fi, voce vintage a nastro, poco brillante",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "indie lo-fi, voce vintage a nastro, poco brillante",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": "indie",
     "axes": {
       "brightness": -0.25,
@@ -567,6 +574,23 @@
         "send_db": -26.0
       },
       "why": "Carattere vintage: una sola ripetizione corta al posto della coda, tiene la voce avanti e asciutta."
+    },
+    {
+      "id": "fx_doubler",
+      "group": "fx",
+      "label": "Doubler largo",
+      "plugin_logic": "Stereo Delay (tempi diversi L/R) o Modulation Delay",
+      "settings": {
+        "time_l_ms": 19,
+        "time_r_ms": 28,
+        "detune_cents": 12,
+        "width_pct": 60,
+        "hpf": 300,
+        "lpf": 5000,
+        "duck_db": 4.0,
+        "send_db": -14.0
+      },
+      "why": "Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808."
     },
     {
       "id": "rev_room",

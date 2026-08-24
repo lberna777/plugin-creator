@@ -70,6 +70,17 @@ namespace
         if (expected.getProperty ("intent", {}).getProperty ("genre", {}).toString() != actual.intent.genre)
             fail ("genere: " + expected.getProperty ("intent", {}).getProperty ("genre", {}).toString()
                   + " != " + actual.intent.genre);
+        if (expected.getProperty ("artist", {}).toString() != actual.artist)
+            fail ("artista: " + expected.getProperty ("artist", {}).toString() + " != " + actual.artist);
+        if (auto* notes = expected.getProperty ("production_notes", {}).getArray())
+        {
+            if (static_cast<size_t> (notes->size()) != actual.intent.productionNotes.size())
+                fail ("numero di note di produzione diverso");
+            else
+                for (int i = 0; i < notes->size(); ++i)
+                    if ((*notes)[i].getProperty ("text", {}).toString() != actual.intent.productionNotes[static_cast<size_t> (i)].second)
+                        fail ("nota di produzione diversa: " + (*notes)[i].getProperty ("id", {}).toString());
+        }
         if (expected.getProperty ("intent", {}).getProperty ("delivery", {}).toString() != actual.intent.delivery)
             fail ("esecuzione diversa");
         if (expected.getProperty ("intent", {}).getProperty ("pitch_class", {}).toString() != actual.intent.pitchClass)

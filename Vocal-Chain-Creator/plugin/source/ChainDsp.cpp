@@ -46,7 +46,7 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
                                         static_cast<juce::uint32> (maximumBlockSize),
                                         static_cast<juce::uint32> (numChannels) };
 
-    for (auto* f : { &hpf1, &hpf2, &keyHp, &keyLp, &revHp, &revLp, &dlyHp, &dlyLp })
+    for (auto* f : { &hpf1, &hpf2, &keyHp, &keyLp, &revHp, &revLp, &dlyHp, &dlyLp, &fxHp, &fxLp })
     {
         f->prepare (spec);
         f->reset();
@@ -59,6 +59,8 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
     revLp.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
     dlyHp.setType (juce::dsp::StateVariableTPTFilterType::highpass);
     dlyLp.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
+    fxHp.setType (juce::dsp::StateVariableTPTFilterType::highpass);
+    fxLp.setType (juce::dsp::StateVariableTPTFilterType::lowpass);
 
     for (int band = 0; band < 3; ++band)
     {
@@ -80,6 +82,11 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
     delayLine.setMaximumDelayInSamples (static_cast<int> (sampleRate * 2.0) + maximumBlockSize);
     delayLine.reset();
 
+    doublerLine.prepare (spec);
+    doublerLine.setMaximumDelayInSamples (static_cast<int> (sampleRate * 0.1) + maximumBlockSize);
+    doublerLine.reset();
+    doublerPhase = 0.0f;
+
     loudnessFollower.prepare (spec);
     loudnessFollower.setAttackTime (400.0f);
     loudnessFollower.setReleaseTime (400.0f);
@@ -90,7 +97,7 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
     dlyScratch.setSize (numChannels, maximumBlockSize, false, false, true);
     preDelayScratch.setSize (numChannels, static_cast<int> (sampleRate * 0.1) + maximumBlockSize, false, false, true);
 
-    for (auto* s : { &trimGain, &outputGain, &mixAmount, &driveAmount, &revSendGain, &dlySendGain })
+    for (auto* s : { &trimGain, &outputGain, &mixAmount, &driveAmount, &revSendGain, &dlySendGain, &fxSendGain })
         s->reset (sampleRate, 0.02);
 
     comp1.reset();
@@ -106,7 +113,7 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
 void ChainDsp::reset()
 {
     if (! prepared) return;
-    for (auto* f : { &hpf1, &hpf2, &keyHp, &keyLp, &revHp, &revLp, &dlyHp, &dlyLp }) f->reset();
+    for (auto* f : { &hpf1, &hpf2, &keyHp, &keyLp, &revHp, &revLp, &dlyHp, &dlyLp, &fxHp, &fxLp }) f->reset();
     for (int band = 0; band < 3; ++band)
     {
         roomDetector[band].reset();
@@ -121,6 +128,7 @@ void ChainDsp::reset()
     limiter.reset();
     reverb.reset();
     delayLine.reset();
+    doublerLine.reset();
     comp1.reset();
     comp2.reset();
     gateEnv.reset();
@@ -174,6 +182,8 @@ void ChainDsp::updateCoefficients()
     revLp.setCutoffFrequency (safeFreq (settings.revLpf));
     dlyHp.setCutoffFrequency (safeFreq (settings.dlyHpf));
     dlyLp.setCutoffFrequency (safeFreq (settings.dlyLpf));
+    fxHp.setCutoffFrequency (safeFreq (settings.fxHpf));
+    fxLp.setCutoffFrequency (safeFreq (settings.fxLpf));
 
     juce::dsp::Reverb::Parameters reverbParams;
     reverbParams.roomSize   = juce::jlimit (0.0f, 1.0f, settings.revSize * 0.01f * 0.6f
@@ -191,6 +201,7 @@ void ChainDsp::updateCoefficients()
     driveAmount.setTargetValue (settings.satOn ? juce::jlimit (0.0f, 1.0f, settings.satDrive * 0.01f) : 0.0f);
     revSendGain.setTargetValue (settings.revOn ? juce::Decibels::decibelsToGain (settings.revSend) : 0.0f);
     dlySendGain.setTargetValue (settings.dlyOn ? juce::Decibels::decibelsToGain (settings.dlySend) : 0.0f);
+    fxSendGain.setTargetValue (settings.fxOn ? juce::Decibels::decibelsToGain (settings.fxSend) : 0.0f);
 }
 
 //==============================================================================
@@ -441,6 +452,52 @@ void ChainDsp::processSends (const juce::AudioBuffer<float>& dry, juce::AudioBuf
             }
         }
     }
+
+    // ---- bus doubler: due ritardi corti diversi L/R, stonati di pochi cent da un LFO lento.
+    // Allarga la voce ai lati senza toccare il centro, dove restano main e 808.
+    if (settings.fxOn && channels >= 1)
+    {
+        const auto lfoStep = static_cast<float> (juce::MathConstants<double>::twoPi * 0.7 / sampleRate);
+        const auto detuneSamples = settings.fxDetune / 100.0f * 0.004f * static_cast<float> (sampleRate);
+        const auto width = juce::jlimit (0.0f, 1.0f, settings.fxWidth * 0.01f);
+
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            doublerPhase += lfoStep;
+            if (doublerPhase > juce::MathConstants<float>::twoPi) doublerPhase -= juce::MathConstants<float>::twoPi;
+
+            const auto duck = juce::Decibels::decibelsToGain (
+                -settings.fxDuck * juce::jlimit (0.0f, 1.0f, duckEnv.value * 4.0f));
+            const auto send = fxSendGain.getNextValue() * duck;
+
+            float copies[2] { 0.0f, 0.0f };
+            for (int ch = 0; ch < juce::jmin (2, channels); ++ch)
+            {
+                const auto input = dry.getSample (juce::jmin (ch, dry.getNumChannels() - 1), sample);
+                doublerLine.pushSample (ch, input);
+
+                const auto baseMs  = (ch == 0) ? settings.fxTimeL : settings.fxTimeR;
+                const auto wobble  = std::sin (doublerPhase + (ch == 0 ? 0.0f : juce::MathConstants<float>::pi));
+                const auto delayed = doublerLine.popSample (ch,
+                    juce::jlimit (1.0f, static_cast<float> (sampleRate * 0.09),
+                                  baseMs * 0.001f * static_cast<float> (sampleRate) + wobble * detuneSamples), true);
+                copies[ch] = fxLp.processSample (ch, fxHp.processSample (ch, delayed));
+            }
+
+            if (channels >= 2)
+            {
+                // width: quanto le due copie si allontanano dal centro. A 0 collassano in mono.
+                const auto mid  = (copies[0] + copies[1]) * 0.5f;
+                const auto side = (copies[0] - copies[1]) * 0.5f * width;
+                destination.addSample (0, sample, (mid + side) * send);
+                destination.addSample (1, sample, (mid - side) * send);
+            }
+            else
+            {
+                destination.addSample (0, sample, copies[0] * send);
+            }
+        }
+    }
 }
 
 //==============================================================================
@@ -565,7 +622,7 @@ void ChainDsp::process (juce::AudioBuffer<float>& buffer, double bpm)
     }
 
     // mandate: bus PARALLELI, alimentati dall'uscita asciutta della catena
-    if (settings.revOn || settings.dlyOn)
+    if (settings.revOn || settings.dlyOn || settings.fxOn)
     {
         for (int ch = 0; ch < channels; ++ch)
             dryScratch.copyFrom (ch, 0, buffer, ch, 0, numSamples);

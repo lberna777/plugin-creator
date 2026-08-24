@@ -32,6 +32,12 @@ EXAMPLES_DIR = os.path.join(ROOT, "examples")
 SCHEMA_VERSION = "1.0.0"
 
 EXAMPLE_PROMPTS = [
+    "voce tipo sfera ebbasta",
+    "shiva",
+    "tony boy, ma meno riverbero",
+    "glockyy",
+    "gue pequeno",
+    "capo plaza, voce molto brillante",
     "voce trap aggressiva ma non stridula",
     "pop moderno, voce brillante e presente, da streaming",
     "r&b intimo, voce calda e morbida",
@@ -207,10 +213,26 @@ def parse_intent(prompt, rules):
         for k in range(index, index + len(phrase.split())):
             consumed.add(k)
 
+    # 0) artista: è il preset di partenza più forte. Sposta tutto in blocco e può FORZARE le mandate.
+    artist, forced_sends, production, sound = None, {}, {}, ""
+    for key, definition, idx, phrase in _find_aliases(tokens, _alias_table(lex.get("artists", {}))):
+        first = artist is None
+        if first:
+            artist = key
+            loudness = float(definition.get("loudness_target_lufs", loudness))
+            delivery = definition.get("delivery", delivery)
+            pitch_class = definition.get("pitch_class", pitch_class)
+            forced_sends = dict(definition.get("sends", {}))
+            production = dict(definition.get("production", {}))
+            sound = definition.get("sound", "")
+        record("artist", phrase, idx, definition.get("axes") if first else None, 1.0, False)
+
     # 1) genere: sposta gli assi in blocco
     genre = None
+    if artist is not None:
+        genre = lex.get("artists", {})[artist].get("genre")
     for key, definition, idx, phrase in _find_aliases(tokens, _alias_table(lex["genre"])):
-        first = genre is None
+        first = genre is None and artist is None
         if first:
             genre = key
             loudness = float(definition.get("loudness_target_lufs", loudness))
@@ -253,6 +275,10 @@ def parse_intent(prompt, rules):
         "schema_version": SCHEMA_VERSION,
         "prompt": prompt,
         "language_hint": language,
+        "artist": artist,
+        "artist_sound": sound,
+        "forced_sends": forced_sends,
+        "production_notes": production,
         "genre": genre,
         "axes": axes,
         "pitch_class": pitch_class,
@@ -351,18 +377,30 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
         modules.append({"id": spec["id"], "label": spec["label"], "enabled": enabled,
                         "why": why, "params": params})
 
+    forced = intent.get("forced_sends", {})
     sends, chosen_groups = [], set()
     for spec in sorted(rules["sends"], key=lambda s: (s["group"], s["priority"])):
-        if spec["group"] in chosen_groups or not evaluate(spec["enabled"], ctx):
+        group = spec["group"]
+        if group in chosen_groups:
+            continue
+        if group in forced:
+            # il profilo artista sceglie la variante: le condizioni non si applicano
+            if spec["id"] != forced[group]:
+                continue
+        elif not evaluate(spec["enabled"], ctx):
             continue
         chosen_groups.add(spec["group"])
         if spec.get("skip"):          # il gruppo si chiude senza mandata: è una scelta, non un buco
             continue
         settings = {pid: _resolve_param(dict(p, why=p.get("why", spec["why"])), ctx, ctx_text)["value"]
                     for pid, p in spec["settings"].items()}
+        why = _fmt_why(spec["why"], ctx, ctx_text)
+        if group in forced:
+            artist_name = (intent.get("artist") or "").replace("_", " ").title()
+            why = f"Scelta dal profilo {artist_name}. " + why
         sends.append({"id": spec["id"], "group": spec["group"], "label": spec["label"],
                       "plugin_logic": spec["plugin_logic"], "settings": settings,
-                      "why": _fmt_why(spec["why"], ctx, ctx_text)})
+                      "why": why})
 
     warnings = []
     if not intent["matched_terms"]:
@@ -373,9 +411,15 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
         warnings.append("Stanza non trattata: le riflessioni precoci non sono correggibili a valle. "
                         "Avvicinati al microfono e metti qualcosa di morbido dietro di te.")
 
+    production_notes = [{"id": key, "text": text}
+                        for key, text in intent.get("production_notes", {}).items()]
+
     return {
         "schema_version": SCHEMA_VERSION,
         "rules_version": rules["version"],
+        "artist": intent.get("artist"),
+        "artist_sound": intent.get("artist_sound", ""),
+        "production_notes": production_notes,
         "generated_by": "chain_compiler.py",
         "prompt": prompt,
         "intent": intent,
@@ -396,8 +440,10 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
 
 def render_text(preset):
     axes = preset["intent"]["axes"]
-    lines = [f'PROMPT: "{preset["prompt"]}"',
-             f'Genere: {preset["intent"]["genre"] or "—"} · registro: {preset["intent"]["pitch_class"]}'
+    lines = [f'PROMPT: "{preset["prompt"]}"']
+    if preset.get("artist"):
+        lines += [f'ARTISTA: {preset["artist"]}  —  {preset["artist_sound"]}']
+    lines += [f'Genere: {preset["intent"]["genre"] or "—"} · registro: {preset["intent"]["pitch_class"]}'
              f' · esecuzione: {preset["intent"]["delivery"]} · target: {preset["output"]["loudness_target_lufs"]} LUFS',
              f'Profilo sorgente: {preset["source_profile"]["id"]}',
              "Assi: " + "  ".join(f"{k}={v:+.2f}" for k, v in axes.items()), ""]
@@ -415,6 +461,9 @@ def render_text(preset):
         lines.append(f'[ SEND ] {send["group"].upper()} — {send["label"]}  ({send["plugin_logic"]})')
         lines.append('         ' + ", ".join(f"{k}={_fmt_value(v)}" for k, v in send["settings"].items()))
         lines.append(f'         {send["why"]}')
+    if preset.get("production_notes"):
+        lines += ["", "PRODUZIONE (quello che il plugin NON fa, e che devi fare in Logic):"]
+        lines += [f'  {note["id"]}: {note["text"]}' for note in preset["production_notes"]]
     if preset["warnings"]:
         lines += ["", "AVVISI:"] + [f"  - {w}" for w in preset["warnings"]]
     return "\n".join(lines)
@@ -423,7 +472,13 @@ def render_text(preset):
 def render_logic_recipe(preset, rules=None):
     rules = rules or load_rules()
     by_id = {m["id"]: m for m in preset["modules"]}
-    out = [f'# Ricetta Logic — "{preset["prompt"]}"', "",
+    out = [f'# Ricetta Logic — "{preset["prompt"]}"', ""]
+    if preset.get("artist"):
+        out += [f'**Mock-up del suono di {preset["artist"].replace("_", " ").title()}.** {preset["artist_sound"]}', "",
+                "> Non è la catena reale dell'artista — nessuno la conosce fuori dal suo studio. È una "
+                "ricostruzione del *risultato* che si sente sui dischi, partendo dal tuo segnale: "
+                "stanza non trattata, microfono Focusrite, Scarlett a due ingressi.", ""]
+    out += [
            f'Generata da `chain_compiler.py` (regole v{preset["rules_version"]}) '
            f'sul profilo `{preset["source_profile"]["id"]}`.',
            "Solo plugin **stock** di Logic Pro, nella strip della traccia vocale, in quest'ordine.", "",
@@ -448,6 +503,15 @@ def render_logic_recipe(preset, rules=None):
             out += [f'| `{k}` | {_fmt_value(v)} |' for k, v in send["settings"].items()]
             out += ["", f'> Manda la voce a un bus aux e imposta il livello di send a `send_db`. '
                         f'Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.', ""]
+    if preset.get("production_notes"):
+        out += ["## Produzione — quello che il plugin non fa", "",
+                "La catena tratta il suono. Questi passaggi stanno *fuori* dal plugin e sono "
+                "quelli che rendono riconoscibile il riferimento.", ""]
+        titles = {"tuning": "Intonazione / Auto-Tune", "doubles": "Doppiaggi",
+                  "adlib": "Ad-lib", "extra": "Extra"}
+        for note in preset["production_notes"]:
+            out += [f'- **{titles.get(note["id"], note["id"])}** — {note["text"]}']
+        out.append("")
     if preset["warnings"]:
         out += ["## Avvisi", ""] + [f"- {w}" for w in preset["warnings"]]
     return "\n".join(out)

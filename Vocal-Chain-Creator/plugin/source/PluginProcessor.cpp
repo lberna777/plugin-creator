@@ -159,6 +159,17 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 floatParam ("dlyDuck", "Delay Duck", 0.0f, 9.0f, 6.0f, "dB"),
                 floatParam ("dlySend", "Delay Send Level", -40.0f, -8.0f, -24.0f, "dB"));
 
+    layout.add (boolParam ("fxOn", "Doubler", false),
+                choiceParam ("fxVariant", "Doubler Type", { "none", "doubler" }, 0),
+                floatParam ("fxTimeL", "Doubler L", 8.0f, 45.0f, 22.0f, "ms"),
+                floatParam ("fxTimeR", "Doubler R", 8.0f, 45.0f, 32.0f, "ms"),
+                floatParam ("fxDetune", "Detune", 0.0f, 18.0f, 8.0f, "cent"),
+                floatParam ("fxWidth", "Doubler Width", 0.0f, 100.0f, 70.0f, "%"),
+                floatParam ("fxHpf", "Doubler HP", 100.0f, 900.0f, 300.0f, "Hz", 350.0f),
+                floatParam ("fxLpf", "Doubler LP", 2000.0f, 12000.0f, 7000.0f, "Hz", 6000.0f),
+                floatParam ("fxDuck", "Doubler Duck", 0.0f, 9.0f, 4.0f, "dB"),
+                floatParam ("fxSend", "Doubler Send", -30.0f, -6.0f, -14.0f, "dB"));
+
     return layout;
 }
 
@@ -277,6 +288,12 @@ vf::ChainSettings VocalForgeProcessor::currentSettings() const
     s.revDuck = value ("revDuck"); s.revSend = value ("revSend");
 
     s.dlyOn = internalSends && flag ("dlyOn");
+    s.fxOn = internalSends && flag ("fxOn");
+    s.fxTimeL = value ("fxTimeL"); s.fxTimeR = value ("fxTimeR");
+    s.fxDetune = value ("fxDetune"); s.fxWidth = value ("fxWidth");
+    s.fxHpf = value ("fxHpf"); s.fxLpf = value ("fxLpf");
+    s.fxDuck = value ("fxDuck"); s.fxSend = value ("fxSend");
+
     s.dlySync = flag ("dlySync"); s.dlyTime = value ("dlyTime");
     s.dlyFeedback = value ("dlyFeedback"); s.dlyHpf = value ("dlyHpf"); s.dlyLpf = value ("dlyLpf");
     s.dlyDuck = value ("dlyDuck"); s.dlySend = value ("dlySend");
@@ -407,6 +424,26 @@ void VocalForgeProcessor::writePresetToParameters (const vf::Preset& preset)
         setValue ("dlyLpf", get ("lpf", 4000.0f));
         setValue ("dlyDuck", get ("duck_db", 6.0f));
         setValue ("dlySend", get ("send_db", -24.0f));
+    }
+
+    const auto* doubler = preset.sendOfGroup ("fx");
+    setValue ("fxOn", doubler != nullptr ? 1.0f : 0.0f);
+    if (doubler != nullptr)
+    {
+        setChoice ("fxVariant", doubler->id.fromFirstOccurrenceOf ("fx_", false, false));
+        auto get = [doubler] (const char* id, float fallback)
+        {
+            const auto* found = doubler->find (id);
+            return found != nullptr ? static_cast<float> (found->asDouble()) : fallback;
+        };
+        setValue ("fxTimeL", get ("time_l_ms", 22.0f));
+        setValue ("fxTimeR", get ("time_r_ms", 32.0f));
+        setValue ("fxDetune", get ("detune_cents", 8.0f));
+        setValue ("fxWidth", get ("width_pct", 70.0f));
+        setValue ("fxHpf", get ("hpf", 300.0f));
+        setValue ("fxLpf", get ("lpf", 7000.0f));
+        setValue ("fxDuck", get ("duck_db", 4.0f));
+        setValue ("fxSend", get ("send_db", -14.0f));
     }
 
     setValue ("outGain", [&preset]

@@ -39,6 +39,7 @@ Vocal-Chain-Creator/
 ├── knowledge/
 │   ├── ROOM_MIC_PROFILE.md     ← stanza non trattata, mic Focusrite, Scarlett: cosa sappiamo già
 │   ├── CHAIN_ARCHITECTURE.md   ← i 13 moduli, ordine e motivo di ognuno
+│   ├── ARTIST_PROFILES.md      ← i riferimenti (trapper italiani): cosa sono e cosa non sono
 │   ├── PROMPT_GRAMMAR.md       ← vocabolario IT/EN → assi di intento
 │   └── LOGIC_INTEGRATION.md    ← come si entra in Logic (AU, ricetta stock, .cst)
 ├── schema/
@@ -57,6 +58,13 @@ Vocal-Chain-Creator/
 ├── examples/                   ← preset + ricette generati da prompt d'esempio
 └── reference/                  ← foto di riferimento della UI
 ```
+
+## Due modi di chiedere
+
+- **Un riferimento**: menù ARTISTA (Sfera Ebbasta, Shiva, Tony Boy, Glockyy, Guè, Capo Plaza) — catena
+  completa più riverbero, delay, doubler e note di produzione.
+  Vedi [`knowledge/ARTIST_PROFILES.md`](knowledge/ARTIST_PROFILES.md).
+- **A parole**: `voce trap aggressiva ma non stridula`. I due si combinano: `capo plaza, ma meno brillante`.
 
 ## Le regole che questo sottoprogetto aggiunge
 

@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "voce sussurrata intima per un pezzo lento",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "voce sussurrata intima per un pezzo lento",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": null,
     "axes": {
       "brightness": 0.0,

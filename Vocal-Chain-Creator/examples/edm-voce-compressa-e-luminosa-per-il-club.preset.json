@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "edm, voce compressa e luminosa per il club",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "edm, voce compressa e luminosa per il club",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": "edm",
     "axes": {
       "brightness": 0.85,
@@ -555,6 +562,23 @@
         "send_db": -24.4
       },
       "why": "Esecuzione ritmica: il puntato riempie tra le parole senza mangiare l'intelligibilità come farebbe piu' riverbero."
+    },
+    {
+      "id": "fx_doubler",
+      "group": "fx",
+      "label": "Doubler largo",
+      "plugin_logic": "Stereo Delay (tempi diversi L/R) o Modulation Delay",
+      "settings": {
+        "time_l_ms": 24,
+        "time_r_ms": 35,
+        "detune_cents": 9,
+        "width_pct": 90,
+        "hpf": 300,
+        "lpf": 7000,
+        "duck_db": 5.0,
+        "send_db": -14.0
+      },
+      "why": "Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808."
     },
     {
       "id": "rev_plate",

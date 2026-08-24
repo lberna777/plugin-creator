@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "r&b intimo, voce calda e morbida",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "r&b intimo, voce calda e morbida",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": "rnb",
     "axes": {
       "brightness": -0.1,
@@ -549,6 +556,23 @@
     "true_peak_ceiling_dbfs": -1.0
   },
   "sends": [
+    {
+      "id": "fx_doubler",
+      "group": "fx",
+      "label": "Doubler largo",
+      "plugin_logic": "Stereo Delay (tempi diversi L/R) o Modulation Delay",
+      "settings": {
+        "time_l_ms": 19,
+        "time_r_ms": 28,
+        "detune_cents": 8,
+        "width_pct": 40,
+        "hpf": 300,
+        "lpf": 6800,
+        "duck_db": 4.8,
+        "send_db": -14.0
+      },
+      "why": "Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808."
+    },
     {
       "id": "rev_hall",
       "group": "reverb",

@@ -76,6 +76,11 @@ struct ChainSettings
     bool  dlyOn = true, dlySync = true;
     float dlyTime = 375.0f, dlyFeedback = 25.0f, dlyHpf = 350.0f, dlyLpf = 4000.0f,
           dlyDuck = 6.0f, dlySend = -24.0f;
+
+    // doubler: terzo bus parallelo — allarga la voce senza toccare il centro
+    bool  fxOn = false;
+    float fxTimeL = 22.0f, fxTimeR = 32.0f, fxDetune = 8.0f, fxWidth = 70.0f,
+          fxHpf = 300.0f, fxLpf = 7000.0f, fxDuck = 4.0f, fxSend = -14.0f;
 };
 
 /** Quello che la UI può leggere mentre l'audio gira: solo atomics, nessun lock. */
@@ -170,12 +175,14 @@ private:
     juce::dsp::Limiter<float> limiter;
 
     juce::SmoothedValue<float> trimGain, outputGain, mixAmount, driveAmount,
-                               revSendGain, dlySendGain;
+                               revSendGain, dlySendGain, fxSendGain;
 
     // mandate (bus paralleli)
     juce::dsp::Reverb reverb;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> delayLine { 96000 };
-    juce::dsp::StateVariableTPTFilter<float> revHp, revLp, dlyHp, dlyLp;
+    juce::dsp::StateVariableTPTFilter<float> revHp, revLp, dlyHp, dlyLp, fxHp, fxLp;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> doublerLine { 16384 };
+    float doublerPhase = 0.0f;
     juce::AudioBuffer<float> dryScratch, revScratch, dlyScratch, preDelayScratch;
     Envelope duckEnv;
     float delayFeedbackState[2] { 0.0f, 0.0f };

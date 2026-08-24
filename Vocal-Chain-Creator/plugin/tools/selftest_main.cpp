@@ -70,7 +70,7 @@ namespace
     void setAllModules (VocalForgeProcessor& processor, bool on)
     {
         for (auto* id : { "gateOn", "hpfOn", "roomOn", "eqSubOn", "ds1On", "c1On", "c2On",
-                          "satOn", "eqToneOn", "ds2On", "limOn", "revOn", "dlyOn", "airOn" })
+                          "satOn", "eqToneOn", "ds2On", "limOn", "revOn", "dlyOn", "fxOn", "airOn" })
             if (auto* parameter = processor.apvts.getParameter (id))
                 parameter->setValueNotifyingHost (on ? 1.0f : 0.0f);
 
@@ -178,7 +178,7 @@ int main()
         auto renderFirstBlock = [&] (bool sendsOn)
         {
             prepare (sampleRate);
-            for (auto* id : { "revOn", "dlyOn" })
+            for (auto* id : { "revOn", "dlyOn", "fxOn" })
                 if (auto* parameter = processor.apvts.getParameter (id))
                     parameter->setValueNotifyingHost (sendsOn ? 1.0f : 0.0f);
 
@@ -197,6 +197,35 @@ int main()
         // il primo blocco è ancora quasi asciutto: le code arrivano dopo, non in serie
         check (worstDiff < 0.2f, "le mandate sono parallele, non in serie",
                "differenza " + juce::String (worstDiff, 3));
+    }
+
+    // ---- profili artista: catena completa e mandate imposte
+    {
+        prepare (48000.0);
+        for (auto* artist : { "sfera ebbasta", "shiva", "tony boy", "glockyy", "gue pequeno", "capo plaza" })
+        {
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+            const auto& preset = processor.getLastPreset();
+
+            const bool hasReverb = preset.sendOfGroup ("reverb") != nullptr;
+            const bool hasDelay  = preset.sendOfGroup ("delay")  != nullptr;
+            const bool satOn     = preset.find ("sat") != nullptr && preset.find ("sat")->enabled;
+            check (preset.artist.isNotEmpty() && hasReverb && hasDelay && satOn,
+                   juce::String (artist) + ": catena completa (saturazione + riverbero + delay)");
+
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            bool finite = true;
+            float peak = 0.0f;
+            for (int i = 0; i < 12; ++i)
+            {
+                fillVoiceLike (buffer, 48000.0, 0.5f);
+                processor.processBlock (buffer, midi);
+                finite = finite && isFinite (buffer);
+                peak = juce::jmax (peak, buffer.getMagnitude (0, blockSize));
+            }
+            check (finite && peak <= 1.0f, juce::String (artist) + ": suona pulito, senza clipping",
+                   juce::String (juce::Decibels::gainToDecibels (peak), 2) + " dBFS");
+        }
     }
 
     // ---- stato: il prompt fa parte del progetto

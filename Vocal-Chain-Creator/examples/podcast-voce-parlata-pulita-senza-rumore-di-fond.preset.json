@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "podcast, voce parlata pulita, senza rumore di fondo",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "podcast, voce parlata pulita, senza rumore di fondo",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": "podcast",
     "axes": {
       "brightness": 0.15,

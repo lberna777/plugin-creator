@@ -36,6 +36,15 @@ In caso di conflitto vince la regola **più restrittiva**.
   `sendsMode = internal` li fa girare nel plugin, `sendsMode = logic` li spegne e li esporta come bus aux.
 - Latenza: solo il lookahead del limiter, **dichiarata** con `setLatencySamples`.
 
+## Profili artista
+- Un profilo artista è un **mock-up del risultato**, mai la pretesa di essere la catena reale di quella
+  persona. Ogni preset con artista lo dichiara, in UI e nella ricetta.
+- Il profilo **impone** le mandate (`forced_sends`): la selezione per priorità non si applica.
+- Ogni profilo deve consegnare la catena completa (EQ, due compressori, saturazione, due de-esser,
+  limiter) **più** riverbero e delay dichiarati, e le note di produzione su intonazione, doppiaggi, ad-lib.
+- Quello che il plugin non fa (autotune, doppiaggi registrati, ad-lib) si **dichiara**, non si simula.
+- Due profili non possono produrre la stessa catena: se succede, uno dei due non serve (c'è un test).
+
 ## Sorgente
 - Il profilo di sorgente (`stanza`, `mic`, `interfaccia`) è un **input del preset**, non un'ipotesi implicita:
   compare in `source_profile` e cambia il risultato. Cambiare stanza deve cambiare la chain.

@@ -23,6 +23,8 @@ il modello e come si estende. Lingue supportate: **italiano e inglese**, mescola
 | `loudness_target` | LUFS | destinazione | output gain e limiter |
 
 ## Come si compone un intento
+0. **Artista** (se riconosciuto): applica il suo vettore di assi, esecuzione, registro, target e mandate
+   imposte. È il blocco più forte; gli aggettivi che seguono lo correggono. Vedi `ARTIST_PROFILES.md`.
 1. **Base neutra**: tutti gli assi a 0 (o al default dichiarato in `rules.json` → `intent_defaults`).
 2. **Genere** (se riconosciuto): applica il suo vettore di assi (`lexicon.genre`).
 3. **Aggettivi e frasi**: ogni termine riconosciuto somma il proprio delta (`lexicon.descriptors`).

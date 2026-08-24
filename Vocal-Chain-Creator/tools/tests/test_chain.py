@@ -97,7 +97,7 @@ class TestDspInvariants(unittest.TestCase):
             self.assertNotIn("reverb", ids)
             self.assertNotIn("delay", ids)
             for send in preset["sends"]:
-                self.assertIn(send["group"], ("reverb", "delay"))
+                self.assertIn(send["group"], ("reverb", "delay", "fx"))
 
 
 class TestIntentDrivesTheChain(unittest.TestCase):
@@ -144,7 +144,7 @@ class TestSends(unittest.TestCase):
             for send in preset["sends"]:
                 for field in ("id", "group", "label", "plugin_logic", "why"):
                     self.assertTrue(str(send[field]).strip(), f'{preset["prompt"]}/{field}')
-                self.assertIn(send["group"], ("reverb", "delay"))
+                self.assertIn(send["group"], ("reverb", "delay", "fx"))
 
     def test_every_send_is_filtered_ducked_and_leveled(self):
         for preset in PRESETS:

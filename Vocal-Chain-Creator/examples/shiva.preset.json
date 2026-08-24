@@ -1,58 +1,76 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
-  "artist": null,
-  "artist_sound": "",
-  "production_notes": [],
+  "artist": "shiva",
+  "artist_sound": "Drill italiana: voce asciutta e in faccia, poco riverbero, medio-bassi presenti, poca aria.",
+  "production_notes": [
+    {
+      "id": "tuning",
+      "text": "Poco o niente autotune: al massimo una correzione leggera (retune 20–40 ms) per tenere l'intonazione."
+    },
+    {
+      "id": "doubles",
+      "text": "Doppia solo le battute chiave, panning stretto (60 L/R): la voce deve restare compatta e centrale."
+    },
+    {
+      "id": "adlib",
+      "text": "Ad-lib scuri e bassi, filtrati sotto i 6 kHz, quasi asciutti."
+    },
+    {
+      "id": "extra",
+      "text": "Niente coda lunga: l'ambiente è corto, la voce deve stare davanti alla 808."
+    }
+  ],
   "generated_by": "chain_compiler.py",
-  "prompt": "voce femminile acuta, cristallina, con molte esse da controllare",
+  "prompt": "shiva",
   "intent": {
     "schema_version": "1.0.0",
-    "prompt": "voce femminile acuta, cristallina, con molte esse da controllare",
-    "language_hint": "it",
-    "artist": null,
-    "artist_sound": "",
-    "forced_sends": {},
-    "production_notes": {},
-    "genre": null,
+    "prompt": "shiva",
+    "language_hint": "unknown",
+    "artist": "shiva",
+    "artist_sound": "Drill italiana: voce asciutta e in faccia, poco riverbero, medio-bassi presenti, poca aria.",
+    "forced_sends": {
+      "reverb": "rev_ambience",
+      "delay": "dly_eighth",
+      "fx": "fx_doubler"
+    },
+    "production_notes": {
+      "tuning": "Poco o niente autotune: al massimo una correzione leggera (retune 20–40 ms) per tenere l'intonazione.",
+      "doubles": "Doppia solo le battute chiave, panning stretto (60 L/R): la voce deve restare compatta e centrale.",
+      "adlib": "Ad-lib scuri e bassi, filtrati sotto i 6 kHz, quasi asciutti.",
+      "extra": "Niente coda lunga: l'ambiente è corto, la voce deve stare davanti alla 808."
+    },
+    "genre": "trap",
     "axes": {
-      "brightness": 0.4,
-      "weight": 0.0,
-      "aggression": 0.0,
-      "density": 0.35,
-      "character": 0.15,
+      "brightness": 0.1,
+      "weight": 0.15,
+      "aggression": 0.6,
+      "density": 1,
+      "character": 0.55,
       "intimacy": 0.0,
-      "cleanliness": 0.45,
+      "cleanliness": 0.85,
       "vintage": 0.0,
       "sibilance_control": 0.8
     },
-    "pitch_class": "high",
-    "delivery": "sung",
-    "loudness_target_lufs": -14.0,
+    "pitch_class": "mid",
+    "delivery": "rapped",
+    "loudness_target_lufs": -9.0,
     "matched_terms": [
       {
-        "term": "femminile acuta",
-        "kind": "pitch"
-      },
-      {
-        "term": "cristallina",
-        "kind": "descriptor",
+        "term": "shiva",
+        "kind": "artist",
         "applied": {
-          "brightness": 0.4
-        }
-      },
-      {
-        "term": "esse",
-        "kind": "descriptor",
-        "applied": {
-          "sibilance_control": 0.35
+          "brightness": 0.1,
+          "aggression": 0.6,
+          "density": 0.7,
+          "character": 0.4,
+          "cleanliness": 0.4,
+          "sibilance_control": 0.35,
+          "weight": 0.15
         }
       }
     ],
-    "unknown_terms": [
-      "molte",
-      "controllare"
-    ]
+    "unknown_terms": []
   },
   "source_profile": {
     "id": "untreated_room_focusrite_scarlett",
@@ -124,32 +142,32 @@
       "why": "Stanza non trattata: il noise floor sta a -50 dBFS e tutto quello che viene dopo lo amplificherebbe. Il detector è filtrato sulla banda di voce, così ronzii e ventole non lo aprono.",
       "params": {
         "gateThresh": {
-          "value": -39.5,
-          "why": "6 dB sopra il noise floor stimato, più 0.45 di severità richiesta",
+          "value": -35.5,
+          "why": "6 dB sopra il noise floor stimato, più 0.85 di severità richiesta",
           "unit": "dB"
         },
         "gateRange": {
-          "value": 13.2,
+          "value": 19.6,
           "why": "attenuazione parziale: chiudere del tutto si sente più del rumore",
           "unit": "dB"
         },
         "gateAtk": {
-          "value": 2.0,
+          "value": 1.1,
           "why": "apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti",
           "unit": "ms"
         },
         "gateRel": {
-          "value": 160,
+          "value": 124,
           "why": "rilascio lungo per non troncare le code di parola",
           "unit": "ms"
         },
         "gateKeyLo": {
-          "value": 138,
+          "value": 120,
           "why": "il detector ignora sotto la fondamentale: rumore di traffico e ronzii non aprono il gate",
           "unit": "Hz"
         },
         "gateKeyHi": {
-          "value": 4600,
+          "value": 4000,
           "why": "il detector ignora sopra la banda di intelligibilità: ventole e fruscio non aprono il gate",
           "unit": "Hz"
         }
@@ -162,8 +180,8 @@
       "why": "Ripresa ravvicinata su cardioide: effetto prossimità (+5 dB) e plosive vanno tolti PRIMA dei detector dinamici.",
       "params": {
         "hpfFreq": {
-          "value": 115,
-          "why": "compensa la prossimità sul registro high, alzato/abbassato secondo il corpo richiesto",
+          "value": 98,
+          "why": "compensa la prossimità sul registro mid, alzato/abbassato secondo il corpo richiesto",
           "unit": "Hz"
         },
         "hpfSlope": {
@@ -190,7 +208,7 @@
           "unit": "Q"
         },
         "room1Depth": {
-          "value": -3.8,
+          "value": -5.4,
           "why": "attenuazione massima quando la risonanza supera la soglia",
           "unit": "dB"
         },
@@ -205,7 +223,7 @@
           "unit": "Q"
         },
         "room2Depth": {
-          "value": -4.3,
+          "value": -5.7,
           "why": "meno profondo se è stato chiesto corpo",
           "unit": "dB"
         },
@@ -220,12 +238,12 @@
           "unit": "Q"
         },
         "room3Depth": {
-          "value": -3.6,
+          "value": -4.8,
           "why": "attenuazione dinamica sulla scatola",
           "unit": "dB"
         },
         "roomThresh": {
-          "value": -27.3,
+          "value": -24.9,
           "why": "sotto questa soglia i notch non lavorano: la voce resta intera",
           "unit": "dB"
         }
@@ -238,7 +256,7 @@
       "why": "Prima togli, poi aggiungi: ogni dB tolto qui è headroom per i due compressori.",
       "params": {
         "sub1Freq": {
-          "value": 276,
+          "value": 240,
           "why": "centro della boxiness della stanza (150–400 Hz)",
           "unit": "Hz"
         },
@@ -248,13 +266,13 @@
           "unit": "Q"
         },
         "sub1Gain": {
-          "value": -2.9,
+          "value": -3.8,
           "why": "toglie fango, ma restituisce corpo se il testo lo ha chiesto",
           "unit": "dB"
         },
         "sub2Freq": {
-          "value": 1150,
-          "why": "banda nasale del registro high",
+          "value": 1000,
+          "why": "banda nasale del registro mid",
           "unit": "Hz"
         },
         "sub2Q": {
@@ -263,12 +281,12 @@
           "unit": "Q"
         },
         "sub2Gain": {
-          "value": -2.1,
+          "value": -3.1,
           "why": "toglie il naso senza spegnere l'intelligibilità",
           "unit": "dB"
         },
         "sub3Freq": {
-          "value": 3220,
+          "value": 2800,
           "why": "banda del flutter echo della stanza (1000–4000 Hz)",
           "unit": "Hz"
         },
@@ -291,8 +309,8 @@
       "why": "Protegge il detector dei compressori: senza, ogni 's' innesca una riduzione che abbassa la parola intera.",
       "params": {
         "ds1Freq": {
-          "value": 7647,
-          "why": "centro sibilanza stimato del microfono sul registro high",
+          "value": 6650,
+          "why": "centro sibilanza stimato del microfono sul registro mid",
           "unit": "Hz"
         },
         "ds1Thresh": {
@@ -318,32 +336,32 @@
       "why": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.",
       "params": {
         "c1Thresh": {
-          "value": -14.8,
-          "why": "profondità di lavoro secondo densità (0.35) e aggressività richieste",
+          "value": -22.4,
+          "why": "profondità di lavoro secondo densità (1) e aggressività richieste",
           "unit": "dB"
         },
         "c1Ratio": {
-          "value": 2.5,
+          "value": 4.7,
           "why": "rapporto moderato, il livellamento vero lo fa il secondo stadio",
           "unit": ":1"
         },
         "c1Atk": {
-          "value": 8.0,
+          "value": 4.4,
           "why": "più aggressivo = attacco più corto = più controllo sui transienti",
           "unit": "ms"
         },
         "c1Rel": {
-          "value": 119,
+          "value": 62,
           "why": "rilascio legato alla densità richiesta",
           "unit": "ms"
         },
         "c1Knee": {
-          "value": 6.0,
+          "value": 3.6,
           "why": "ginocchio morbido salvo richiesta aggressiva",
           "unit": "dB"
         },
         "c1Makeup": {
-          "value": 3.0,
+          "value": 5.0,
           "why": "recupero del livello perso, stimato sulla riduzione attesa",
           "unit": "dB"
         }
@@ -356,22 +374,22 @@
       "why": "Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante.",
       "params": {
         "c2Thresh": {
-          "value": -20.1,
+          "value": -24.0,
           "why": "aggancia il corpo della frase, non i picchi",
           "unit": "dB"
         },
         "c2Ratio": {
-          "value": 2.0,
+          "value": 3.0,
           "why": "rapporto basso: colla, non controllo",
           "unit": ":1"
         },
         "c2Atk": {
-          "value": 41,
+          "value": 25,
           "why": "attacco lento: lascia passare i transienti",
           "unit": "ms"
         },
         "c2Rel": {
-          "value": 258,
+          "value": 180,
           "why": "rilascio lungo, segue la frase",
           "unit": "ms"
         },
@@ -381,7 +399,7 @@
           "unit": "dB"
         },
         "c2Makeup": {
-          "value": 2.2,
+          "value": 3.5,
           "why": "recupero del livello dello stadio lento",
           "unit": "dB"
         }
@@ -394,16 +412,16 @@
       "why": "Dopo la dinamica il livello che la attacca è stabile, quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.",
       "params": {
         "satDrive": {
-          "value": 23,
-          "why": "quantità di carattere richiesta dal testo (0.15)",
+          "value": 45,
+          "why": "quantità di carattere richiesta dal testo (0.55)",
           "unit": "%"
         },
         "satType": {
-          "value": "tube",
+          "value": "transistor",
           "why": "tipo di armoniche coerente con vintage/aggressività richieste"
         },
         "satTilt": {
-          "value": 1.2,
+          "value": 0.3,
           "why": "inclina lo spettro delle armoniche verso il timbro richiesto",
           "unit": "dB"
         }
@@ -416,8 +434,8 @@
       "why": "Qui si aggiunge, su un segnale già pulito e già denso: i boost non riportano su fango o rumore.",
       "params": {
         "tone1Freq": {
-          "value": 207,
-          "why": "corpo del registro high",
+          "value": 180,
+          "why": "corpo del registro mid",
           "unit": "Hz"
         },
         "tone1Q": {
@@ -426,12 +444,12 @@
           "unit": "Q"
         },
         "tone1Gain": {
-          "value": 0.0,
+          "value": 0.4,
           "why": "corpo richiesto dal testo",
           "unit": "dB"
         },
         "tone2Freq": {
-          "value": 3680,
+          "value": 3200,
           "why": "presenza / intelligibilità",
           "unit": "Hz"
         },
@@ -441,12 +459,12 @@
           "unit": "Q"
         },
         "tone2Gain": {
-          "value": 0.7,
+          "value": 0.2,
           "why": "ridotto perché il microfono ha già un suo picco di presenza",
           "unit": "dB"
         },
         "tone3Freq": {
-          "value": 9200,
+          "value": 8000,
           "why": "brillantezza alta",
           "unit": "Hz"
         },
@@ -456,7 +474,7 @@
           "unit": "Q"
         },
         "tone3Gain": {
-          "value": 0.8,
+          "value": 0.2,
           "why": "annullata se è stato chiesto un timbro vintage",
           "unit": "dB"
         },
@@ -465,7 +483,7 @@
           "why": "aria solo se richiesta e se non contraddice il vintage"
         },
         "airGain": {
-          "value": 1.2,
+          "value": 0.3,
           "why": "shelf alta, tenuta bassa: la stanza non trattata ha già fruscio",
           "unit": "dB"
         }
@@ -478,17 +496,17 @@
       "why": "Saturazione e boost di presenza rigenerano sibilanti: un solo de-esser all'inizio non basta.",
       "params": {
         "ds2Freq": {
-          "value": 8452,
+          "value": 7350,
           "why": "leggermente più in alto del primo: qui si trattano le armoniche generate",
           "unit": "Hz"
         },
         "ds2Thresh": {
-          "value": -17.0,
+          "value": -18.6,
           "why": "tiene conto delle armoniche aggiunte dalla saturazione",
           "unit": "dB"
         },
         "ds2Range": {
-          "value": 4.7,
+          "value": 5.5,
           "why": "rifinitura, non correzione principale",
           "unit": "dB"
         },
@@ -510,7 +528,7 @@
           "unit": "dBFS"
         },
         "limRelease": {
-          "value": 120,
+          "value": 84,
           "why": "rilascio coerente con l'energia richiesta",
           "unit": "ms"
         }
@@ -523,12 +541,12 @@
       "why": "Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
       "params": {
         "outGain": {
-          "value": 0.0,
-          "why": "stima iniziale per il target di -14.0 LUFS, poi corretta dal meter",
+          "value": 5.0,
+          "why": "stima iniziale per il target di -9.0 LUFS, poi corretta dal meter",
           "unit": "dB"
         },
         "mix": {
-          "value": 100,
+          "value": 86,
           "why": "un filo di segnale non compresso quando la densità richiesta è alta",
           "unit": "%"
         }
@@ -536,30 +554,62 @@
     }
   ],
   "output": {
-    "loudness_target_lufs": -14.0,
+    "loudness_target_lufs": -9.0,
     "true_peak_ceiling_dbfs": -1.0
   },
   "sends": [
     {
-      "id": "rev_plate",
-      "group": "reverb",
-      "label": "Plate moderna",
-      "plugin_logic": "ChromaVerb (Plate) o Silververb",
+      "id": "dly_eighth",
+      "group": "delay",
+      "label": "1/8 puntato",
+      "plugin_logic": "Tape Delay o Stereo Delay (sync on)",
       "settings": {
-        "decay_s": 1.26,
-        "predelay": 20,
-        "size_pct": 61,
-        "hpf": 345,
-        "lpf": 7600,
-        "width_pct": 91,
-        "duck_db": 4.8,
-        "send_db": -24.0
+        "sync": true,
+        "division": "1/8 dotted",
+        "feedback": 24,
+        "hpf": 350,
+        "lpf": 4000,
+        "duck_db": 8.0,
+        "send_db": -21.2
       },
-      "why": "Default cantato: la plate resta dietro la voce e non impasta le medie della stanza già presenti nel segnale."
+      "why": "Scelta dal profilo Shiva. Esecuzione ritmica: il puntato riempie tra le parole senza mangiare l'intelligibilità come farebbe piu' riverbero."
+    },
+    {
+      "id": "fx_doubler",
+      "group": "fx",
+      "label": "Doubler largo",
+      "plugin_logic": "Stereo Delay (tempi diversi L/R) o Modulation Delay",
+      "settings": {
+        "time_l_ms": 20,
+        "time_r_ms": 29,
+        "detune_cents": 9,
+        "width_pct": 64,
+        "hpf": 300,
+        "lpf": 7000,
+        "duck_db": 5.0,
+        "send_db": -14.0
+      },
+      "why": "Scelta dal profilo Shiva. Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808."
+    },
+    {
+      "id": "rev_ambience",
+      "group": "reverb",
+      "label": "Ambience corta",
+      "plugin_logic": "ChromaVerb (Room)",
+      "settings": {
+        "decay_s": 0.5,
+        "predelay": 10,
+        "size_pct": 35,
+        "hpf": 400,
+        "lpf": 5000,
+        "width_pct": 60,
+        "duck_db": 6.0,
+        "send_db": -30.0
+      },
+      "why": "Scelta dal profilo Shiva. Voce parlata: un filo di ambienza corta per non farla suonare sotto vuoto, senza toccare l'intelligibilità."
     }
   ],
   "warnings": [
-    "Termini non nel vocabolario (ignorati): molte, controllare",
     "Stanza non trattata: le riflessioni precoci non sono correggibili a valle. Avvicinati al microfono e metti qualcosa di morbido dietro di te."
   ]
 }

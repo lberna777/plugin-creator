@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include <map>
+#include <utility>
 #include <set>
 #include <vector>
 
@@ -42,6 +43,9 @@ struct Send
 struct Intent
 {
     juce::String prompt, genre, pitchClass, delivery, languageHint;
+    juce::String artist, artistSound;
+    std::map<juce::String, juce::String> forcedSends;                 // gruppo → id della variante
+    std::vector<std::pair<juce::String, juce::String>> productionNotes;
     std::map<juce::String, double> axes;
     double loudnessTargetLufs = 0.0;
     juce::StringArray unknownTerms, matchedTerms;
@@ -50,7 +54,7 @@ struct Intent
 
 struct Preset
 {
-    juce::String prompt, profileId, rulesVersion;
+    juce::String prompt, profileId, rulesVersion, artist, artistSound;
     Intent intent;
     std::vector<Module> modules;
     std::vector<Send>   sends;
@@ -80,6 +84,10 @@ public:
     static const char* defaultProfileId()   { return "untreated_room_focusrite_scarlett"; }
 
     juce::StringArray getProfileIds() const;
+
+    struct ArtistEntry { juce::String key, displayName, prompt, sound; };
+    /** I profili artista disponibili, per il menù della UI. */
+    std::vector<ArtistEntry> getArtists() const;
 
     /** testo → assi. Deterministico: stesso testo, stesso intento. */
     Intent parseIntent (const juce::String& prompt) const;

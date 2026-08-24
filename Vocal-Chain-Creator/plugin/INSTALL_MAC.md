@@ -52,15 +52,21 @@ Non serve Xcode completo: bastano i Command Line Tools.
 
 1. Apri Logic e la tua traccia vocale.
 2. Nella strip, slot **Audio FX** → **Audio Units → MyPlugins → VOCAL FORGE**.
-3. Nel campo in alto scrivi che voce vuoi, in italiano o in inglese:
+3. **Scegli un riferimento** dal menù **ARTISTA** — Sfera Ebbasta, Shiva, Tony Boy, Glockyy, Guè,
+   Capo Plaza — e la catena si costruisce da sola: main, EQ, compressione, saturazione, riverbero,
+   delay e doubler. Nel pannello PERCHÉ trovi anche le **note di produzione** (autotune, doppiaggi,
+   ad-lib): sono la metà del suono che il plugin non fa e che devi fare tu in Logic.
+   Dettagli: [`../knowledge/ARTIST_PROFILES.md`](../knowledge/ARTIST_PROFILES.md).
+4. Oppure scrivi che voce vuoi, in italiano o in inglese — e puoi correggere un riferimento a parole
+   (`capo plaza, ma meno brillante`):
    > `voce trap aggressiva ma non stridula`
    > `podcast, voce parlata pulita, senza rumore di fondo`
    > `r&b intimo, voce calda e morbida`
-4. Premi **FORGE** (o Invio). La catena si costruisce: 13 moduli, valori calcolati sapendo che il segnale
+5. Premi **FORGE** (o Invio). La catena si costruisce: 13 moduli, valori calcolati sapendo che il segnale
    arriva da **stanza non trattata + microfono Focusrite + Scarlett a due ingressi**.
-5. A destra, il pannello **PERCHÉ** ti dice il motivo di ogni valore. Se un valore non ha un perché, è un bug.
-6. In basso, la sezione **SENDS**: riverbero e delay scelti per te. Sono **bus paralleli**, non sono in serie
-   sulla voce.
+6. A destra, il pannello **PERCHÉ** ti dice il motivo di ogni valore. Se un valore non ha un perché, è un bug.
+7. In basso, la sezione **SENDS**: riverbero, delay e doubler scelti per te. Sono **bus paralleli**,
+   non sono in serie sulla voce.
 
 ### I due modi delle mandate
 

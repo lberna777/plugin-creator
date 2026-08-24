@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "pop moderno, voce brillante e presente, da streaming",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "pop moderno, voce brillante e presente, da streaming",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": "pop",
     "axes": {
       "brightness": 1,
@@ -566,6 +573,23 @@
         "send_db": -22.0
       },
       "why": "Voce brillante e densa: ripetizioni lunghe e filtrate allargano senza aggiungere fango nelle medie."
+    },
+    {
+      "id": "fx_doubler",
+      "group": "fx",
+      "label": "Doubler largo",
+      "plugin_logic": "Stereo Delay (tempi diversi L/R) o Modulation Delay",
+      "settings": {
+        "time_l_ms": 25,
+        "time_r_ms": 36,
+        "detune_cents": 8,
+        "width_pct": 90,
+        "hpf": 300,
+        "lpf": 7000,
+        "duck_db": 5.0,
+        "send_db": -14.0
+      },
+      "why": "Trap italiana: il doppiaggio allarga la voce senza toccare il centro, dove restano la main e la 808."
     },
     {
       "id": "rev_plate",

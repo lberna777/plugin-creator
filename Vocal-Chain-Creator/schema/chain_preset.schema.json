@@ -10,6 +10,17 @@
     "schema_version": { "type": "string", "const": "1.0.0" },
     "rules_version":  { "type": "string", "description": "Versione di tools/data/rules.json usata." },
     "generated_by":   { "type": "string" },
+    "artist":         { "type": ["string", "null"], "description": "Profilo artista riconosciuto nel prompt (chiave di lexicon.artists)." },
+    "artist_sound":   { "type": "string", "description": "Descrizione in una riga del suono da ricostruire." },
+    "production_notes": {
+      "type": "array",
+      "description": "Quello che il plugin NON fa e che va fatto in Logic (intonazione, doppiaggi, ad-lib). Parte del mock-up quanto la catena.",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": { "id": { "type": "string" }, "text": { "type": "string", "minLength": 1 } }
+      }
+    },
     "prompt":         { "type": "string" },
     "intent":         { "$ref": "https://myplugins.com/vocal-forge/intent.schema.json" },
     "source_profile": {
@@ -68,14 +79,14 @@
     },
     "sends": {
       "type": "array",
-      "description": "Mandate: bus PARALLELI, mai in serie sulla voce. Una sola variante per gruppo (reverb, delay), scelta in modo deterministico per priorità.",
+      "description": "Mandate: bus PARALLELI, mai in serie sulla voce. Una sola variante per gruppo (reverb, delay, fx), scelta per priorità o imposta dal profilo artista.",
       "items": {
         "type": "object",
         "required": ["id", "group", "label", "plugin_logic", "settings", "why"],
         "additionalProperties": false,
         "properties": {
           "id":           { "type": "string" },
-          "group":        { "type": "string", "enum": ["reverb", "delay"] },
+          "group":        { "type": "string", "enum": ["reverb", "delay", "fx"] },
           "label":        { "type": "string" },
           "plugin_logic": { "type": "string", "description": "Plugin stock di Logic equivalente per il bus aux." },
           "settings":     { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean"] } },

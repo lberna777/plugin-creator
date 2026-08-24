@@ -1,12 +1,19 @@
 {
   "schema_version": "1.0.0",
   "rules_version": "1.0.0",
+  "artist": null,
+  "artist_sound": "",
+  "production_notes": [],
   "generated_by": "chain_compiler.py",
   "prompt": "voiceover per audiolibro, voce bassa e corposa",
   "intent": {
     "schema_version": "1.0.0",
     "prompt": "voiceover per audiolibro, voce bassa e corposa",
     "language_hint": "it",
+    "artist": null,
+    "artist_sound": "",
+    "forced_sends": {},
+    "production_notes": {},
     "genre": "voiceover",
     "axes": {
       "brightness": 0.0,
