@@ -139,6 +139,11 @@ def measure_all():
     return report
 
 
+def _sat(value):
+    """Il livello rispetto al ginocchio della saturazione, o un trattino se la saturazione è spenta."""
+    return f"{value:.1f}" if value is not None else "—"
+
+
 class TestGainStaging(unittest.TestCase):
     """Le regole di taratura diventano assert: valgono a gain nominale E a gain basso."""
 
@@ -200,7 +205,7 @@ def _table(report):
                 f'{prompt[:43]:<44}{m["makeup1_db"] + m["makeup2_db"]:>8.1f}{m["out_gain_db"]:>7.1f}'
                 f'{m["total_static_gain_db"]:>7.1f}{m["gr1_db"]:>7.2f}{m["gr2_db"]:>7.2f}'
                 f'{m["sat_drive_pct"]:>7.0f}'
-                f'{(m["sat_excess_db"] if m["sat_excess_db"] is not None else float("nan")):>8.1f}'
+                f'{_sat(m["sat_excess_db"]):>8}'
                 f'{m["headroom_before_limiter_db"]:>7.1f}{m["limiter_gr_db"]:>7.2f}{m["out_peak_dbfs"]:>8.1f}')
     return "\n".join(lines)
 
