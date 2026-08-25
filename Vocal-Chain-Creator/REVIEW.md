@@ -944,3 +944,36 @@ adesso distingue davvero. Ha già trovato una cosa: `sendsMode` restava su *logi
 spegneva i bus interni — la preparazione dei test ora lo riporta a *internal*.
 
 Controlli headless totali: **126**.
+
+
+---
+
+## Quarto passaggio — rischi e debito
+
+Chiusi tutti i RISCHI R1–R8 del primo giro e le voci di debito che avevano un effetto reale.
+
+| # | cosa era | correzione | controllo |
+|---|---|---|---|
+| **R1** | il room tamer guardava tutto il blocco prima di filtrare: ascolto ≠ bounce, e la banda 2 leggeva il segnale già filtrato dalla banda 1 | detector e filtro camminano insieme per campione, detector sull'ingresso dello stadio, profondità smussata, coefficienti a control rate indipendente dal blocco | stesso ingresso a blocchi da 64 e da 1024: differenza sotto −60 dBFS |
+| **R2** | filtri dimensionati a 2 canali mentre altri stadi ciclavano su tutti | tutti gli stadi coprono `kChannels = 8` | quattro canali identici escono identici |
+| **R3** | `setLatencySamples` ad audio in corsa a ogni FORGE | la latenza la fissa solo `prepareToPlay` | coperto dal controllo di latenza |
+| **R4** | 60 `setValueNotifyingHost` senza gesto e senza smoothing | `beginChangeGesture`/`endChangeGesture` per parametro, makeup smussati, valori non finiti scartati | click a cambio di prompt, misurato **contro il salto normale della catena** |
+| **R5** | `onPresetGenerated` toccava la UI dal thread di `setStateInformation` | `AsyncUpdater`: la UI si aggiorna sul message thread | — |
+| **R6** | il valutatore falliva in silenzio; `not` legava più stretto dei confronti (diverso da Python); divisione senza guardia | errori propagati e trasformati in avvisi del preset (stesso testo nei due motori), `not` spostato sopra i confronti, guardia su divisione e non-finiti | 15 espressioni di riferimento valutate in Python e riverificate in C++, più un test che valuta **ogni** espressione di `rules.json` in tutti gli angoli del dominio |
+| **R7** | spegnere una mandata troncava la coda; il tempo del delay saltava; `getTailLengthSeconds` mentiva | i bus continuano finché la mandata sta scendendo, tempo del delay interpolato, coda dichiarata calcolata da decay e feedback | la coda continua dopo lo spegnimento; coda dichiarata ≥ tempo del delay |
+| **R8** | nella banda di isteresi il gate congelava il guadagno a metà corsa | isteresi vera: sopra apre, sotto chiude, in mezzo resta com'era | segnale dentro la banda: il gate resta aperto |
+
+Debito chiuso: meter `outLufs` che non era LUFS e non leggeva nessuno (rimosso), overload morto di
+`isBusesLayoutSupported`, ternario con i due rami identici, scratch mai usati.
+
+**Due difetti trovati dai test nuovi, non dalla revisione:**
+
+1. I valori smussati partivano dal residuo del render precedente, quindi il primo blocco dopo
+   `prepareToPlay` rampava invece di partire già a destinazione: due render identici differivano di
+   −21 dBFS sul solo stadio di saturazione. Ora alla partenza si agganciano al valore di destinazione.
+2. Il controllo "nessun parametro finto" chiedeva che ogni parametro cambiasse **il suono** su un
+   segnale solo — cosa falsa per una soglia di gate su un segnale sempre sopra soglia. Ora verifica che
+   il parametro **arrivi alle impostazioni che il DSP riceve**: è esattamente il difetto B10, senza
+   dipendere dalle condizioni del segnale.
+
+Controlli headless: **124**. Test Python: **79**. Parità: 18 preset, 1683 valori, 0 differenze.

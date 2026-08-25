@@ -235,8 +235,6 @@ bool VocalForgeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) co
     return in.size() <= out.size();          // mono→stereo e stereo→stereo, mai il contrario
 }
 
-bool VocalForgeProcessor::isBusesLayoutSupported (const BusesProperties&) const { return true; }
-
 void VocalForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     chain.prepare (sampleRate, samplesPerBlock, juce::jmax (getTotalNumOutputChannels(), 1));
@@ -374,14 +372,25 @@ void VocalForgeProcessor::writePresetToParameters (const vf::Preset& preset)
     auto setValue = [this] (const juce::String& id, float value)
     {
         if (auto* parameter = apvts.getParameter (id))
-            parameter->setValueNotifyingHost (parameter->convertTo0to1 (value));
+        {
+            const auto normalised = parameter->convertTo0to1 (value);
+            if (! std::isfinite (normalised)) { jassertfalse; return; }   // una regola malformata non arriva al DSP
+            parameter->beginChangeGesture();
+            parameter->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, normalised));
+            parameter->endChangeGesture();
+        }
     };
     auto setChoice = [this] (const juce::String& id, const juce::String& text)
     {
         if (auto* choice = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (id)))
         {
             const auto index = choice->choices.indexOf (text, true);
-            if (index >= 0) choice->setValueNotifyingHost (choice->convertTo0to1 (static_cast<float> (index)));
+            if (index >= 0)
+            {
+                choice->beginChangeGesture();
+                choice->setValueNotifyingHost (choice->convertTo0to1 (static_cast<float> (index)));
+                choice->endChangeGesture();
+            }
         }
     };
 
@@ -402,9 +411,7 @@ void VocalForgeProcessor::writePresetToParameters (const vf::Preset& preset)
         {
             if (param.value.isString())
             {
-                const auto id = (param.id == "ds1Mode" || param.id == "ds2Mode" || param.id == "satType")
-                                ? param.id : param.id;
-                setChoice (id, param.value.toString());
+                setChoice (param.id, param.value.toString());
             }
             else if (param.id == "hpfSlope")
             {
@@ -503,8 +510,8 @@ void VocalForgeProcessor::applyPrompt (const juce::String& prompt, const juce::S
     chainGenerated.store (true);
     touchedByHand.store (false);
 
-    if (getSampleRate() > 0.0)      // fuori da un host la latenza la fissa prepareToPlay
-        setLatencySamples (static_cast<int> (getSampleRate() * lastPreset.declaredLatencyMs * 0.001));
+    // La latenza NON si cambia mentre il transport gira: Logic ricostruirebbe il grafo PDC
+    // (buco audio) per un valore che oggi è comunque zero. La fissa prepareToPlay. (R3)
     if (onPresetGenerated) onPresetGenerated();
 }
 

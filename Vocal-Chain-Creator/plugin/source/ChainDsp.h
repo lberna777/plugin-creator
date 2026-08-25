@@ -90,7 +90,6 @@ struct ChainMeters
     std::atomic<float> inPeak { 0.0f }, outPeak { 0.0f };
     std::atomic<float> gateGr { 0.0f }, ds1Gr { 0.0f }, comp1Gr { 0.0f },
                        comp2Gr { 0.0f }, ds2Gr { 0.0f }, limGr { 0.0f };
-    std::atomic<float> outLufs { -70.0f };
 };
 
 class ChainDsp
@@ -106,6 +105,9 @@ public:
 
     /** Processa in place. Nessuna allocazione qui dentro. */
     void process (juce::AudioBuffer<float>& buffer, double bpm);
+
+    /** Coda reale delle mandate, in secondi: serve all'host per non tagliare il bounce. */
+    double getTailSeconds() const noexcept;
 
     ChainMeters meters;
 
@@ -176,8 +178,8 @@ private:
     void processDeEsser (juce::AudioBuffer<float>&, int numSamples, DeEsser&, float threshDb,
                          float rangeDb, bool split, std::atomic<float>& meter);
     void processCompressor (juce::AudioBuffer<float>&, int numSamples, Compressor&, float thresh,
-                            float ratio, float atkMs, float relMs, float knee, float makeupDb,
-                            std::atomic<float>& meter);
+                            float ratio, float atkMs, float relMs, float knee,
+                            juce::SmoothedValue<float>& makeup, std::atomic<float>& meter);
     void processSaturation (juce::AudioBuffer<float>&, int numSamples);
     void processTilt (juce::AudioBuffer<float>&, int numSamples);
     void processLimiter (juce::AudioBuffer<float>&, int numSamples);
@@ -192,11 +194,15 @@ private:
 
     // path principale
     juce::dsp::StateVariableTPTFilter<float> hpf1, hpf2, keyHp, keyLp;
-    Biquad roomFilters[3][2], subFilters[3][2], toneFilters[3][2], airFilter[2];
-    Biquad tiltLow[2], tiltHigh[2];
+    static constexpr int kChannels = 8;      // limite dichiarato della classe: oltre non si va
+    Biquad roomFilters[3][kChannels], subFilters[3][kChannels], toneFilters[3][kChannels], airFilter[kChannels];
+    Biquad tiltLow[kChannels], tiltHigh[kChannels];
     juce::dsp::StateVariableTPTFilter<float> roomDetector[3];
     Envelope roomEnv[3], gateEnv;
+    juce::SmoothedValue<float> roomDepthSmoothed[3];
+    int   roomCoeffCountdown = 0;
     float gateGainDb = 0.0f;
+    bool  gateOpen = false;                  // R8: l'isteresi tiene il gate APERTO, non congela il guadagno
 
     Compressor comp1, comp2;
     DeEsser    deEsser1, deEsser2;
@@ -214,7 +220,8 @@ private:
     Limiter limiter;
 
     juce::SmoothedValue<float> trimGain, outputGain, mixAmount, driveAmount,
-                               revSendGain, dlySendGain, fxSendGain;
+                               revSendGain, dlySendGain, fxSendGain,
+                               comp1Makeup, comp2Makeup, delayTimeSamples;
 
     // mandate (bus paralleli)
     juce::dsp::Reverb reverb;
@@ -229,6 +236,9 @@ private:
 
     juce::dsp::BallisticsFilter<float> loudnessFollower;
     bool prepared = false;
+    /*  Alla partenza i valori smussati devono trovarsi GIÀ sul loro obiettivo: altrimenti il primo
+        blocco rampa da un residuo del render precedente, e due render identici non coincidono. */
+    bool snapSmoothedOnNextUpdate = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChainDsp)
 };

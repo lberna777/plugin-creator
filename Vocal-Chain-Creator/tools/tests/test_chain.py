@@ -200,17 +200,25 @@ class TestNoHardcodedDspValues(unittest.TestCase):
     """CLAUDE.md: un numero DSP nel codice è un bug, come un pixel hardcoded nella UI."""
 
     def test_compiler_source_has_no_domain_numbers(self):
-        import re
-        source = open(os.path.join(os.path.dirname(__file__), "..", "chain_compiler.py"), encoding="utf-8").read()
-        source = re.sub(r'"""(?:.|\n)*?"""', "", source)               # via i docstring
-        source = re.sub(r"#.*", "", source)                              # via i commenti
-        source = re.sub(r"(?:f?r?)(\'[^\']*\'|\"[^\"]*\")", "S", source)   # via le stringhe (formattazione, regex)
-        # Unici numeri ammessi nel codice: indici e costanti di presentazione, nessuna delle quali è DSP.
-        allowed = {"0", "0.0", "1", "1.0", "2", "3", "4", "6", "9", "-1", "48"}
-        # indici e step, scala neutra dei modificatori, precisioni di arrotondamento,
-        # larghezze di colonna della stampa, lunghezza dello slug: nessuno è un valore DSP.
-        numbers = {n for n in re.findall(r"(?<![\w.])-?\d+\.?\d*", source)} - allowed
-        self.assertEqual(numbers, set(), f"numeri sospetti nel codice: {sorted(numbers)} — devono stare in rules.json")
+        """I numeri veri si contano con il tokenizer, non con una regex: le stringhe ingannano."""
+        import io
+        import tokenize
+
+        path = os.path.join(os.path.dirname(__file__), "..", "chain_compiler.py")
+        with open(path, encoding="utf-8") as fh:
+            source = fh.read()
+
+        # Unici numeri ammessi nel codice: indici, scale neutre dei modificatori, precisioni di
+        # arrotondamento, larghezze di stampa, lunghezza dello slug. Nessuno e' un valore DSP.
+        allowed = {"0", "0.0", "1", "1.0", "2", "3", "4", "6", "7", "9", "11", "48"}
+        found = {}
+        for token in tokenize.generate_tokens(io.StringIO(source).readline):
+            if token.type == tokenize.NUMBER and token.string not in allowed:
+                found.setdefault(token.string, token.start[0])
+
+        self.assertEqual(found, {},
+                         f"numeri sospetti nel codice: {sorted(found)} (righe {sorted(found.values())}) "
+                         "— devono stare in rules.json")
 
 
 if __name__ == "__main__":

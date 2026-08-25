@@ -45,8 +45,15 @@ namespace expr
         }
         double parseAnd()
         {
-            auto left = parseCompare();
-            while (true) { skipWs(); if (! eat ("and")) return left; auto r = parseCompare(); left = (left != 0.0 && r != 0.0) ? 1.0 : 0.0; }
+            auto left = parseNot();
+            while (true) { skipWs(); if (! eat ("and")) return left; auto r = parseNot(); left = (left != 0.0 && r != 0.0) ? 1.0 : 0.0; }
+        }
+        double parseNot()
+        {
+            // in Python `not` lega PIU' LASCO dei confronti: `not a > b` e' `not (a > b)`
+            skipWs();
+            if (eat ("not")) return parseNot() != 0.0 ? 0.0 : 1.0;
+            return parseCompare();
         }
         double parseCompare()
         {
@@ -87,7 +94,13 @@ namespace expr
             {
                 skipWs();
                 if (pos < text.length() && text[pos] == '*') { ++pos; left *= parseUnary(); }
-                else if (pos < text.length() && text[pos] == '/') { ++pos; left /= parseUnary(); }
+                else if (pos < text.length() && text[pos] == '/')
+                {
+                    ++pos;
+                    const auto divisor = parseUnary();
+                    if (divisor == 0.0) { failed = true; return 0.0; }
+                    left /= divisor;
+                }
                 else return left;
             }
         }
@@ -96,7 +109,6 @@ namespace expr
             skipWs();
             if (pos < text.length() && text[pos] == '-') { ++pos; return -parseUnary(); }
             if (pos < text.length() && text[pos] == '+') { ++pos; return  parseUnary(); }
-            if (eat ("not")) return parseUnary() != 0.0 ? 0.0 : 1.0;
             return parsePrimary();
         }
         double parsePrimary()
@@ -174,7 +186,9 @@ namespace expr
     static double evaluate (const juce::String& source, const std::map<juce::String, double>& vars, bool* ok = nullptr)
     {
         Parser p (source, vars);
-        const auto value = p.parse();
+        auto value = p.parse();
+        if (p.pos < p.text.length()) p.failed = true;          // avanzo non consumato = espressione malformata
+        if (! std::isfinite (value)) { p.failed = true; value = 0.0; }
         if (ok != nullptr) *ok = ! p.failed;
         jassert (! p.failed);
         return value;
@@ -272,6 +286,12 @@ juce::StringArray RulesEngine::getProfileIds() const
         for (auto& prop : obj->getProperties())
             ids.add (prop.name.toString());
     return ids;
+}
+
+double RulesEngine::evaluateExpression (const juce::String& expression,
+                                        const std::map<juce::String, double>& variables, bool* ok)
+{
+    return expr::evaluate (expression, variables, ok);
 }
 
 std::vector<RulesEngine::ArtistEntry> RulesEngine::getArtists() const
@@ -651,6 +671,7 @@ juce::String RulesEngine::formatWhy (const juce::String& tmpl, const Context& ct
 
 Param RulesEngine::resolveParam (const juce::String& id, const juce::var& spec, const Context& ctx) const
 {
+    bool ok = true;
     Param param;
     param.id   = id;
     param.unit = spec.getProperty ("unit", juce::String()).toString();
@@ -665,13 +686,15 @@ Param RulesEngine::resolveParam (const juce::String& id, const juce::var& spec, 
             for (auto& choice : *choices)
             {
                 const bool matches = ! choice.hasProperty ("when")
-                                     || expr::evaluate (choice.getProperty ("when", {}).toString(), ctx.vars) != 0.0;
+                                     || expr::evaluate (choice.getProperty ("when", {}).toString(), ctx.vars, &ok) != 0.0;
+                if (! ok) failedExpressions.add (choice.getProperty ("when", {}).toString());
                 if (matches) { param.value = choice.getProperty ("value", {}); break; }
             }
     }
     else
     {
-        const auto raw = expr::evaluate (spec.getProperty ("expr", {}).toString(), ctx.vars);
+        const auto raw = expr::evaluate (spec.getProperty ("expr", {}).toString(), ctx.vars, &ok);
+        if (! ok) failedExpressions.add (spec.getProperty ("expr", {}).toString());
         if (spec.hasProperty ("round"))
         {
             const int decimals = static_cast<int> (spec.getProperty ("round", 0));
@@ -689,8 +712,26 @@ Param RulesEngine::resolveParam (const juce::String& id, const juce::var& spec, 
 }
 
 //==============================================================================
+namespace
+{
+    juce::String expressionWarning (const juce::String& expression)
+    {
+        return "Regola non valutabile, modulo lasciato al valore neutro: " + expression;
+    }
+}
+
 Preset RulesEngine::compile (const juce::String& prompt, const juce::String& profileId) const
 {
+    failedExpressions.clear();
+    juce::StringArray expressionErrors;
+    auto evaluateChecked = [&expressionErrors] (const juce::String& expression,
+                                                const std::map<juce::String, double>& vars)
+    {
+        bool ok = true;
+        const auto value = expr::evaluate (expression, vars, &ok);
+        if (! ok && ! expressionErrors.contains (expression)) expressionErrors.add (expression);
+        return value;
+    };
     Preset preset;
     preset.prompt       = prompt;
     preset.profileId    = profileId;
@@ -708,7 +749,7 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
             Module module;
             module.id      = spec.getProperty ("id", {}).toString();
             module.label   = spec.getProperty ("label", {}).toString();
-            module.enabled = expr::evaluate (spec.getProperty ("enabled", {}).toString(), ctx.vars) != 0.0;
+            module.enabled = evaluateChecked (spec.getProperty ("enabled", {}).toString(), ctx.vars) != 0.0;
 
             const auto whyKey = module.enabled ? "why_on" : "why_off";
             auto whyTemplate  = spec.getProperty (whyKey, {}).toString();
@@ -746,7 +787,7 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
                 // il profilo artista sceglie la variante: le condizioni non si applicano
                 if (spec.getProperty ("id", {}).toString() != forced->second) continue;
             }
-            else if (expr::evaluate (spec.getProperty ("enabled", {}).toString(), ctx.vars) == 0.0)
+            else if (evaluateChecked (spec.getProperty ("enabled", {}).toString(), ctx.vars) == 0.0)
             {
                 continue;
             }
@@ -785,6 +826,11 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
                                                           .getProperty ("declared_latency_ms", 0.0));
     preset.stereoIsDualMono   = static_cast<bool> (profile.getProperty ("io", {})
                                                           .getProperty ("stereo_is_dual_mono", false));
+
+    for (const auto& expression : failedExpressions)
+        if (! expressionErrors.contains (expression)) expressionErrors.add (expression);
+    for (const auto& expression : expressionErrors)
+        preset.warnings.add (expressionWarning (expression));
 
     if (preset.intent.matchedTerms.isEmpty())
         preset.warnings.add ("Nessun termine riconosciuto: applicato il profilo neutro dichiarato in rules.json.");

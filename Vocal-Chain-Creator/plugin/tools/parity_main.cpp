@@ -159,6 +159,43 @@ namespace
     }
 }
 
+namespace
+{
+    void compareExpressions (const juce::File& fixtureFile)
+    {
+        if (! fixtureFile.existsAsFile())
+        {
+            fail ("fixture delle espressioni assente: " + fixtureFile.getFullPathName());
+            return;
+        }
+
+        const auto fixtures = juce::JSON::parse (fixtureFile.loadFileAsString());
+        std::map<juce::String, double> context;
+        if (auto* obj = fixtures.getProperty ("context", {}).getDynamicObject())
+            for (auto& prop : obj->getProperties())
+                context[prop.name.toString()] = static_cast<double> (prop.value);
+
+        auto* cases = fixtures.getProperty ("cases", {}).getArray();
+        if (cases == nullptr) { fail ("fixture senza casi"); return; }
+
+        std::cout << "· semantica delle espressioni (" << cases->size() << " casi)" << std::endl;
+        for (auto& item : *cases)
+        {
+            const auto expression = item.getProperty ("expr", {}).toString();
+            const auto expected = static_cast<double> (item.getProperty ("value", {}));
+
+            bool ok = true;
+            const auto actual = vf::RulesEngine::evaluateExpression (expression, context, &ok);
+            ++checks;
+            if (! ok)
+                fail ("espressione non valutabile in C++: " + expression);
+            else if (std::abs (expected - actual) > 1.0e-6)
+                fail ("semantica diversa: " + expression + " -> py " + juce::String (expected, 6)
+                      + " != cpp " + juce::String (actual, 6));
+        }
+    }
+}
+
 int main (int argc, char** argv)
 {
     if (argc < 3)
@@ -185,6 +222,8 @@ int main (int argc, char** argv)
         ++files;
         comparePreset (entry.getFile(), engine);
     }
+
+    compareExpressions (examplesDir.getChildFile ("expression_fixtures.json"));
 
     std::cout << std::endl << (failures == 0 ? "OK   " : "FALLITO   ")
               << files << " preset, " << checks << " valori confrontati, "

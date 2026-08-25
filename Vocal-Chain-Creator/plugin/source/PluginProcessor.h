@@ -19,7 +19,6 @@ public:
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override {}
     void reset() override;
-    bool isBusesLayoutSupported (const BusesProperties&) const;
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
     void processBlockBypassed (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
@@ -31,7 +30,7 @@ public:
     bool acceptsMidi() const override                        { return false; }
     bool producesMidi() const override                       { return false; }
     bool isMidiEffect() const override                       { return false; }
-    double getTailLengthSeconds() const override             { return 4.0; }
+    double getTailLengthSeconds() const override             { return chain.getTailSeconds(); }
 
     int getNumPrograms() override                            { return 1; }
     int getCurrentProgram() override                         { return 0; }
@@ -62,10 +61,13 @@ public:
 
     std::function<void()> onPresetGenerated;
 
+    /** Lo stato che il DSP riceve adesso. Pubblico perché il self test verifica che ogni
+        parametro dichiarato arrivi davvero fin qui: un knob che non muove nulla è un knob finto. */
+    vf::ChainSettings currentSettings() const;
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void parameterChanged (const juce::String& parameterID, float newValue) override;
-    vf::ChainSettings currentSettings() const;
 
     /*  Puntatori ai valori dei parametri, risolti UNA volta nel costruttore.
         Prima `currentSettings()` costruiva 27 juce::String per blocco e faceva ~90 lookup:

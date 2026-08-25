@@ -14,7 +14,8 @@
     asset fotorealistici, si sostituisce il LookAndFeel e si legge layout.json — la struttura non cambia.
 */
 class VocalForgeEditor : public juce::AudioProcessorEditor,
-                         private juce::Timer
+                         private juce::Timer,
+                         private juce::AsyncUpdater
 {
 public:
     explicit VocalForgeEditor (VocalForgeProcessor&);
@@ -38,6 +39,7 @@ private:
     };
 
     void timerCallback() override;
+    void handleAsyncUpdate() override;      // setStateInformation puo' arrivare fuori dal message thread (R5)
     void forgeFromPrompt();
     void forgeFromArtist (int menuIndex);
     std::vector<vf::RulesEngine::ArtistEntry> artists;

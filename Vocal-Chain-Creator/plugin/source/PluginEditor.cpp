@@ -201,7 +201,7 @@ VocalForgeEditor::VocalForgeEditor (VocalForgeProcessor& p)
     controlsViewport.setScrollBarsShown (true, false);
     addAndMakeVisible (controlsViewport);
 
-    processor.onPresetGenerated = [this] { refreshFromPreset(); };
+    processor.onPresetGenerated = [this] { triggerAsyncUpdate(); };
 
     rebuildControls();
     refreshFromPreset();
@@ -211,9 +211,15 @@ VocalForgeEditor::VocalForgeEditor (VocalForgeProcessor& p)
     setSize (1080, 680);
 }
 
+void VocalForgeEditor::handleAsyncUpdate()
+{
+    refreshFromPreset();
+}
+
 VocalForgeEditor::~VocalForgeEditor()
 {
     processor.onPresetGenerated = nullptr;
+    cancelPendingUpdate();
     setLookAndFeel (nullptr);
 }
 

@@ -85,6 +85,10 @@ public:
 
     juce::StringArray getProfileIds() const;
 
+    /** Valuta un'espressione con un contesto dato: serve al confronto di semantica col Python. */
+    static double evaluateExpression (const juce::String& expression,
+                                      const std::map<juce::String, double>& variables, bool* ok = nullptr);
+
     struct ArtistEntry { juce::String key, displayName, prompt, sound; };
     /** I profili artista disponibili, per il menù della UI. */
     std::vector<ArtistEntry> getArtists() const;
@@ -98,6 +102,7 @@ public:
 
 private:
     juce::var rules;
+    mutable juce::StringArray failedExpressions;   // espressioni che non si sono valutate: diventano avvisi
 
     struct Context
     {

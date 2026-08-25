@@ -86,6 +86,9 @@ class ExprError(ValueError):
     pass
 
 
+EXPRESSION_WARNING = "Regola non valutabile, modulo lasciato al valore neutro: {expr}"
+
+
 def evaluate(expr, ctx):
     """Valuta un'espressione aritmetica/booleana su un contesto piatto di variabili."""
     try:
@@ -107,7 +110,10 @@ def _eval(node, ctx, src):
             return False
         raise ExprError(f"variabile sconosciuta {node.id!r} in {src!r}")
     if isinstance(node, ast.BinOp) and type(node.op) in _BIN_OPS:
-        return _BIN_OPS[type(node.op)](_eval(node.left, ctx, src), _eval(node.right, ctx, src))
+        left, right = _eval(node.left, ctx, src), _eval(node.right, ctx, src)
+        if isinstance(node.op, (ast.Div, ast.Mod)) and right == 0:
+            raise ExprError(f"divisione per zero in {src!r}")
+        return _BIN_OPS[type(node.op)](left, right)
     if isinstance(node, ast.UnaryOp):
         if isinstance(node.op, ast.USub):
             return -_eval(node.operand, ctx, src)
@@ -372,9 +378,20 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
     intent = parse_intent(prompt, rules)
     ctx, ctx_text = build_context(intent, profile, rules)
 
+    failed_expressions = []
+
+    def checked(expression):
+        """Un'espressione che non si valuta diventa un avviso, non uno zero silenzioso."""
+        try:
+            return evaluate(expression, ctx)
+        except ExprError:
+            if expression not in failed_expressions:
+                failed_expressions.append(expression)
+            return 0.0
+
     modules = []
     for spec in rules["chain"]:
-        enabled = bool(evaluate(spec["enabled"], ctx))
+        enabled = bool(checked(spec["enabled"]))
         why_key = "why_on" if enabled else "why_off"
         why = _fmt_why(spec.get(why_key, spec.get("why_on", "")), ctx, ctx_text)
         params = {}
@@ -394,7 +411,7 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
             # il profilo artista sceglie la variante: le condizioni non si applicano
             if spec["id"] != forced[group]:
                 continue
-        elif not evaluate(spec["enabled"], ctx):
+        elif not checked(spec["enabled"]):
             continue
         chosen_groups.add(spec["group"])
         if spec.get("skip"):          # il gruppo si chiude senza mandata: è una scelta, non un buco
@@ -409,7 +426,7 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
                       "plugin_logic": spec["plugin_logic"], "settings": settings,
                       "why": why})
 
-    warnings = []
+    warnings = [EXPRESSION_WARNING.format(expr=e) for e in failed_expressions]
     if not intent["matched_terms"]:
         warnings.append("Nessun termine riconosciuto: applicato il profilo neutro dichiarato in rules.json.")
     if intent["unknown_terms"]:
@@ -539,6 +556,27 @@ def _slug(text):
     return re.sub(r"[^a-z0-9]+", "-", normalize(text)).strip("-")[:48]
 
 
+EXPRESSION_CASES_PATH = os.path.join(HERE, "data", "expression_cases.json")
+
+
+def load_expression_cases():
+    """Le espressioni di riferimento e il loro contesto: dati, non codice."""
+    with open(EXPRESSION_CASES_PATH, "r", encoding="utf-8") as fh:
+        cases = json.load(fh)
+    return cases["expressions"], cases["context"]
+
+
+def write_expression_fixtures(path):
+    """Valuta le espressioni di riferimento e le salva: il motore C++ deve dare gli stessi numeri."""
+    expressions, context = load_expression_cases()
+    fixtures = {"context": context,
+                "cases": [{"expr": e, "value": round(float(evaluate(e, context)), 9)} for e in expressions]}
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(fixtures, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    return fixtures
+
+
 def generate_examples(check=False):
     rules = load_rules()
     os.makedirs(EXAMPLES_DIR, exist_ok=True)
@@ -562,6 +600,10 @@ def generate_examples(check=False):
                 with open(path, "w", encoding="utf-8") as fh:
                     fh.write(content)
         index.append(f'- `{slug}` — "{prompt}"')
+    fixture_path = os.path.join(EXAMPLES_DIR, "expression_fixtures.json")
+    if not check:
+        write_expression_fixtures(fixture_path)
+
     index_content = "\n".join(index) + "\n"
     index_path = os.path.join(EXAMPLES_DIR, "README.md")
     if check:
