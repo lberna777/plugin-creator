@@ -113,7 +113,7 @@
   },
   "io": {
     "stereo_is_dual_mono": true,
-    "declared_latency_ms": 2.0
+    "declared_latency_ms": 0.0
   },
   "modules": [
     {

@@ -76,6 +76,7 @@ struct ChainSettings
     bool  dlyOn = true, dlySync = true;
     float dlyTime = 375.0f, dlyFeedback = 25.0f, dlyHpf = 350.0f, dlyLpf = 4000.0f,
           dlyDuck = 6.0f, dlySend = -24.0f;
+    float dlyDivisionBeats = 0.75f;          // 1/4 = 1.0 · 1/8 puntato = 0.75 · 1/8 = 0.5 · 1/16 = 0.25
 
     // doubler: terzo bus parallelo — allarga la voce senza toccare il centro
     bool  fxOn = false;
@@ -142,21 +143,44 @@ private:
         float lastGrDb = 0.0f;
         void prepare (const juce::dsp::ProcessSpec&);
         void reset();
+        void setFrequency (float freq) { splitter.setCutoffFrequency (freq); }
     };
 
-    using Filter  = juce::dsp::IIR::Filter<float>;
-    using Coeffs  = juce::dsp::IIR::Coefficients<float>;
+    /*  Biquad a coefficienti propri (transposed direct form II).
+
+        juce::dsp::IIR::Coefficients è un ReferenceCountedObject: ricalcolarlo per-blocco
+        ALLOCA sul thread audio. Qui i coefficienti si scrivono in float già allocati.
+    */
+    struct Biquad
+    {
+        float b0 = 1.0f, b1 = 0.0f, b2 = 0.0f, a1 = 0.0f, a2 = 0.0f;
+        float z1 = 0.0f, z2 = 0.0f;
+
+        void reset() noexcept { z1 = z2 = 0.0f; }
+
+        float process (float x) noexcept
+        {
+            const auto y = b0 * x + z1;
+            z1 = b1 * x - a1 * y + z2;
+            z2 = b2 * x - a2 * y;
+            return y;
+        }
+
+        void setPeak (double sampleRate, float freq, float q, float gainDb) noexcept;
+        void setShelf (double sampleRate, float freq, float q, float gainDb, bool high) noexcept;
+    };
 
     void updateCoefficients();
-    void processGate (juce::AudioBuffer<float>&);
-    void processRoomTamer (juce::AudioBuffer<float>&);
-    void processDeEsser (juce::AudioBuffer<float>&, DeEsser&, float freq, float threshDb,
+    void processGate (juce::AudioBuffer<float>&, int numSamples);
+    void processRoomTamer (juce::AudioBuffer<float>&, int numSamples);
+    void processDeEsser (juce::AudioBuffer<float>&, int numSamples, DeEsser&, float threshDb,
                          float rangeDb, bool split, std::atomic<float>& meter);
-    void processCompressor (juce::AudioBuffer<float>&, Compressor&, float thresh, float ratio,
-                            float atkMs, float relMs, float knee, float makeupDb,
+    void processCompressor (juce::AudioBuffer<float>&, int numSamples, Compressor&, float thresh,
+                            float ratio, float atkMs, float relMs, float knee, float makeupDb,
                             std::atomic<float>& meter);
-    void processSaturation (juce::AudioBuffer<float>&);
-    void processSends (const juce::AudioBuffer<float>& dry, juce::AudioBuffer<float>& destination, double bpm);
+    void processSaturation (juce::AudioBuffer<float>&, int numSamples);
+    void processSends (const juce::AudioBuffer<float>& source, juce::AudioBuffer<float>& destination,
+                       int numSamples, double bpm);
 
     ChainSettings settings;
     double sampleRate = 44100.0;
@@ -164,8 +188,8 @@ private:
 
     // path principale
     juce::dsp::StateVariableTPTFilter<float> hpf1, hpf2, keyHp, keyLp;
-    std::array<Filter, 2> roomFilters[3];
-    std::array<Filter, 2> subFilters[3], toneFilters[3], airFilter;
+    Biquad roomFilters[3][2], subFilters[3][2], toneFilters[3][2], airFilter[2];
+    Biquad tiltLow[2], tiltHigh[2];
     juce::dsp::StateVariableTPTFilter<float> roomDetector[3];
     Envelope roomEnv[3], gateEnv;
     float gateGainDb = 0.0f;
@@ -181,9 +205,10 @@ private:
     juce::dsp::Reverb reverb;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> delayLine { 96000 };
     juce::dsp::StateVariableTPTFilter<float> revHp, revLp, dlyHp, dlyLp, fxHp, fxLp;
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> revPredelayLine { 8192 };
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> doublerLine { 16384 };
     float doublerPhase = 0.0f;
-    juce::AudioBuffer<float> dryScratch, revScratch, dlyScratch, preDelayScratch;
+    juce::AudioBuffer<float> dryScratch, revScratch, duckScratch;
     Envelope duckEnv;
     float delayFeedbackState[2] { 0.0f, 0.0f };
 

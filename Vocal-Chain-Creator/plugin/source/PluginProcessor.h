@@ -2,6 +2,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "ChainDsp.h"
 #include "RulesEngine.h"
+#include <vector>
 
 /*  VOCAL FORGE — processore.
 
@@ -64,6 +65,19 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void parameterChanged (const juce::String& parameterID, float newValue) override;
     vf::ChainSettings currentSettings() const;
+
+    /*  Puntatori ai valori dei parametri, risolti UNA volta nel costruttore.
+        Prima `currentSettings()` costruiva 27 juce::String per blocco e faceva ~90 lookup:
+        allocazioni sul thread audio, cioè un lock globale a ogni buffer.
+    */
+    struct ParamCache
+    {
+        void build (juce::AudioProcessorValueTreeState&);
+        float get (const char* id) const noexcept;
+        bool  flag (const char* id) const noexcept { return get (id) > 0.5f; }
+        std::vector<std::pair<juce::String, std::atomic<float>*>> entries;
+    };
+    ParamCache params;
     void writePresetToParameters (const vf::Preset&);
 
     vf::ChainDsp chain;

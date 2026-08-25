@@ -26,9 +26,12 @@ namespace
     }
 
     std::unique_ptr<juce::AudioParameterChoice> choiceParam (juce::String id, juce::String name,
-                                                             juce::StringArray choices, int def)
+                                                             juce::StringArray choices, int def,
+                                                             bool automatable = true)
     {
-        return std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { id, 1 }, name, choices, def);
+        return std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { id, 1 }, name, choices, def,
+            juce::AudioParameterChoiceAttributes().withAutomatable (automatable));
     }
 }
 
@@ -41,8 +44,7 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
     layout.add (floatParam ("inTrim",  "Input Trim", -24.0f, 24.0f, 0.0f, "dB"),
                 boolParam  ("polarity", "Polarity", false),
                 floatParam ("outGain", "Output", -24.0f, 12.0f, 0.0f, "dB"),
-                floatParam ("mix",     "Mix", 0.0f, 100.0f, 100.0f, "%"),
-                floatParam ("intensity", "Intensity", 0.0f, 100.0f, 60.0f, "%"));
+                floatParam ("mix",     "Mix", 0.0f, 100.0f, 100.0f, "%"));
 
     // gate
     layout.add (boolParam ("gateOn", "Gate", true),
@@ -138,7 +140,7 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
     // mandate — bus paralleli, mai in serie
     layout.add (choiceParam ("sendsMode", "Sends", { "internal", "logic" }, 0));
     layout.add (boolParam ("revOn", "Reverb Send", true),
-                choiceParam ("revVariant", "Reverb", { "none", "ambience", "room", "hall", "plate" }, 4),
+                choiceParam ("revVariant", "Reverb", { "none", "ambience", "room", "hall", "plate" }, 4, false),
                 floatParam ("revDecay", "Rev Decay", 0.2f, 4.0f, 1.4f, "s", 1.5f),
                 floatParam ("revPredelay", "Rev Predelay", 0.0f, 80.0f, 20.0f, "ms"),
                 floatParam ("revSize", "Rev Size", 10.0f, 100.0f, 55.0f, "%"),
@@ -149,7 +151,7 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 floatParam ("revSend", "Rev Send", -40.0f, -6.0f, -24.0f, "dB"));
 
     layout.add (boolParam ("dlyOn", "Delay Send", true),
-                choiceParam ("dlyVariant", "Delay", { "slap", "eighth", "quarter" }, 1),
+                choiceParam ("dlyVariant", "Delay", { "slap", "eighth", "quarter" }, 1, false),
                 boolParam ("dlySync", "Delay Sync", true),
                 floatParam ("dlyTime", "Delay Time", 60.0f, 1500.0f, 375.0f, "ms", 400.0f),
                 choiceParam ("dlyDivision", "Division", { "1/4", "1/8 dotted", "1/8", "1/16" }, 1),
@@ -160,7 +162,7 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 floatParam ("dlySend", "Delay Send Level", -40.0f, -8.0f, -24.0f, "dB"));
 
     layout.add (boolParam ("fxOn", "Doubler", false),
-                choiceParam ("fxVariant", "Doubler Type", { "none", "doubler" }, 0),
+                choiceParam ("fxVariant", "Doubler Type", { "none", "doubler" }, 0, false),
                 floatParam ("fxTimeL", "Doubler L", 8.0f, 45.0f, 22.0f, "ms"),
                 floatParam ("fxTimeR", "Doubler R", 8.0f, 45.0f, 32.0f, "ms"),
                 floatParam ("fxDetune", "Detune", 0.0f, 18.0f, 8.0f, "cent"),
@@ -171,6 +173,23 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 floatParam ("fxSend", "Doubler Send", -30.0f, -6.0f, -14.0f, "dB"));
 
     return layout;
+}
+
+void VocalForgeProcessor::ParamCache::build (juce::AudioProcessorValueTreeState& apvts)
+{
+    entries.clear();
+    for (auto* parameter : apvts.processor.getParameters())
+        if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter))
+            entries.emplace_back (withId->paramID, apvts.getRawParameterValue (withId->paramID));
+}
+
+float VocalForgeProcessor::ParamCache::get (const char* id) const noexcept
+{
+    for (const auto& entry : entries)
+        if (entry.first == id)
+            return entry.second != nullptr ? entry.second->load() : 0.0f;
+    jassertfalse;                    // id sconosciuto: è un errore di programmazione, non di runtime
+    return 0.0f;
 }
 
 //==============================================================================
@@ -188,6 +207,8 @@ VocalForgeProcessor::VocalForgeProcessor()
     for (auto* parameter : getParameters())
         if (auto* withId = dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter))
             apvts.addParameterListener (withId->paramID, this);
+
+    params.build (apvts);
 }
 
 VocalForgeProcessor::~VocalForgeProcessor()
@@ -224,15 +245,15 @@ void VocalForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     chain.prepare (sampleRate, samplesPerBlock, juce::jmax (getTotalNumOutputChannels(), 1));
     settingsDirty.store (true);
 
-    // latenza DICHIARATA: solo il lookahead del limiter. Logic compensa solo se gliela dici.
-    const auto latencyMs = lastPreset.declaredLatencyMs > 0.0 ? lastPreset.declaredLatencyMs : 2.0;
-    setLatencySamples (static_cast<int> (sampleRate * latencyMs * 0.001));
+    // Latenza DICHIARATA: dev'essere quella VERA. Il limiter di JUCE non ha lookahead,
+    // nessuno stadio ritarda: dichiarare 2 ms faceva anticipare la traccia a Logic di 96 campioni.
+    setLatencySamples (static_cast<int> (sampleRate * lastPreset.declaredLatencyMs * 0.001));
 }
 
 vf::ChainSettings VocalForgeProcessor::currentSettings() const
 {
-    auto value = [this] (const char* id) { return apvts.getRawParameterValue (id)->load(); };
-    auto flag  = [&value] (const char* id) { return value (id) > 0.5f; };
+    auto value = [this] (const char* id) { return params.get (id); };
+    auto flag  = [this] (const char* id) { return params.flag (id); };
 
     vf::ChainSettings s;
     s.inTrim = value ("inTrim");  s.polarity = flag ("polarity");
@@ -249,16 +270,25 @@ vf::ChainSettings VocalForgeProcessor::currentSettings() const
     s.roomOn = flag ("roomOn"); s.roomThresh = value ("roomThresh");
     for (int band = 0; band < 3; ++band)
     {
-        const auto b = juce::String (band + 1);
-        s.roomFreq[band]  = value (("room" + b + "Freq").toRawUTF8());
-        s.roomQ[band]     = value (("room" + b + "Q").toRawUTF8());
-        s.roomDepth[band] = value (("room" + b + "Depth").toRawUTF8());
-        s.subFreq[band]   = value (("sub" + b + "Freq").toRawUTF8());
-        s.subQ[band]      = value (("sub" + b + "Q").toRawUTF8());
-        s.subGain[band]   = value (("sub" + b + "Gain").toRawUTF8());
-        s.toneFreq[band]  = value (("tone" + b + "Freq").toRawUTF8());
-        s.toneQ[band]     = value (("tone" + b + "Q").toRawUTF8());
-        s.toneGain[band]  = value (("tone" + b + "Gain").toRawUTF8());
+        static const char* roomIds[3][3] {
+            { "room1Freq", "room1Q", "room1Depth" }, { "room2Freq", "room2Q", "room2Depth" },
+            { "room3Freq", "room3Q", "room3Depth" } };
+        static const char* subIds[3][3] {
+            { "sub1Freq", "sub1Q", "sub1Gain" }, { "sub2Freq", "sub2Q", "sub2Gain" },
+            { "sub3Freq", "sub3Q", "sub3Gain" } };
+        static const char* toneIds[3][3] {
+            { "tone1Freq", "tone1Q", "tone1Gain" }, { "tone2Freq", "tone2Q", "tone2Gain" },
+            { "tone3Freq", "tone3Q", "tone3Gain" } };
+
+        s.roomFreq[band]  = value (roomIds[band][0]);
+        s.roomQ[band]     = value (roomIds[band][1]);
+        s.roomDepth[band] = value (roomIds[band][2]);
+        s.subFreq[band]   = value (subIds[band][0]);
+        s.subQ[band]      = value (subIds[band][1]);
+        s.subGain[band]   = value (subIds[band][2]);
+        s.toneFreq[band]  = value (toneIds[band][0]);
+        s.toneQ[band]     = value (toneIds[band][1]);
+        s.toneGain[band]  = value (toneIds[band][2]);
     }
     s.eqSubOn = flag ("eqSubOn"); s.eqToneOn = flag ("eqToneOn");
     s.airOn = flag ("airOn"); s.airGain = value ("airGain");
@@ -295,6 +325,9 @@ vf::ChainSettings VocalForgeProcessor::currentSettings() const
     s.fxDuck = value ("fxDuck"); s.fxSend = value ("fxSend");
 
     s.dlySync = flag ("dlySync"); s.dlyTime = value ("dlyTime");
+    // 1/4 · 1/8 puntato · 1/8 · 1/16 — l'ordine è quello del parametro choice
+    static const float divisionBeats[] { 1.0f, 0.75f, 0.5f, 0.25f };
+    s.dlyDivisionBeats = divisionBeats[juce::jlimit (0, 3, static_cast<int> (value ("dlyDivision")))];
     s.dlyFeedback = value ("dlyFeedback"); s.dlyHpf = value ("dlyHpf"); s.dlyLpf = value ("dlyLpf");
     s.dlyDuck = value ("dlyDuck"); s.dlySend = value ("dlySend");
     return s;

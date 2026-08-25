@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_audio_processors/juce_audio_processors.h>
 #include "PluginProcessor.h"
+#include <vector>
 
 /*  VOCAL FORGE — editor.
 
@@ -60,6 +61,10 @@ private:
     juce::OwnedArray<juce::Label> sliderLabels;
     juce::OwnedArray<juce::ToggleButton> toggles;
     juce::OwnedArray<juce::ComboBox> combos;
+    /*  Ordine di posizionamento: ogni controllo con la SUA etichetta.
+        Prima `resized()` consumava le etichette per tipo e le sfalsava su ogni modulo con un menu. */
+    struct PlacedControl { juce::Component* control; juce::Label* label; };
+    std::vector<PlacedControl> placement;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::SliderAttachment> sliderAttachments;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachments;
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ComboBoxAttachment> comboAttachments;

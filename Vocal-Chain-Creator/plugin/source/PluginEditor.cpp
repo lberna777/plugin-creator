@@ -251,6 +251,7 @@ void VocalForgeEditor::rebuildControls()
     sliderLabels.clear();
     toggles.clear();
     combos.clear();
+    placement.clear();
 
     const auto moduleId = moduleIds[selectedModule];
     const auto it = moduleParams.find (moduleId);
@@ -265,6 +266,7 @@ void VocalForgeEditor::rebuildControls()
         {
             auto* toggle = toggles.add (new juce::ToggleButton (parameter->getName (24)));
             controlsHolder.addAndMakeVisible (toggle);
+            placement.push_back ({ toggle, nullptr });
             buttonAttachments.add (new juce::AudioProcessorValueTreeState::ButtonAttachment (
                 processor.apvts, paramId, *toggle));
         }
@@ -278,6 +280,7 @@ void VocalForgeEditor::rebuildControls()
             label->setColour (juce::Label::textColourId, inkDim);
             label->setJustificationType (juce::Justification::centred);
             controlsHolder.addAndMakeVisible (label);
+            placement.push_back ({ combo, label });
             comboAttachments.add (new juce::AudioProcessorValueTreeState::ComboBoxAttachment (
                 processor.apvts, paramId, *combo));
         }
@@ -296,6 +299,7 @@ void VocalForgeEditor::rebuildControls()
             label->setJustificationType (juce::Justification::centred);
             controlsHolder.addAndMakeVisible (label);
 
+            placement.push_back ({ slider, label });
             sliderAttachments.add (new juce::AudioProcessorValueTreeState::SliderAttachment (
                 processor.apvts, paramId, *slider));
         }
@@ -519,10 +523,8 @@ void VocalForgeEditor::resized()
         if (++column >= columns) { column = 0; ++row; }
     };
 
-    int labelIndex = 0;
-    for (auto* toggle : toggles) place (*toggle, nullptr);
-    for (auto* combo : combos)   place (*combo, sliderLabels[labelIndex++]);
-    for (auto* slider : sliders) place (*slider, sliderLabels[labelIndex++]);
+    for (const auto& placed : placement)
+        place (*placed.control, placed.label);
 
     controlsHolder.setSize (controlsViewport.getWidth(), juce::jmax (controlsViewport.getHeight(), (row + 1) * knobHeight));
 }

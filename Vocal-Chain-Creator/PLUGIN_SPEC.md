@@ -61,7 +61,8 @@
 ## 4. I/O
 - Bus: **mono→stereo** e **stereo→stereo** (la voce resta centrale; nessun width nella v1).
 - Sidechain esterno: **no** (il gate usa un key-filter interno).
-- Latenza: **solo il lookahead del limiter** (≤ 2 ms), dichiarata con `setLatencySamples`.
+- Latenza: **zero**, e dichiarata come tale. Il limiter non ha lookahead: dichiarare una latenza che il DSP
+  non ha fa anticipare la traccia a Logic. Se un giorno ci sarà lookahead vero, va ritardato anche `processBlockBypassed`.
 
 ## 5. UI / Skin
 - Stile: **fotorealistico (asset)**, coerente con lo scaffold padre.

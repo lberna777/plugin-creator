@@ -6,6 +6,31 @@ più Valgrind). Nessun file del progetto è stato modificato.
 
 ---
 
+## Stato delle correzioni (aggiornato dopo l'intervento)
+
+Tutti i rilievi B1–B12 sono stati corretti, e ognuno ha ora un controllo in
+`plugin/tools/selftest_main.cpp` che **fallisce se il difetto torna**. Prova fatta: reintroducendo il solo
+B1 il binario di test muore con `free(): invalid next size` invece di passare.
+
+| # | difetto | correzione | controllo che lo prende |
+|---|---|---|---|
+| B1 | scrittura fuori dal buffer dell'host | la lunghezza vera del blocco passa esplicitamente a tutti gli stadi | blocchi di lunghezza casuale 1…512 |
+| B2 | de-esser allpass, chiamato due volte | crossover a due uscite, **una** passata per campione, detector sulla banda alta vera | risposta misurata a 200 Hz vs 9 kHz |
+| B3 | allocazioni sul thread audio | biquad a coefficienti propri + puntatori ai parametri risolti nel costruttore | contatore di `operator new` durante `processBlock` |
+| B4 | limiter non era un tetto | mandate e output gain **prima**, limiter ultimo stadio | ceiling −1 dBFS con output +12 e riverbero acceso |
+| B5 | ducking di delay e doubler morto | un solo detector per campione, condiviso dai tre bus | livello del delay con e senza duck, riverbero spento |
+| B6 | polarità + mix = silenzio | il dry del mix si copia **dopo** trim e polarità | polarità invertita con mix al 50 % |
+| B7 | latenza dichiarata inesistente | dichiarata zero, com'è il DSP | latenza misurata con impulso == dichiarata |
+| B8 | drive diverso fra L e R | il drive si legge una volta per campione, fuori dal ciclo dei canali | ingresso mono deve restare mono durante la rampa |
+| B9 | delay sempre 1/8 puntato | `dlyDivision` letto e mappato in battute | posizione dell'eco per 1/4 vs 1/8 puntato |
+| B10 | sei parametri inerti | `intensity` rimosso, predelay collegato, varianti non più automatizzabili | ogni parametro deve cambiare il suono |
+| B11 | `satTilt` non era un tilt | due shelf speculari a 700 Hz, attive anche a drive 0 | coperto dal controllo "nessun parametro finto" |
+| B12 | etichette dei knob sfalsate | ogni controllo porta la sua etichetta, non ricostruita per tipo | — (visivo) |
+
+I **RISCHI** elencati più sotto restano aperti e sono ancora validi come lettura.
+
+---
+
 ## Verdetto
 
 1. **Il plugin corrompe la memoria appena Logic gli passa un buffer più corto di quello dichiarato** in
