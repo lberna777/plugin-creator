@@ -400,3 +400,219 @@ A **−18 dBFS d'ingresso i de-esser non agganciano nulla** (riduzione 0,00 su t
 sotto soglia. È lo stesso limite dichiarato al primo giro, con la stessa risposta: le regole sono
 statiche, e quando esisterà l'analisi del segnale (F3) `work_peak` smetterà di essere una stima. Fino
 ad allora la cosa onesta è dirlo, non alzare le soglie fino a far lavorare il de-esser sul rumore.
+
+---
+
+# Terzo giro: il limiter vero, il room tamer causale, il MIX che scala le mandate
+
+Il secondo giro ha tarato su un DSP che è cambiato di nuovo (`REVIEW.md`, "Terzo passaggio" e
+"Quarto passaggio"): limiter riscritto con un tetto vero, MIX che scala anche le mandate, room tamer
+causale e per campione, tilt come stadio proprio, gate con isteresi, makeup smussati, coda dichiarata
+calcolata da decay e feedback.
+
+Questo giro **ha cambiato due numeri**. Tutto il resto è stato misurato sul DSP nuovo e **lasciato dov'era**,
+con la misura al posto della speranza. La misura si rifà con:
+
+```
+./build/vocalforge_selftest_artefacts/Release/vocalforge_selftest
+```
+
+Le tre sezioni nuove sono `room tamer`, `mandate` e `coda dichiarata`; gli invarianti corrispondenti
+stanno in `tools/tests/test_gain_staging.py::TestThirdPass`. Controlli headless: **229**.
+
+---
+
+## 1. Room tamer: era acceso, dichiarato, e non toglieva niente
+
+Con la correzione R1 il detector legge l'**ingresso dello stadio** (prima la banda 2 leggeva il segnale
+già filtrato dalla banda 1), cammina per campione insieme al filtro, e con B17 è normalizzato per il
+guadagno del suo Q. `roomThresh` era invece un numero assoluto in dBFS (`-30 + 6·cleanliness`, cioè
+−24÷−27 sui profili artista) scelto quando il modulo si comportava in un altro modo.
+
+Il segnale di prova nuovo, `fillRoomResonance()`, è una voce dentro una stanza che risuona **davvero**:
+i tre modi assiali (92 · 184 · 246 Hz) eccitati dalle sillabe con una coda di 250 ms — la coda è quello
+che distingue un modo di stanza da una nota della voce, ed è l'unica cosa che un notch *dinamico* possa
+inseguire. La catena viene **troncata subito dopo il tamer**: compressori e saturazione a valle
+reagiscono all'energia tolta e falsano la misura dello stadio (con la catena intera la stessa
+attenuazione si legge fino a 4 dB più profonda di quanto il notch stia davvero facendo).
+
+Attenuazione misurata sulle tre bande, ingresso a −6 dBFS di picco. Formato `prima → dopo`:
+
+| profilo | 92 Hz | 184 Hz | 246 Hz | voce (140/420 Hz) |
+|---|---|---|---|---|
+| Sfera Ebbasta | 0,00 → **1,17** | 0,16 → **3,29** | 0,02 → **2,10** | 0,02 → 0,48 |
+| Shiva | 0,00 → **1,78** | 0,03 → **4,03** | 0,00 → **2,71** | 0,01 → 0,60 |
+| Tony Boy | 0,01 → **0,72** | 0,41 → **1,96** | 0,06 → **1,15** | 0,06 → 0,28 |
+| Glockyy | 0,00 → **3,39** | 0,02 → **4,82** | 0,00 → **3,25** | 0,00 → 0,77 |
+| Guè | 0,00 → **2,77** | 0,16 → **3,79** | 0,02 → **2,49** | 0,02 → 0,60 |
+| Capo Plaza | 0,01 → **0,58** | 0,42 → **2,11** | 0,06 → **1,26** | 0,06 → 0,30 |
+
+**Prima: da 0,0 a 0,4 dB su tutti e sei i profili.** Il modulo era acceso, aveva le sue profondità
+(−3,2÷−6,0 dB), il suo `why`, e non toccava una sola risonanza. È la stessa figura del de-esser del
+secondo giro, sullo stadio accanto.
+
+### Cosa è cambiato nelle regole
+
+La soglia diventa **derivata**, con lo stesso criterio delle soglie del de-esser: si dichiara dove il
+modo arriva davvero al detector, e la soglia si calcola da lì.
+
+```
+mode_peak   = work_peak - 12                                  ← misurato sul DSP, non ipotizzato
+room_thresh = clamp(mode_peak - 6 - 6 * cleanliness, -60, 0)
+```
+
+I 12 dB sono una misura: il modo più forte, dentro il segnale di prova, arriva al detector 12 dB sotto
+il picco di lavoro (il detector è un bandpass normalizzato a 0 dB al centro, quindi legge esattamente
+quel livello). I 6 dB fissi sono il margine che tiene fermo il tamer su una voce **senza** risonanze —
+c'è un controllo apposta, `senza risonanza il room tamer resta fermo`, e misura ≤ 0,1 dB.
+
+Il termine su `cleanliness` **ha cambiato segno**. Prima più pulizia chiesta *alzava* la soglia, cioè
+faceva agganciare i notch più tardi, mentre le profondità crescevano: le due metà del modulo si
+annullavano a vicenda. Adesso più pulizia = aggancia prima e scava di più, e si vede nell'ordine dei
+profili: Glockyy (cleanliness 0,95) è il più corretto, Tony Boy e Capo Plaza (0,45) i più intatti.
+
+| profilo | roomThresh |
+|---|---|
+| Sfera Ebbasta | −25,8 → **−34,2** |
+| Shiva | −24,9 → **−35,1** |
+| Tony Boy | −27,3 → **−32,7** |
+| Glockyy | −24,3 → **−35,7** |
+| Guè | −25,2 → **−34,8** |
+| Capo Plaza | −27,3 → **−32,7** |
+
+### Le profondità e i Q: **non cambiati**
+
+Le profondità (`-2.0 - 4.0·cleanliness` e sorelle, da −3,2 a −6,0 dB) erano irraggiungibili, non
+sbagliate: adesso che la soglia aggancia sono un **tetto** che si tocca solo in una stanza pessima. Sul
+segnale di prova — che è già una risonanza severa, +6÷9 dB sui modi — il tamer ne usa il 60÷80%, e
+resta corsa per il caso peggiore. Il massimo misurato è 4,82 dB su Glockyy, dentro il limite di
+CLAUDE.md (mai oltre 8 dB su una singola banda).
+
+**Nessuno zipper con i Q attuali (5÷6):** il salto massimo campione-campione con il tamer acceso è
+*minore* di quello a tamer spento (0,0105 contro 0,0121 su Shiva) — la profondità è smussata a 30 ms e
+i coefficienti si aggiornano ogni 16 campioni, indipendentemente dal blocco. C'è il controllo.
+
+### Due cose dichiarate, non aggiustate
+
+- **La banda 1 (92 Hz) sta sotto l'HPF della catena** (80÷100 Hz, 24 dB/oct): sui profili con HPF a
+  96÷100 Hz (Sfera, Tony Boy, Capo Plaza) la risonanza arriva al detector già tagliata e il notch trova
+  poco da togliere (0,58÷1,17 dB); su quelli con HPF a 80÷82 Hz (Glockyy, Guè) morde per intero
+  (2,77÷3,39 dB). Non è un errore di taratura, è un doppione: il lavoro l'ha già fatto l'HPF. Per
+  questo il controllo chiede il minimo ai modi 2 e 3, non al modo 1.
+- **A −18 dBFS d'ingresso il tamer non aggancia niente** (0,00 dB su tutti i profili), esattamente come
+  i de-esser: `mode_peak` deriva da `work_peak`, che assume che l'input trim abbia portato i picchi a
+  −12 dBFS. È lo stesso limite dichiarato ai due giri precedenti, con la stessa risposta: si dice,
+  non si abbassa la soglia fino a far lavorare i notch sul rumore.
+
+---
+
+## 2. Margine sul limiter: il tetto adesso è vero, e il margine **regge**. Niente cambiato
+
+Prima della correzione B14 il limiter di JUCE riamplificava di −threshold: il tetto reale era sempre
+0 dBFS e abbassare il ceiling *alzava* l'uscita. Adesso è una riduzione verso il tetto più un clamp sul
+campione. Il conto del secondo giro andava rifatto su questo — ed è stato rifatto, sul DSP vero.
+
+Picco d'uscita misurato con `fillAtPeak()`, ceiling a −1,0 dBFS su tutti i profili:
+
+| profilo | picco @ −6 dBFS | margine sul tetto | picco @ −18 dBFS | riduzione del limiter |
+|---|---|---|---|---|
+| Sfera Ebbasta | −7,4 | 6,4 dB | −17,8 | **0,00 dB** |
+| Shiva | −6,3 | 5,3 dB | −16,5 | **0,00 dB** |
+| Tony Boy | −6,8 | 5,8 dB | −17,6 | **0,00 dB** |
+| Glockyy | −5,6 | 4,6 dB | −15,0 | **0,00 dB** |
+| Guè | −6,1 | 5,1 dB | −16,1 | **0,00 dB** |
+| Capo Plaza | −6,7 | 5,7 dB | −16,7 | **0,00 dB** |
+
+Il limiter non lavora su nessun profilo, a nessuno dei due livelli: **4,6÷6,4 dB di margine sul tetto
+vero**. Il modello statico di `test_gain_staging.py` dice la stessa cosa su tutti e 21 i prompt
+(headroom davanti al limiter 6,6÷11,3 dB, riduzione 0,00). `outGain`, `mix`, i makeup e le soglie dei
+compressori **non sono stati toccati**: il tetto di 4 dB su `outGain` del primo giro regge anche
+adesso che il tetto del limiter è reale.
+
+Unica cosa che si muove, ed è un effetto del §1: con il room tamer che finalmente toglie energia nella
+banda dei modi, i compressori a valle riducono un po' meno (comp 1 da 0,79÷1,87 a 0,59÷1,33 dB, comp 2
+da 1,15÷1,68 a 0,79÷1,28). Va nella direzione giusta: meno lavoro perché arriva meno da domare.
+
+---
+
+## 3. Mandate e MIX: il rapporto **non** cambia. Un solo numero era sbagliato, e non era il MIX
+
+Da B4 il MIX moltiplica anche le tre mandate. La paura era che la valvola parallela del primo giro
+(mix 78% su tutti i profili artista) si portasse via l'ambiente. Misurato bus per bus — il doubler non
+è ambiente, e sommarlo al riverbero nasconde il profilo che il doubler non ce l'ha — la risposta è no:
+
+| profilo | riverbero (mix preset → mix 100%) | delay | doubler |
+|---|---|---|---|
+| Sfera Ebbasta | −32,7 / −32,5 | −40,9 / −40,6 | −30,1 / −29,6 |
+| Shiva | −39,3 / −39,3 | −38,6 / −38,3 | −31,4 / −30,7 |
+| Tony Boy | −31,0 / −31,0 | −42,1 / −42,0 | −31,3 / −30,8 |
+| Glockyy | −39,7 / −38,8 | −39,8 / −38,7 | −31,9 / −30,4 |
+| Guè | −36,8 / −35,9 | −40,7 / −39,7 | — |
+| Capo Plaza | −33,6 / −33,7 | −39,7 / −39,5 | −30,4 / −30,0 |
+
+Il MIX scala il wet **e** la voce con cui si somma: il rapporto si sposta di meno di 1,5 dB fra mix
+78% e mix 100%. È il comportamento giusto, ed è quello che il DSP fa adesso. **Nessun `send_db` è
+stato cambiato per il MIX**, e c'è il controllo che lo tiene fermo.
+
+### `rev_ambience`: quello sì
+
+Il caso vero di "l'ambiente sparisce dove serve" non era il MIX, era una mandata già troppo bassa in
+partenza. `rev_ambience` è la variante con mezzo secondo di coda, scritta per la voce parlata — e i
+profili di **Shiva e Glockyy la impongono** (`forced_sends`). A parità di mandata una coda di 0,5 s
+restituisce molta meno energia di una plate o di una hall: misurato, il loro riverbero stava a
+**−43,3 e −43,7 dB sotto la voce**, contro i −31÷−37 di tutti gli altri. Non è "asciutto", è assente.
+
+```
+rev_ambience.send_db:  clamp(-32 + 4·neg(intimacy), -40, -6)  →  clamp(-28 + 4·neg(intimacy), -40, -6)
+```
+
+Adesso Shiva sta a −39,3 e Glockyy a −39,7: restano i due **più asciutti** dei sei, come vuole il loro
+profilo, ma l'ambiente c'è. Le mandate di riverbero di tutti i 18 preset stanno ora in una fascia
+coerente (−23,2 ÷ −28,0 dB), e c'è l'invariante che lo tiene.
+
+Il `duck_db` di riverbero e delay, il `send_db` di delay e doubler, il ducking del doubler: **non
+toccati**, misurati giusti al secondo giro e ancora giusti adesso (la sezione `ducking` del self test
+gira su questo giro con gli stessi 4÷5 dB sotto la parola e meno di 1,2 dB nel vuoto).
+
+---
+
+## 4. Coda dichiarata all'host: misurata, **nessun preset la allunga assurdamente**
+
+Da R7 `getTailLengthSeconds` è calcolata da `revDecay` (fino a 4 s) e `dlyFeedback` (fino al 45%).
+Misurata sul processore vero, per profilo:
+
+| profilo | coda dichiarata | revDecay | dlyFeedback |
+|---|---|---|---|
+| Sfera Ebbasta | 2,01 s | 1,00 s | 18% |
+| Shiva | 2,32 s | 0,50 s | 24% |
+| Tony Boy | 2,52 s | 1,98 s | 16% |
+| Glockyy | 1,01 s | 0,50 s | 13% |
+| Guè | 1,52 s | 1,00 s | 10% |
+| Capo Plaza | 2,16 s | 1,00 s | 21% |
+
+Su tutti e 21 i prompt il massimo è **3,06 s** (cantautore acustico, hall da 2,52 s). I due estremi
+temuti non si presentano: `revDecay` a 4 s richiederebbe intimità massima con densità zero, e le
+formule del feedback si fermano al 30% molto prima del tetto del parametro (45%). **Niente da
+accorciare** — accorciare qui avrebbe tolto coda al suono per risolvere un problema che il bounce non
+ha. C'è l'invariante (≤ 6 s) e la misura per profilo nel self test.
+
+---
+
+## 5. Riepilogo: cosa è cambiato, cosa no
+
+**Cambiato (2 numeri):**
+- `roomThresh` → derivato da `mode_peak` (`work_peak - 12`), con il segno di `cleanliness` corretto.
+  Da 0,0÷0,4 dB di attenuazione a 0,6÷4,8 dB su una risonanza vera.
+- `rev_ambience.send_db` da −32 a −28 dB: era la mandata che faceva sparire l'ambiente su Shiva e
+  Glockyy, gli unici due profili che quella variante ce l'hanno imposta.
+
+**Non cambiato, e misurato:** profondità e Q del room tamer, `outGain` e il suo tetto di 4 dB, `mix`,
+makeup e soglie dei due compressori, `satDrive` e `satTilt`, soglie e range dei due de-esser, tutti i
+`duck_db`, i `send_db` di delay e doubler, `revDecay` e `dlyFeedback`, l'ordine della catena.
+
+**Non più vero, corretto qui:** la tabella dei picchi d'uscita del secondo giro (−2,5÷−3,1 dBFS)
+apparteneva al limiter di JUCE che riamplificava di −threshold. Con il tetto vero i picchi stanno a
+−5,6÷−7,4 dBFS: quel giro leggeva 1 dB di riamplificazione più il livello pieno delle mandate a mix
+78%. I numeri buoni sono quelli del §2.
+
+Parità Python ↔ C++: 18 preset, 1683 valori, 0 differenze. Test Python: 84. Controlli headless: 229.

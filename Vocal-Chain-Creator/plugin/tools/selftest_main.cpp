@@ -116,6 +116,45 @@ namespace
             buffer.clear (ch, wordEnd, buffer.getNumSamples() - wordEnd);
     }
 
+    /*  Voce dentro una stanza che risuona DAVVERO sui tre modi assiali (92 · 184 · 246 Hz, gli stessi
+        che il room tamer tratta). I modi si eccitano sulla sillaba e continuano a suonare dopo, con
+        una coda di ~250 ms: è quello che distingue un modo di stanza da una nota della voce, ed è
+        l'unica cosa che un notch DINAMICO possa inseguire. Su fillVoiceLike (nessuna risonanza nella
+        banda dei modi) il room tamer non ha niente da fare, e non farebbe misura. */
+    void fillRoomResonance (juce::AudioBuffer<float>& buffer, double sampleRate, float peakDbfs)
+    {
+        std::mt19937 generator (2468);
+        std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+        const double modeFrequency[3] { 92.0, 184.0, 246.0 };
+        const double modeAmount[3]    { 0.50, 0.35, 0.25 };     // stanza non trattata: +6÷9 dB sui modi
+        const auto ringDecay = std::exp (-1.0 / (0.25 * sampleRate));   // coda del modo: 250 ms
+        double ring[3] { 0.0, 0.0, 0.0 };
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            const auto t = static_cast<double> (sample) / sampleRate;
+            const auto syllable = 0.5 + 0.5 * std::sin (juce::MathConstants<double>::twoPi * 2.5 * t);
+
+            auto value = (0.6 * std::sin (juce::MathConstants<double>::twoPi * 140.0 * t)
+                        + 0.25 * std::sin (juce::MathConstants<double>::twoPi * 420.0 * t)
+                        + 0.02 * noise (generator)) * syllable;
+
+            for (int mode = 0; mode < 3; ++mode)
+            {
+                ring[mode] = juce::jmax (syllable, ring[mode] * ringDecay);
+                value += ring[mode] * modeAmount[mode]
+                         * std::sin (juce::MathConstants<double>::twoPi * modeFrequency[mode] * t);
+            }
+
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.setSample (ch, sample, static_cast<float> (value));
+        }
+
+        const auto current = buffer.getMagnitude (0, buffer.getNumSamples());
+        if (current > 0.0f)
+            buffer.applyGain (juce::Decibels::decibelsToGain (peakDbfs) / current);
+    }
+
     void fillAtPeakSibilant (juce::AudioBuffer<float>& buffer, double sampleRate, float peakDbfs)
     {
         fillVoiceWithSibilants (buffer, sampleRate, 1.0f);
@@ -141,6 +180,23 @@ namespace
         const auto real = s1 - s2 * std::cos (w), imaginary = s2 * std::sin (w);
         const auto magnitude = 2.0 * std::sqrt (real * real + imaginary * imaginary) / numSamples;
         return juce::Decibels::gainToDecibels (static_cast<float> (magnitude), -140.0f);
+    }
+
+    /*  Energia di una banda STRETTA attorno a una riga, sommando i bin vicini. Serve al room tamer:
+        il notch è dinamico, la sua profondità si muove al ritmo delle sillabe e sparpaglia energia nei
+        bin accanto — misurare il solo bin centrale conterebbe come attenuazione anche quello che è
+        soltanto modulazione. Con finestra 24000 a 48 kHz i bin sono da 2 Hz: ±6 Hz bastano a
+        riprendersi le bande laterali di una modulazione a 2,5 Hz. */
+    float bandDb (const float* data, int numSamples, double frequency, double sampleRate)
+    {
+        double power = 0.0;
+        for (int bin = -3; bin <= 3; ++bin)
+        {
+            const auto magnitude = juce::Decibels::decibelsToGain (
+                lineDb (data, numSamples, frequency + bin * sampleRate / numSamples, sampleRate));
+            power += static_cast<double> (magnitude) * magnitude;
+        }
+        return juce::Decibels::gainToDecibels (static_cast<float> (std::sqrt (power)), -140.0f);
     }
 
     float rmsDb (const juce::AudioBuffer<float>& buffer, int start, int count)
@@ -594,6 +650,225 @@ int main()
                     check (inGap <= underWord - 1.5f, juce::String (artist) + ": " + bus.label + " risale fra le parole", detail);
                 }
             }
+    }
+
+    /*  ---- TERZO GIRO DI TARATURA (knowledge/TUNING.md, sezione "Terzo giro").
+
+        ROOM TAMER. Con la correzione R1 il modulo è diventato causale e per campione: il detector
+        legge l'INGRESSO dello stadio (prima la banda 2 leggeva il segnale già filtrato dalla banda 1),
+        la profondità è smussata e i coefficienti si aggiornano a control rate. Profondità e soglia
+        erano numeri scelti sul comportamento vecchio: qui si misura quanta attenuazione fanno DAVVERO
+        sui tre modi, con un segnale che nella banda dei modi ha una risonanza vera.
+        Il metodo è quello del de-esser: stesso segnale, stessa catena, il tamer acceso e spento —
+        la differenza sulle bande 92/184/246 Hz è quello che toglie, quella a 140 e 420 Hz (fondamentale
+        e corpo della voce) è quello che NON deve togliere. La catena viene troncata SUBITO DOPO il
+        tamer: quello che sta a valle (compressori, saturazione, EQ, mix) reagisce all'energia tolta e
+        falserebbe la misura dello stadio — con la catena intera la stessa attenuazione si legge fino a
+        4 dB piu' profonda di quanto il notch stia davvero facendo. Restano accesi trim, gate e HPF,
+        perche' decidono il livello con cui la risonanza arriva al detector. */
+    {
+        const double sampleRate = 48000.0;
+        const int span   = 48000;      // 1 s in un blocco solo: il Goertzel vuole fase continua
+        const int window = 24000;      // bin da 2 Hz: 92 · 184 · 246 · 420 Hz cadono su un bin intero
+        const int offset = span - window;
+
+        const float minModeCutDb   = 1.5f;    // sotto questo il tamer e' acceso e non fa niente
+        const float maxModeCutDb   = 8.0f;    // CLAUDE.md: mai oltre -8 dB su una singola banda
+        const float maxBodyCutDb   = 1.0f;    // 140 e 420 Hz sono la voce: il tamer non deve arrivarci
+
+        struct Modes { float mode[3] { 0.0f, 0.0f, 0.0f }, voice[2] { 0.0f, 0.0f }, jump = 0.0f; };
+
+        auto run = [&] (const char* artist, float peakDbfs, bool tamerOn, bool resonant)
+        {
+            processor.setRateAndBufferSizeDetails (sampleRate, span);
+            processor.prepareToPlay (sampleRate, span);
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+
+            // catena troncata dopo il room tamer: si misura lo stadio, non la reazione di chi sta dopo
+            for (auto* id : { "eqSubOn", "ds1On", "c1On", "c2On", "satOn", "eqToneOn", "ds2On",
+                              "limOn", "revOn", "dlyOn", "fxOn" })
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (0.0f);
+            for (auto* id : { "outGain", "satTilt" })
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
+            if (auto* p = processor.apvts.getParameter ("mix")) p->setValueNotifyingHost (p->convertTo0to1 (100.0f));
+            if (! tamerOn)
+                if (auto* p = processor.apvts.getParameter ("roomOn")) p->setValueNotifyingHost (0.0f);
+
+            juce::AudioBuffer<float> buffer (2, span);
+            for (int i = 0; i < 2; ++i)        // il primo giro assesta inviluppi e smoothing
+            {
+                if (resonant) fillRoomResonance (buffer, sampleRate, peakDbfs);
+                else          fillAtPeak (buffer, sampleRate, peakDbfs);
+                processor.processBlock (buffer, midi);
+            }
+            Modes measured;
+            const auto* data = buffer.getReadPointer (0) + offset;
+            const double frequencies[3] { 92.0, 184.0, 246.0 };
+            for (int mode = 0; mode < 3; ++mode)
+                measured.mode[mode] = bandDb (data, window, frequencies[mode], sampleRate);
+            measured.voice[0] = bandDb (data, window, 140.0, sampleRate);
+            measured.voice[1] = bandDb (data, window, 420.0, sampleRate);
+            measured.jump = maxJump (buffer);
+            return measured;
+        };
+
+        std::cout << "  --- room tamer: quanta attenuazione fa davvero sui tre modi di stanza" << std::endl;
+        struct Level { const char* name; float peakDbfs; };
+        for (auto level : { Level { "-6 dBFS (nominale)", -6.0f }, Level { "-18 dBFS (gain basso)", -18.0f } })
+            for (auto* artist : kArtists)
+            {
+                const auto without = run (artist, level.peakDbfs, false, true);
+                const auto with    = run (artist, level.peakDbfs, true,  true);
+
+                float worstCut = 0.0f, weakestBoxyCut = 0.0f, voiceCut = 0.0f;
+                juce::String cuts;
+                for (int mode = 0; mode < 3; ++mode)
+                {
+                    const auto cut = without.mode[mode] - with.mode[mode];    // positivo = attenuato
+                    worstCut = juce::jmax (worstCut, cut);
+                    // Il modo 1 (92 Hz) sta SOTTO l'HPF della catena (80-100 Hz, 24 dB/oct): su meta'
+                    // dei profili arriva al detector gia' tagliato, e il notch trova poco da togliere.
+                    // Non e' un difetto di taratura, e' un doppione: il floor si chiede ai modi 2 e 3.
+                    if (mode > 0) weakestBoxyCut = (mode == 1 || cut < weakestBoxyCut) ? cut : weakestBoxyCut;
+                    cuts += juce::String (-cut, 2) + (mode < 2 ? " / " : "");
+                }
+                for (int line = 0; line < 2; ++line)
+                    voiceCut = juce::jmax (voiceCut, without.voice[line] - with.voice[line]);
+
+                const juce::String detail ("modi " + cuts + " dB, voce (140/420 Hz) "
+                                           + juce::String (-voiceCut, 2) + " dB");
+                std::cout << "        " << artist << " @ " << level.name << ": " << detail << std::endl;
+
+                check (voiceCut <= maxBodyCutDb,
+                       juce::String (artist) + " @ " + level.name
+                       + ": il room tamer non tocca il corpo della voce", detail);
+                check (worstCut <= maxModeCutDb,
+                       juce::String (artist) + " @ " + level.name
+                       + ": il room tamer corregge, non scava", detail);
+                if (level.peakDbfs <= -18.0f) continue;   // a gain basso i modi vanno sotto soglia
+                check (worstCut >= minModeCutDb,
+                       juce::String (artist) + ": il room tamer morde davvero sulla risonanza", detail);
+                check (weakestBoxyCut >= 1.0f,
+                       juce::String (artist) + ": anche i modi sopra l'HPF (184 e 246 Hz) vengono presi", detail);
+
+                // Senza risonanza nella banda dei modi il tamer deve restare fermo: e' un correttore
+                // dinamico, non un'EQ sottrattiva mascherata. (E' la meta' del lavoro: se per farlo
+                // mordere sulla stanza si abbassa troppo la soglia, comincia a mangiare la voce.)
+                const auto flatOff = run (artist, level.peakDbfs, false, false);
+                const auto flatOn  = run (artist, level.peakDbfs, true,  false);
+                float flatCut = 0.0f;
+                for (int mode = 0; mode < 3; ++mode)
+                    flatCut = juce::jmax (flatCut, flatOff.mode[mode] - flatOn.mode[mode]);
+                check (flatCut <= 1.0f,
+                       juce::String (artist) + ": senza risonanza il room tamer resta fermo",
+                       "su voce senza modi toglie " + juce::String (-flatCut, 2) + " dB");
+
+                // Zipper: la profondità è smussata e i coefficienti si aggiornano a intervallo fisso.
+                // Con i Q attuali (5÷6) il notch non deve aggiungere discontinuità al segnale.
+                check (with.jump <= without.jump * 1.15f + 0.005f,
+                       juce::String (artist) + ": nessuno zipper dai notch (Q 5-6)",
+                       "salto massimo " + juce::String (without.jump, 4) + " senza tamer, "
+                       + juce::String (with.jump, 4) + " con");
+            }
+    }
+
+    /*  ---- MANDATE e MIX. Dalla correzione di B4 il MIX moltiplica anche le tre mandate: prima
+        riverbero, delay e doubler suonavano a livello pieno anche a mix 0 %. I `send_db` erano stati
+        scelti quando il mix non li toccava, e tutti e sei i profili artista stanno a mix 78 % (la
+        valvola parallela del primo giro). La domanda e' se l'ambiente sparisce proprio dove serve, e
+        va guardata BUS PER BUS: il doubler non e' ambiente, e sommarlo al riverbero nasconde il caso
+        del profilo che il doubler non ce l'ha. Il wet si isola per sottrazione, e il rapporto si legge
+        sulla voce che esce con quel mix — che e' quello che si sente. */
+    {
+        const double sampleRate = 48000.0;
+        const int span = 24000;
+        const float minWetToDryDb = -46.0f;   // sotto questo il bus non c'e' piu', nemmeno nei vuoti
+        const float maxWetToDryDb = -12.0f;   // sopra questo la voce e' dentro l'ambiente, non davanti
+
+        auto render = [&] (const char* artist, const char* onlyBus, float mixOverride)
+        {
+            processor.setRateAndBufferSizeDetails (sampleRate, span);
+            processor.prepareToPlay (sampleRate, span);
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+            if (mixOverride > 0.0f)
+                if (auto* p = processor.apvts.getParameter ("mix"))
+                    p->setValueNotifyingHost (p->convertTo0to1 (mixOverride));
+            for (auto* id : { "revOn", "dlyOn", "fxOn" })
+                if (auto* p = processor.apvts.getParameter (id))
+                    if (onlyBus == nullptr || juce::String (id) != onlyBus) p->setValueNotifyingHost (0.0f);
+
+            juce::AudioBuffer<float> buffer (2, span);
+            for (int i = 0; i < 2; ++i)
+            {
+                fillAtPeak (buffer, sampleRate, -6.0f);
+                processor.processBlock (buffer, midi);
+            }
+            return buffer;
+        };
+
+        auto wetToDryDb = [&] (const char* artist, const char* bus, float mixOverride)
+        {
+            const auto dry  = render (artist, nullptr, mixOverride);
+            const auto full = render (artist, bus,     mixOverride);
+            double wetSum = 0.0, drySum = 0.0;
+            for (int i = 0; i < span; ++i)
+            {
+                const auto wet = full.getSample (0, i) - dry.getSample (0, i);
+                wetSum += static_cast<double> (wet) * wet;
+                drySum += static_cast<double> (dry.getSample (0, i)) * dry.getSample (0, i);
+            }
+            return juce::Decibels::gainToDecibels (
+                static_cast<float> (std::sqrt (wetSum / juce::jmax (1.0e-12, drySum))), -140.0f);
+        };
+
+        std::cout << "  --- mandate: quanto sta ogni bus sotto la voce, col MIX che adesso lo scala" << std::endl;
+        struct Bus { const char* id; const char* label; };
+        for (auto* artist : kArtists)
+            for (auto bus : { Bus { "revOn", "riverbero" }, Bus { "dlyOn", "delay" }, Bus { "fxOn", "doubler" } })
+            {
+                const auto atPreset = wetToDryDb (artist, bus.id, -1.0f);    // il mix del preset (78 %)
+                if (atPreset < -100.0f) continue;                            // il profilo non usa questo bus
+                const auto atFull = wetToDryDb (artist, bus.id, 100.0f);     // com'era prima che il MIX lo scalasse
+
+                const juce::String detail (juce::String (bus.label) + " " + juce::String (atPreset, 1)
+                                           + " dB sotto la voce (a mix 100 %: " + juce::String (atFull, 1) + " dB)");
+                std::cout << "        " << artist << ": " << detail << std::endl;
+
+                // Il MIX scala il wet E la voce con cui si somma: il RAPPORTO deve restare quello,
+                // altrimenti la valvola parallela del primo giro si porterebbe via l'ambiente.
+                check (std::abs (atPreset - atFull) <= 1.5f,
+                       juce::String (artist) + ": il MIX non cambia il rapporto ambiente/voce di " + bus.label, detail);
+                check (atPreset >= minWetToDryDb,
+                       juce::String (artist) + ": " + bus.label + " si sente ancora", detail);
+                check (atPreset <= maxWetToDryDb,
+                       juce::String (artist) + ": " + bus.label + " resta dietro la voce", detail);
+            }
+    }
+
+    /*  ---- CODA DICHIARATA all'host. Dalla correzione R7 `getTailLengthSeconds` è calcolata da
+        `revDecay` e `dlyFeedback` invece di essere una costante: decay alti e feedback alti allungano
+        il bounce in Logic. Va guardata profilo per profilo, per vedere se qualche preset chiede
+        all'host una coda che il suono non giustifica. */
+    {
+        prepare (48000.0);
+        std::cout << "  --- coda dichiarata all'host, per profilo" << std::endl;
+        const float maxTailSeconds = 6.0f;      // oltre, il bounce si allunga senza che si senta nulla
+        for (auto* artist : kArtists)
+        {
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+            juce::AudioBuffer<float> buffer (2, blockSize);        // i parametri arrivano al DSP con un blocco
+            fillVoiceLike (buffer, 48000.0, 0.4f);
+            processor.processBlock (buffer, midi);
+            const auto decay    = processor.apvts.getRawParameterValue ("revDecay")->load();
+            const auto feedback = processor.apvts.getRawParameterValue ("dlyFeedback")->load();
+            const auto tail     = processor.getTailLengthSeconds();
+
+            const juce::String detail ("coda " + juce::String (tail, 2) + " s (revDecay "
+                                       + juce::String (decay, 2) + " s, dlyFeedback "
+                                       + juce::String (feedback, 0) + " %)");
+            std::cout << "        " << artist << ": " << detail << std::endl;
+            check (tail <= maxTailSeconds, juce::String (artist) + ": la coda dichiarata resta sensata", detail);
+        }
     }
 
     // ---- blocchi di lunghezza variabile: il contratto e' "<= maximumBlockSize", non "="

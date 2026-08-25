@@ -100,9 +100,12 @@ def stage_trace(preset, input_peak_dbfs=None):
     level += 20.0 * math.log10(max(1e-6, out["mix"] / 100.0))
 
     # le mandate sono bus paralleli sommati alla voce PRIMA del limiter: caso peggiore, in fase.
-    sends_gain = sum(10.0 ** (send["settings"]["send_db"] / 20.0)
-                     for send in preset.get("sends", [])
-                     if "send_db" in send.get("settings", {}))
+    # Il MIX le scala insieme alla voce (correzione del terzo passaggio: prima suonavano a livello
+    # pieno anche a mix 0 %), quindi entra qui dentro e non solo sulla riga sopra.
+    mix_scale = max(1e-6, out["mix"] / 100.0)
+    sends_gain = mix_scale * sum(10.0 ** (send["settings"]["send_db"] / 20.0)
+                                 for send in preset.get("sends", [])
+                                 if "send_db" in send.get("settings", {}))
     level += 20.0 * math.log10(1.0 + sends_gain)
 
     level += out["outGain"]
@@ -273,6 +276,92 @@ class TestSecondPass(unittest.TestCase):
             for send in preset.get("sends", []):
                 if send["group"] in ("reverb", "delay"):
                     self.assertGreaterEqual(send["settings"]["duck_db"], 4.0, f"{prompt}/{send['id']}")
+
+
+class TestThirdPass(unittest.TestCase):
+    """Terzo giro: gli invarianti nati dopo la riscrittura del limiter, del room tamer e del MIX.
+
+    Anche qui i numeri si controllano sul preset; quanto facciano davvero sul segnale lo misura
+    `vocalforge_selftest` (sezioni "room tamer", "mandate", "coda dichiarata").
+    """
+
+    MAX_ROOM_DEPTH_DB = 8.0        # CLAUDE.md: mai oltre -8 dB su una singola banda
+    MIN_REVERB_SEND_DB = -29.0     # misurato: sotto, il wet finisce oltre 43 dB sotto la voce
+    MAX_DECLARED_TAIL_S = 6.0      # oltre, il bounce si allunga senza che si senta niente
+
+    def setUp(self):
+        prompts = [RULES["lexicon"]["artists"][a]["aliases"][0] for a in ARTISTS] + list(EXAMPLE_PROMPTS)
+        self.presets = {p: compile_preset(p, rules=RULES) for p in dict.fromkeys(prompts)}
+
+    @staticmethod
+    def declared_tail_seconds(preset):
+        """Stessa formula di ChainDsp::getTailSeconds(), che dal terzo passaggio non e' piu' una
+        costante: decay e feedback allungano la coda che il plugin chiede all'host per il bounce."""
+        reverb = next((s for s in preset.get("sends", []) if s["group"] == "reverb"), None)
+        delay = next((s for s in preset.get("sends", []) if s["group"] == "delay"), None)
+        reverb_tail = 0.0
+        if reverb is not None and "decay_s" in reverb.get("settings", {}):
+            reverb_tail = reverb["settings"]["decay_s"] + reverb["settings"].get("predelay", 0.0) * 0.001
+        delay_tail = 0.0
+        if delay is not None:
+            feedback = min(0.85, max(0.0, delay["settings"].get("feedback", 0.0) / 100.0))
+            repeats = min(40.0, max(1.0, -60.0 / (20.0 * math.log10(feedback)))) if feedback > 0.01 else 1.0
+            delay_tail = delay["settings"].get("time_ms", 375.0) * 0.001 * repeats
+        return min(20.0, max(0.5, max(reverb_tail, delay_tail) + 0.5))
+
+    def test_room_threshold_is_referenced_to_the_level_a_mode_really_reaches(self):
+        """Era un numero assoluto in dBFS (-25) tarato su un room tamer che leggeva tutto il blocco.
+
+        Col detector causale e normalizzato quel numero non agganciava piu' niente: misurati sul DSP,
+        i notch toglievano 0.0-0.4 dB su tutti e sei i profili artista. La soglia adesso parte dal
+        livello a cui un modo arriva davvero al detector (12 dB sotto il picco di lavoro).
+        """
+        for prompt, preset in self.presets.items():
+            room = _p(preset, "room")
+            if room is None:
+                continue
+            mode_peak = float(preset["source_profile"]["interface"]["target_peak_dbfs"]) - 12.0
+            self.assertLessEqual(room["roomThresh"], mode_peak - 4.0,
+                                 f"{prompt}: soglia cosi' alta che i notch non agganciano il modo")
+            self.assertGreaterEqual(room["roomThresh"], mode_peak - 14.0,
+                                    f"{prompt}: soglia cosi' bassa che i notch lavorano sulla voce")
+
+    def test_a_cleaner_request_makes_the_room_tamer_engage_earlier(self):
+        """Il segno era rovesciato: piu' pulizia chiesta alzava la soglia e annullava i notch."""
+        by_cleanliness = sorted(
+            ((preset["intent"]["axes"]["cleanliness"], _p(preset, "room")["roomThresh"])
+             for preset in self.presets.values() if _p(preset, "room") is not None),
+            key=lambda pair: pair[0])
+        for (clean_low, thresh_low), (clean_high, thresh_high) in zip(by_cleanliness, by_cleanliness[1:]):
+            if clean_high > clean_low:
+                self.assertLessEqual(thresh_high, thresh_low + 1e-6,
+                                     f"cleanliness {clean_high} aggancia piu' tardi di {clean_low}")
+
+    def test_room_depth_stays_inside_the_eight_db_limit(self):
+        for prompt, preset in self.presets.items():
+            room = _p(preset, "room")
+            if room is None:
+                continue
+            for band in (1, 2, 3):
+                self.assertLessEqual(abs(room[f"room{band}Depth"]), self.MAX_ROOM_DEPTH_DB,
+                                     f"{prompt}/room{band}Depth")
+
+    def test_the_reverb_send_survives_the_mix_scaling(self):
+        """Dal terzo passaggio il MIX scala anche le mandate. Il rapporto ambiente/voce non cambia
+        (il MIX scala tutt'e due — misurato: meno di 1,5 dB di scarto fra mix 78 % e mix 100 %), ma
+        una mandata gia' troppo bassa in partenza sparisce comunque: `rev_ambience` stava a -32 dB e
+        con mezzo secondo di coda finiva 43 dB sotto la voce."""
+        for prompt, preset in self.presets.items():
+            for send in preset.get("sends", []):
+                if send["group"] == "reverb" and "send_db" in send.get("settings", {}):
+                    self.assertGreaterEqual(send["settings"]["send_db"], self.MIN_REVERB_SEND_DB, prompt)
+
+    def test_the_declared_tail_stays_sane(self):
+        """`getTailLengthSeconds` non e' piu' una costante: decay e feedback allungano il bounce."""
+        for prompt, preset in self.presets.items():
+            tail = self.declared_tail_seconds(preset)
+            self.assertLessEqual(tail, self.MAX_DECLARED_TAIL_S, f"{prompt}: coda dichiarata {tail:.2f} s")
+            self.assertGreaterEqual(tail, 0.5, prompt)
 
 
 def _table(report):

@@ -243,8 +243,8 @@
           "unit": "dB"
         },
         "roomThresh": {
-          "value": -24.9,
-          "why": "sotto questa soglia i notch non lavorano: la voce resta intera",
+          "value": -35.1,
+          "why": "soglia riferita al livello a cui un modo di stanza arriva davvero al detector (12 dB sotto il picco di lavoro), non un numero assoluto in dBFS: sotto di lei i notch stanno fermi e la voce resta intera, sopra scavano quanto la risonanza eccede",
           "unit": "dB"
         }
       }
@@ -604,7 +604,7 @@
         "lpf": 5000,
         "width_pct": 60,
         "duck_db": 8.0,
-        "send_db": -32.0
+        "send_db": -28.0
       },
       "why": "Scelta dal profilo Shiva. Voce parlata: un filo di ambienza corta per non farla suonare sotto vuoto, senza toccare l'intelligibilità."
     }

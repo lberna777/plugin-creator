@@ -59,7 +59,7 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `room3Freq` | 246 Hz | terzo modo / scatola |
 | `room3Q` | 5.0 Q | stretto |
 | `room3Depth` | -4.8 dB | attenuazione dinamica sulla scatola |
-| `roomThresh` | -24.9 dB | sotto questa soglia i notch non lavorano: la voce resta intera |
+| `roomThresh` | -35.1 dB | soglia riferita al livello a cui un modo di stanza arriva davvero al detector (12 dB sotto il picco di lavoro), non un numero assoluto in dBFS: sotto di lei i notch stanno fermi e la voce resta intera, sopra scavano quanto la risonanza eccede |
 
 ## 5. Channel EQ — EQ sottrattiva
 *Prima togli, poi aggiungi: ogni dB tolto qui è headroom per i due compressori.*
@@ -225,7 +225,7 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `lpf` | 5000 |
 | `width_pct` | 60 |
 | `duck_db` | 8.0 |
-| `send_db` | -32.0 |
+| `send_db` | -28.0 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 

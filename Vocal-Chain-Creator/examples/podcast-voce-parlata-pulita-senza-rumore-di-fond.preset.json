@@ -236,8 +236,8 @@
           "unit": "dB"
         },
         "roomThresh": {
-          "value": -24.0,
-          "why": "sotto questa soglia i notch non lavorano: la voce resta intera",
+          "value": -36.0,
+          "why": "soglia riferita al livello a cui un modo di stanza arriva davvero al detector (12 dB sotto il picco di lavoro), non un numero assoluto in dBFS: sotto di lei i notch stanno fermi e la voce resta intera, sopra scavano quanto la risonanza eccede",
           "unit": "dB"
         }
       }

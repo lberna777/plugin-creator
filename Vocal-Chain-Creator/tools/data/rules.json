@@ -218,6 +218,9 @@
     "ds2_thresh": { "expr": "clamp(sib_peak - 1 - 4 * sibilance_control - 3 * character, -45, 0)", "note": "il secondo de-esser vede la banda alta gia' abbassata dal primo, ma rialzata dalla saturazione e dallo shelf d'aria: la soglia parte piu' alta e scende con il carattere richiesto." },
     "ds2_range":  { "expr": "clamp(1.5 + 1.5 * sibilance_control + 1.0 * character, 0, 5)", "note": "rifinitura: meta' del primo stadio." },
 
+    "mode_peak":  { "expr": "work_peak - 12", "note": "livello di PICCO di un modo di stanza all'ingresso del room tamer, misurato sul DSP vero (vocalforge_selftest, sezione room tamer): su una stanza non trattata il modo piu' forte arriva circa 12 dB sotto il picco di lavoro. Il detector del tamer e' un bandpass normalizzato a 0 dB al centro, quindi legge esattamente questo livello, e la soglia puo' riferirsi a lui invece di essere un numero assoluto in dBFS." },
+    "room_thresh": { "expr": "clamp(mode_peak - 6 - 6 * cleanliness, -60, 0)", "note": "soglia dei tre notch dinamici. Sotto di lei stanno fermi; sopra, la profondita' cresce con l'eccesso (il DSP arriva a fondo corsa 12 dB sopra la soglia). I 6 dB fissi sono il margine che la tiene ferma su una voce senza risonanze; il termine su cleanliness la fa agganciare PRIMA quando si e' chiesto pulito. Il segno era rovesciato e la soglia era assoluta (-25 dBFS): misurati sul DSP nuovo, i notch toglievano 0.0-0.4 dB su tutti e sei i profili artista, cioe' niente." },
+
     "gr1_target": { "expr": "clamp(1.2 + 3.0 * density + 1.5 * pos(aggression), 0, 5.0)", "note": "riduzione VOLUTA dal primo stadio sui picchi al livello di lavoro. Tetto 5.0: CLAUDE.md dice mai oltre 6 dB per stadio, e questo lascia margine all'arrotondamento di soglia e rapporto." },
     "c1_ratio":   { "expr": "clamp(2.0 + 1.5 * pos(aggression) + 1.0 * density, 1.2, 6.0)", "note": "rapporto del primo stadio: moderato, il livellamento vero lo fa il secondo." },
     "c1_makeup":  { "expr": "clamp(0.65 * gr1_target, 0, 6)", "note": "recupero PARZIALE della riduzione reale: la riduzione è misurata sui picchi, il livello medio ne perde meno, quindi restituire tutto vorrebbe dire alzare." },
@@ -285,7 +288,7 @@
         "room3Freq":  { "expr": "mode3", "round": 0, "unit": "Hz", "why": "terzo modo / scatola" },
         "room3Q":     { "expr": "5", "round": 1, "unit": "Q", "why": "stretto" },
         "room3Depth": { "expr": "clamp(-2.0 - 3.5 * cleanliness + 1.5 * pos(weight), -8, 0)", "round": 1, "unit": "dB", "why": "attenuazione dinamica sulla scatola" },
-        "roomThresh": { "expr": "clamp(-30 + 6 * cleanliness, -60, 0)", "round": 1, "unit": "dB", "why": "sotto questa soglia i notch non lavorano: la voce resta intera" }
+        "roomThresh": { "expr": "room_thresh", "round": 1, "unit": "dB", "why": "soglia riferita al livello a cui un modo di stanza arriva davvero al detector (12 dB sotto il picco di lavoro), non un numero assoluto in dBFS: sotto di lei i notch stanno fermi e la voce resta intera, sopra scavano quanto la risonanza eccede" }
       }
     },
     {
@@ -470,7 +473,7 @@
         "lpf":        { "expr": "clamp(5000 - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
         "width_pct":  { "expr": "60", "round": 0, "unit": "%" },
         "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-32 + 4 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+        "send_db":    { "expr": "clamp(-28 + 4 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB", "why": "una coda di mezzo secondo restituisce molta meno energia di una plate o di una hall a parita' di mandata: misurato sul DSP, a -32 dB questa variante stava 10 dB dietro la plate e non si sentiva piu' (i profili che la impongono, Shiva e Glockyy, arrivavano a -43 dB sotto la voce). Il livello e' quello di una ambienza corta che si sente fra le parole, non di un riverbero." }
       }
     },
     {

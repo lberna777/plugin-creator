@@ -59,7 +59,7 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `room3Freq` | 246 Hz | terzo modo / scatola |
 | `room3Q` | 5.0 Q | stretto |
 | `room3Depth` | -3.6 dB | attenuazione dinamica sulla scatola |
-| `roomThresh` | -27.3 dB | sotto questa soglia i notch non lavorano: la voce resta intera |
+| `roomThresh` | -32.7 dB | soglia riferita al livello a cui un modo di stanza arriva davvero al detector (12 dB sotto il picco di lavoro), non un numero assoluto in dBFS: sotto di lei i notch stanno fermi e la voce resta intera, sopra scavano quanto la risonanza eccede |
 
 ## 5. Channel EQ — EQ sottrattiva
 *Prima togli, poi aggiungi: ogni dB tolto qui è headroom per i due compressori.*
