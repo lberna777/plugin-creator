@@ -256,7 +256,7 @@
       "params": {
         "gateThresh": { "expr": "clamp(noise_floor + 6 + 10 * cleanliness, -80, 0)", "round": 1, "unit": "dB", "why": "6 dB sopra il noise floor stimato, più {cleanliness} di severità richiesta" },
         "gateRange":  { "expr": "clamp(6 + 16 * cleanliness, 0, 40)", "round": 1, "unit": "dB", "why": "attenuazione parziale: chiudere del tutto si sente più del rumore" },
-        "gateAtk":    { "expr": "clamp(2.0 - 1.5 * pos(aggression), 0.1, 20)", "round": 2, "unit": "ms", "why": "apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti" },
+        "gateAtk":    { "expr": "clamp(1.2 - 0.6 * pos(aggression), 0.1, 20)", "round": 2, "unit": "ms", "why": "il gate parte chiuso, quindi questo tempo entra due volte: e' la costante del detector E la rampa con cui il guadagno risale dal fondo del range fino a zero. Misurato sul DSP, la prima parola di una take esce piena dopo circa tre volte questo valore: a 2 ms perdeva 4,9 dB sui primi 10 ms con la sorgente 12 dB sotto il livello dichiarato, a 1,2 ne perde 3" },
         "gateRel":    { "expr": "clamp(160 - 60 * pos(aggression) + 80 * pos(intimacy), 10, 1000)", "round": 0, "unit": "ms", "why": "rilascio lungo per non troncare le code di parola" },
         "gateKeyLo":  { "expr": "clamp(120 * pitch_factor, 60, 400)", "round": 0, "unit": "Hz", "why": "il detector ignora sotto la fondamentale: rumore di traffico e ronzii non aprono il gate" },
         "gateKeyHi":  { "expr": "clamp(4000 * pitch_factor, 1000, 12000)", "round": 0, "unit": "Hz", "why": "il detector ignora sopra la banda di intelligibilità: ventole e fruscio non aprono il gate" }

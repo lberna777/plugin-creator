@@ -153,8 +153,8 @@
           "unit": "dB"
         },
         "gateAtk": {
-          "value": 2.0,
-          "why": "apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti",
+          "value": 1.2,
+          "why": "il gate parte chiuso, quindi questo tempo entra due volte: e' la costante del detector E la rampa con cui il guadagno risale dal fondo del range fino a zero. Misurato sul DSP, la prima parola di una take esce piena dopo circa tre volte questo valore: a 2 ms perdeva 4,9 dB sui primi 10 ms con la sorgente 12 dB sotto il livello dichiarato, a 1,2 ne perde 3",
           "unit": "ms"
         },
         "gateRel": {

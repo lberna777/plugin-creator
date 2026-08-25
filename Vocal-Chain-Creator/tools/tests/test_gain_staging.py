@@ -364,6 +364,79 @@ class TestThirdPass(unittest.TestCase):
             self.assertGreaterEqual(tail, 0.5, prompt)
 
 
+class TestFourthPass(unittest.TestCase):
+    """Quarto giro: il gate che adesso parte CHIUSO, e la coda dichiarata che segue il sync.
+
+    Come nei giri precedenti, qui si controllano i numeri del preset; quanto facciano davvero sul
+    segnale lo misura `vocalforge_selftest` (sezioni "gate", "EQ smussata", "coda dichiarata").
+    """
+
+    # Il tempo per aprire il gate non e' `gateAtk`: e' la rampa con cui il guadagno risale da
+    # -gateRange a zero, cioe' circa gateAtk * ln(gateRange). Misurato sul DSP con la prima parola
+    # di una take: 3,0-3,5 ms al livello nominale, con 0,8-1,2 dB persi sui primi 10 ms.
+    MAX_OPEN_MS = 4.0
+    MIN_GATE_ATK_MS = 0.3          # sotto, il detector insegue le singole semionde e il gate sfarfalla
+    MIN_HEADROOM_OVER_NOISE_DB = 6.0
+    MIN_GATE_RANGE_DB = 6.0
+    SLOW_BPM = 60.0                # il tempo lento realistico: sotto, la coda del sync si allunga
+    MAX_DECLARED_TAIL_SYNCED_S = 10.0
+    DIVISION_BEATS = {"1/4": 1.0, "1/8 dotted": 0.75, "1/8": 0.5, "1/16": 0.25}
+
+    def setUp(self):
+        prompts = [RULES["lexicon"]["artists"][a]["aliases"][0] for a in ARTISTS] + list(EXAMPLE_PROMPTS)
+        self.presets = {p: compile_preset(p, rules=RULES) for p in dict.fromkeys(prompts)}
+
+    def test_the_gate_opens_before_the_attack_of_the_first_word_is_gone(self):
+        """Prima della correzione B24 il gate partiva APERTO: `gateAtk` non apriva niente, perche'
+        non c'era niente da aprire, e il rumore di stanza passava intero per i primi 200 ms di ogni
+        take. Adesso parte chiuso e quel tempo decide quanto attacco si perde sulla prima parola.
+        A 2 ms di base si perdevano 4,9 dB sui primi 10 ms con la sorgente 12 dB sotto il livello
+        dichiarato; a 1,2 se ne perdono 3,4 sul profilo che chiede il gate piu' profondo."""
+        for prompt, preset in self.presets.items():
+            gate = _p(preset, "gate")
+            if gate is None:
+                continue
+            open_ms = gate["gateAtk"] * math.log(max(gate["gateRange"], 1.1))
+            self.assertLessEqual(open_ms, self.MAX_OPEN_MS,
+                                 f"{prompt}: il gate ci mette {open_ms:.2f} ms ad aprirsi")
+            self.assertGreaterEqual(gate["gateAtk"], self.MIN_GATE_ATK_MS,
+                                    f"{prompt}: apertura cosi' rapida da sfarfallare")
+
+    def test_the_faster_gate_was_not_bought_with_noise(self):
+        """Accorciare `gateAtk` e' lecito; alzare la soglia o abbassare il range no: sarebbe
+        comprare l'attacco lasciando passare la stanza. Questi due numeri non sono stati toccati."""
+        for prompt, preset in self.presets.items():
+            gate = _p(preset, "gate")
+            if gate is None:
+                continue
+            noise_floor = float(preset["source_profile"]["room"]["noise_floor_dbfs"])
+            self.assertGreaterEqual(gate["gateThresh"], noise_floor + self.MIN_HEADROOM_OVER_NOISE_DB,
+                                    f"{prompt}: soglia troppo vicina al noise floor")
+            self.assertGreaterEqual(gate["gateRange"], self.MIN_GATE_RANGE_DB, prompt)
+
+    def test_the_declared_tail_stays_sane_even_with_a_synced_delay_at_a_slow_tempo(self):
+        """Dalla correzione B22 la coda dichiarata usa il tempo SINCRONIZZATO, non `dlyTime`: a 60
+        BPM un 1/4 dura un secondo, e il feedback lo moltiplica. Misurato sul DSP: il massimo e'
+        4,13 s (Shiva) — nessun profilo chiede a Logic una coda assurda."""
+        for prompt, preset in self.presets.items():
+            delay = next((s for s in preset.get("sends", []) if s["group"] == "delay"), None)
+            reverb_tail = TestThirdPass.declared_tail_seconds(preset) - 0.5
+            delay_tail = 0.0
+            if delay is not None:
+                settings = delay["settings"]
+                feedback = min(0.85, max(0.0, settings.get("feedback", 0.0) / 100.0))
+                repeats = min(40.0, max(1.0, -60.0 / (20.0 * math.log10(feedback)))) if feedback > 0.01 else 1.0
+                if settings.get("sync"):
+                    beats = self.DIVISION_BEATS[settings["division"]]
+                    time_ms = 60000.0 / self.SLOW_BPM * beats
+                else:
+                    time_ms = settings.get("time_ms", 375.0)
+                delay_tail = time_ms * 0.001 * repeats
+            tail = min(20.0, max(0.5, max(reverb_tail, delay_tail) + 0.5))
+            self.assertLessEqual(tail, self.MAX_DECLARED_TAIL_SYNCED_S,
+                                 f"{prompt}: a {self.SLOW_BPM:.0f} BPM la coda dichiarata e' {tail:.2f} s")
+
+
 def _table(report):
     head = (f'{"prompt":<44}{"makeup":>8}{"out":>7}{"tot":>7}{"gr1":>7}{"gr2":>7}'
             f'{"drive":>7}{"satEx":>8}{"head":>7}{"limGR":>7}{"outPk":>8}')

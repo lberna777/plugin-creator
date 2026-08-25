@@ -170,6 +170,41 @@ namespace
             buffer.applyGain (juce::Decibels::decibelsToGain (peakDbfs) / current);
     }
 
+    /*  QUARTO GIRO — il gate adesso parte CHIUSO (B24). Serve un segnale che riproduca l'inizio di
+        una take vera: prima il solo rumore di stanza, poi la PRIMA parola, con un attacco ripido
+        (1 ms di salita) come una consonante occlusiva. Quello che si misura e' quanto tempo passa
+        dall'attacco a quando il gate e' aperto, e quanta parola si e' persa nel frattempo.
+        Il rumore sta `noiseBelowDb` sotto il picco della parola: con la parola a -6 dBFS e 38 dB di
+        distanza si finisce sul noise floor dichiarato dal profilo (-50 dBFS dopo l'input trim). */
+    void fillNoiseThenWord (juce::AudioBuffer<float>& buffer, double sampleRate, float peakDbfs,
+                            double gapSeconds, float noiseBelowDb)
+    {
+        std::mt19937 generator (8642);
+        std::uniform_real_distribution<float> noise (-1.0f, 1.0f);
+        const auto peak = juce::Decibels::decibelsToGain (peakDbfs);
+        const auto noiseGain = peak * juce::Decibels::decibelsToGain (noiseBelowDb);
+        const auto onset = static_cast<int> (gapSeconds * sampleRate);
+        const auto riseSamples = juce::jmax (1, static_cast<int> (0.001 * sampleRate));
+
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+        {
+            const auto t = static_cast<double> (sample) / sampleRate;
+            auto value = noiseGain * noise (generator);        // il rumore c'e' sempre, anche sotto la voce
+
+            if (sample >= onset)
+            {
+                const auto rise = juce::jmin (1.0, static_cast<double> (sample - onset) / riseSamples);
+                const auto word = 0.62 * std::sin (juce::MathConstants<double>::twoPi * 140.0 * t)
+                                + 0.26 * std::sin (juce::MathConstants<double>::twoPi * 420.0 * t)
+                                + 0.09 * std::sin (juce::MathConstants<double>::twoPi * 2800.0 * t);
+                value += static_cast<float> (peak * rise * word / 0.97);
+            }
+
+            for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+                buffer.setSample (ch, sample, value);
+        }
+    }
+
     void fillAtPeakSibilant (juce::AudioBuffer<float>& buffer, double sampleRate, float peakDbfs)
     {
         fillVoiceWithSibilants (buffer, sampleRate, 1.0f);
@@ -218,6 +253,19 @@ namespace
     {
         return juce::Decibels::gainToDecibels (buffer.getRMSLevel (0, start, count), -140.0f);
     }
+
+    /*  QUARTO GIRO — la coda dichiarata all'host adesso segue il delay SINCRONIZZATO (B22), quindi
+        dipende dal BPM: per misurarla a tempi diversi serve un playhead che lo dica. */
+    struct FixedBpmPlayHead : public juce::AudioPlayHead
+    {
+        double bpm = 120.0;
+        juce::Optional<juce::AudioPlayHead::PositionInfo> getPosition() const override
+        {
+            juce::AudioPlayHead::PositionInfo info;
+            info.setBpm (bpm);
+            return info;
+        }
+    };
 
     const char* const kArtists[] { "sfera ebbasta", "shiva", "tony boy", "glockyy", "gue pequeno", "capo plaza" };
 
@@ -900,6 +948,338 @@ int main()
             std::cout << "        " << artist << ": " << detail << std::endl;
             check (tail <= maxTailSeconds, juce::String (artist) + ": la coda dichiarata resta sensata", detail);
         }
+    }
+
+    /*  ---- QUARTO GIRO DI TARATURA (knowledge/TUNING.md, sezione "Quarto giro").
+
+        1) IL GATE ADESSO PARTE CHIUSO (B24). Prima partiva aperto: il rumore di stanza passava
+        intero per i primi ~200 ms di ogni take, e `gateAtk` non decideva niente perche' non c'era
+        niente da aprire. Adesso decide tutto: e' il tempo con cui il guadagno risale da -gateRange
+        a 0 dB, ed e' anche la costante dell'inviluppo del detector, quindi entra due volte.
+        Qui si misura, sulla PRIMA parola di una take, quanto ci mette ad aprirsi e quanta parola si
+        mangia nel frattempo. La catena e' troncata a trim + gate: quello che sta a valle cambia il
+        rapporto ingresso/uscita e falserebbe la misura dello stadio. */
+    {
+        const double sampleRate = 48000.0;
+        const int span   = 48000;                       // 1 s in un blocco solo: il gate apre qui dentro
+        const double gapSeconds = 0.25;                 // rumore di stanza prima della prima parola
+        const int onset  = static_cast<int> (gapSeconds * sampleRate);
+        const int window = static_cast<int> (0.0005 * sampleRate);   // 0,5 ms: risoluzione della misura
+
+        const float minNoiseCut = 5.0f;      // dB tolti al rumore di stanza prima della parola
+        /*  I limiti sono due, uno per livello. A gain d'ingresso basso la parola arriva 12 dB piu'
+            vicina alla soglia, quindi il detector la aggancia piu' tardi: il ritardo in piu' non e'
+            `gateAtk`, e' la distanza dalla soglia. Quello che resta di perdita sull'attacco cresce
+            col RANGE che il profilo chiede (misurato: 1,1 dB con 13 dB di range, 3,4 con 21), e il
+            range e' la profondita' voluta, non un effetto collaterale: si dichiara, non si abbassa. */
+        struct GateLimits { float openMs, attackLoss; };
+
+        std::cout << "  --- gate: quanto ci mette ad aprirsi sulla PRIMA parola (adesso parte chiuso)"
+                  << std::endl;
+
+        // il caso a gain d'ingresso basso e' quello che nei giri scorsi ha fatto cadere de-esser e
+        // room tamer: il gate va guardato anche li', perche' una soglia in dBFS assoluti che non
+        // aggancia piu' non lo fa aprire affatto — cioe' cancella la prima parola invece di pulirla
+        struct GateLevel { const char* name; float peakDbfs; GateLimits limits; };
+        for (auto level : { GateLevel { "-6 dBFS (nominale)", -6.0f, { 4.5f, 1.5f } },
+                            GateLevel { "-18 dBFS (gain basso)", -18.0f, { 8.0f, 3.5f } } })
+        for (auto* artist : kArtists)
+        {
+            processor.setRateAndBufferSizeDetails (sampleRate, span);
+            processor.prepareToPlay (sampleRate, span);
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+
+            const auto gateOn = processor.apvts.getRawParameterValue ("gateOn")->load() > 0.5f;
+            const auto gateAtk   = processor.apvts.getRawParameterValue ("gateAtk")->load();
+            const auto gateRange = processor.apvts.getRawParameterValue ("gateRange")->load();
+            const auto gateThresh = processor.apvts.getRawParameterValue ("gateThresh")->load();
+            if (! gateOn)
+            {
+                std::cout << "        " << artist << ": gate spento dal preset, niente da misurare" << std::endl;
+                continue;
+            }
+
+            for (auto* id : { "hpfOn", "roomOn", "eqSubOn", "ds1On", "c1On", "c2On", "satOn",
+                              "eqToneOn", "ds2On", "limOn", "revOn", "dlyOn", "fxOn", "airOn" })
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (0.0f);
+            for (auto* id : { "outGain", "satTilt" })
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
+            if (auto* p = processor.apvts.getParameter ("mix")) p->setValueNotifyingHost (p->convertTo0to1 (100.0f));
+
+            juce::AudioBuffer<float> buffer (2, span), reference (2, span);
+            // -6 dBFS di picco, rumore 38 dB sotto: dopo l'input trim (-6 dB) il rumore cade
+            // esattamente sul noise floor che il profilo dichiara (-50 dBFS)
+            fillNoiseThenWord (buffer, sampleRate, level.peakDbfs, gapSeconds, -38.0f);
+            for (int ch = 0; ch < 2; ++ch) reference.copyFrom (ch, 0, buffer, ch, 0, span);
+            processor.processBlock (buffer, midi);
+
+            // il guadagno applicato dal gate, finestra per finestra: l'unica cosa fra in e out
+            // e' l'input trim, che e' costante e sparisce nel confronto con il valore a regime
+            auto ratioDb = [&] (int start, int count)
+            {
+                const auto in  = reference.getRMSLevel (0, start, count);
+                const auto out = buffer.getRMSLevel (0, start, count);
+                return juce::Decibels::gainToDecibels (out / juce::jmax (1.0e-9f, in), -120.0f);
+            };
+
+            const auto openRef  = ratioDb (span - static_cast<int> (0.05 * sampleRate),
+                                           static_cast<int> (0.05 * sampleRate));   // gate spalancato
+            const auto noiseCut = openRef - ratioDb (onset - static_cast<int> (0.15 * sampleRate),
+                                                     static_cast<int> (0.14 * sampleRate));
+            const auto attackLoss = openRef - ratioDb (onset, static_cast<int> (0.010 * sampleRate));
+
+            float openMs = -1.0f;
+            for (int start = onset; start + window <= span; start += window)
+                if (ratioDb (start, window) >= openRef - 1.0f)
+                {
+                    openMs = static_cast<float> ((start - onset) * 1000.0 / sampleRate);
+                    break;
+                }
+
+            const juce::String detail ("apre in " + juce::String (openMs, 1) + " ms, perde "
+                                       + juce::String (attackLoss, 2) + " dB sui primi 10 ms, "
+                                       + "rumore -" + juce::String (noiseCut, 1) + " dB "
+                                       + "(gateAtk " + juce::String (gateAtk, 2) + " ms, range "
+                                       + juce::String (gateRange, 1) + " dB, soglia "
+                                       + juce::String (gateThresh, 1) + " dBFS)");
+            const juce::String who (juce::String (artist) + " @ " + level.name);
+            std::cout << "        " << who << ": " << detail << std::endl;
+
+            check (openMs >= 0.0f && openMs <= level.limits.openMs, who + ": il gate apre prima che l'attacco sia passato", detail);
+            check (attackLoss <= level.limits.attackLoss, who + ": il gate non mangia l'attacco della prima parola", detail);
+            check (noiseCut >= minNoiseCut, who + ": prima della parola il rumore di stanza resta fuori", detail);
+        }
+    }
+
+    /*  2) LO SMOOTHING DELL'EQ (R9). I guadagni di EQ sottrattiva, tonale, aria e tilt adesso sono a
+        rampa e i coefficienti si riscrivono a control rate. Due domande, due misure:
+          · la curva arriva DAVVERO al valore dichiarato nel preset, o si ferma per strada?
+            Si isola una banda alla volta: stessa catena, stesso segnale, il guadagno della banda
+            portato da 0 al valore del preset MENTRE l'audio gira. Le altre bande sono identiche nei
+            due render, quindi si cancellano: quello che resta e' il guadagno di quella banda al suo
+            centro, che per un peak RBJ e' esattamente il valore dichiarato.
+          · quanto dura la rampa? Se dura 30 ms e' una dissolvenza; se durasse mezzo secondo sarebbe
+            un morphing, e si sentirebbe come tale al cambio di preset. */
+    {
+        const double sampleRate = 48000.0;
+        const int fineBlock = 64;                       // 1,33 ms: risoluzione della rampa
+        const int settleBlocks = 120;                   // 160 ms per assestare
+        const int watchBlocks = 90;                     // 120 ms di osservazione dopo il cambio
+
+        const float maxErrorDb   = 0.25f;   // scarto ammesso fra guadagno dichiarato e misurato
+        const float maxSettleMs  = 60.0f;   // oltre, il cambio di preset si sente come un morphing
+        const float minSettleMs  = 10.0f;   // sotto, non e' una rampa: e' uno scalino
+
+        auto set = [&processor] (const char* id, float value)
+        {
+            if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+        };
+
+        /*  Manda una sinusoide ferma a `frequency`, cambia `id` da `from` a `to` a meta' corsa e
+            restituisce il guadagno misurato prima, dopo, e il tempo che ci mette ad arrivarci. */
+        struct Ramp { float beforeDb = 0.0f, afterDb = 0.0f, settleMs = 0.0f, jump = 0.0f, quietJump = 0.0f; };
+
+        auto sweep = [&] (const char* artist, const char* toneToggle, const char* id,
+                          float from, float to, double frequency)
+        {
+            processor.setRateAndBufferSizeDetails (sampleRate, fineBlock);
+            processor.prepareToPlay (sampleRate, fineBlock);
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+            for (auto* off : { "gateOn", "hpfOn", "roomOn", "eqSubOn", "ds1On", "c1On", "c2On",
+                               "satOn", "eqToneOn", "ds2On", "limOn", "revOn", "dlyOn", "fxOn", "airOn" })
+                if (auto* p = processor.apvts.getParameter (off)) p->setValueNotifyingHost (0.0f);
+            if (toneToggle != nullptr)
+                if (auto* p = processor.apvts.getParameter (toneToggle)) p->setValueNotifyingHost (1.0f);
+            for (auto* zero : { "inTrim", "outGain" })
+                if (auto* p = processor.apvts.getParameter (zero)) p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
+            if (auto* p = processor.apvts.getParameter ("mix")) p->setValueNotifyingHost (p->convertTo0to1 (100.0f));
+            if (juce::String (id) != "satTilt") set ("satTilt", 0.0f);
+            set (id, from);
+
+            juce::AudioBuffer<float> buffer (2, fineBlock);
+            const int totalBlocks = settleBlocks + watchBlocks;
+            std::vector<float> in (static_cast<size_t> (totalBlocks * fineBlock), 0.0f), out (in.size(), 0.0f);
+            Ramp result;
+            int sampleIndex = 0;
+
+            for (int block = 0; block < totalBlocks; ++block)
+            {
+                for (int sample = 0; sample < fineBlock; ++sample, ++sampleIndex)
+                {
+                    const auto value = 0.25f * static_cast<float> (
+                        std::sin (juce::MathConstants<double>::twoPi * frequency * sampleIndex / sampleRate));
+                    buffer.setSample (0, sample, value);
+                    buffer.setSample (1, sample, value);
+                    in[static_cast<size_t> (sampleIndex)] = value;
+                }
+                if (block == settleBlocks) set (id, to);
+                processor.processBlock (buffer, midi);
+                for (int sample = 0; sample < fineBlock; ++sample)
+                    out[static_cast<size_t> (block * fineBlock + sample)] = buffer.getSample (0, sample);
+                if (block >= settleBlocks) result.jump = juce::jmax (result.jump, maxJump (buffer));
+                if (block >= settleBlocks - 10 && block < settleBlocks)
+                    result.quietJump = juce::jmax (result.quietJump, maxJump (buffer));
+            }
+
+            /*  Il guadagno si legge su una finestra che contiene almeno quattro periodi della
+                sonda: su un blocco da 64 campioni una sinusoide a 200 Hz non fa nemmeno un terzo
+                di periodo, e la media di |x| ballerebbe piu' della rampa che si vuole misurare.
+                La finestra e' la stessa prima e dopo, quindi non sposta il valore a regime; smussa
+                la rampa di meta' finestra, ed e' dichiarato. */
+            const int measureWindow = juce::jmax (fineBlock, static_cast<int> (4.0 * sampleRate / frequency));
+            auto gainDbAt = [&] (int endSample)
+            {
+                const auto start = juce::jmax (0, endSample - measureWindow);
+                double inSum = 0.0, outSum = 0.0;
+                for (int i = start; i < endSample; ++i)
+                {
+                    inSum  += std::abs (static_cast<double> (in[static_cast<size_t> (i)]));
+                    outSum += std::abs (static_cast<double> (out[static_cast<size_t> (i)]));
+                }
+                return juce::Decibels::gainToDecibels (static_cast<float> (outSum / juce::jmax (1.0e-12, inSum)));
+            };
+
+            result.beforeDb = gainDbAt (settleBlocks * fineBlock);
+            result.afterDb  = gainDbAt (totalBlocks * fineBlock);
+            result.settleMs = static_cast<float> (watchBlocks * fineBlock * 1000.0 / sampleRate);
+            // "assestata" = entro il 10 % del salto che doveva fare. Una tolleranza fissa in dB
+            // misurerebbe solo quanto e' piccolo il salto: su un boost da 0,4 dB qualunque rampa
+            // sembrerebbe istantanea.
+            const auto tolerance = juce::jmax (0.02f, 0.1f * std::abs (result.afterDb - result.beforeDb));
+            const int firstUsable = settleBlocks + measureWindow / fineBlock;   // la finestra deve stare dopo il cambio
+            for (int block = firstUsable; block < totalBlocks; ++block)
+            {
+                bool settled = true;
+                for (int later = block; later < totalBlocks; ++later)
+                    if (std::abs (gainDbAt (later * fineBlock) - result.afterDb) > tolerance) { settled = false; break; }
+                if (settled)
+                {
+                    // meta' finestra e' ritardo dello strumento, non della rampa: si toglie
+                    result.settleMs = static_cast<float> (((block - settleBlocks) * fineBlock - measureWindow * 0.5)
+                                                          * 1000.0 / sampleRate);
+                    break;
+                }
+            }
+            return result;
+        };
+
+        std::cout << "  --- EQ smussata: la curva arriva al valore del preset, e in quanto tempo" << std::endl;
+
+        for (auto* artist : kArtists)
+        {
+            juce::String line (artist);
+            float worstError = 0.0f, worstSettle = 0.0f, bestSettle = 1.0e6f;
+
+            for (int band = 1; band <= 3; ++band)
+            {
+                const juce::String gainId ("tone" + juce::String (band) + "Gain");
+                const juce::String freqId ("tone" + juce::String (band) + "Freq");
+                const auto declared  = processor.apvts.getRawParameterValue (gainId)->load();
+                const auto frequency = processor.apvts.getRawParameterValue (freqId)->load();
+                if (std::abs (declared) < 0.2f) continue;      // banda ferma: non c'e' curva da raggiungere
+
+                const auto ramp = sweep (artist, "eqToneOn", gainId.toRawUTF8(), 0.0f, declared, frequency);
+                const auto measured = ramp.afterDb - ramp.beforeDb;
+                worstError  = juce::jmax (worstError, std::abs (measured - declared));
+                worstSettle = juce::jmax (worstSettle, ramp.settleMs);
+                bestSettle  = juce::jmin (bestSettle, ramp.settleMs);
+                line += "  tone" + juce::String (band) + " " + juce::String (declared, 1)
+                        + " dB -> " + juce::String (measured, 2) + " in " + juce::String (ramp.settleMs, 0) + " ms";
+            }
+
+            // il tilt e' uno stadio a se': va verificato che arrivi al suo valore anche con l'EQ
+            // tonale SPENTA, perche' la manopola deve funzionare da sola (B11)
+            const auto tiltDeclared = processor.apvts.getRawParameterValue ("satTilt")->load();
+            const auto tiltRamp = sweep (artist, nullptr, "satTilt", 0.0f, juce::jmax (0.5f, tiltDeclared), 8000.0);
+            const auto tiltMeasured = tiltRamp.afterDb - tiltRamp.beforeDb;
+
+            std::cout << "        " << line << std::endl;
+            std::cout << "        " << artist << ": tilt " << juce::String (juce::jmax (0.5f, tiltDeclared), 2)
+                      << " dB (EQ tonale spenta) -> " << juce::String (tiltMeasured, 2)
+                      << " dB a 8 kHz in " << juce::String (tiltRamp.settleMs, 0) << " ms" << std::endl;
+
+            check (worstError <= maxErrorDb, juce::String (artist) + ": l'EQ arriva al guadagno dichiarato dal preset",
+                   "scarto peggiore " + juce::String (worstError, 2) + " dB");
+            check (worstSettle <= maxSettleMs, juce::String (artist) + ": il cambio di EQ e' una dissolvenza, non un morphing",
+                   "assestata in " + juce::String (worstSettle, 0) + " ms");
+            check (bestSettle >= minSettleMs, juce::String (artist) + ": il cambio di EQ non e' uno scalino",
+                   "assestata in " + juce::String (bestSettle, 0) + " ms");
+            check (tiltMeasured > 0.3f, juce::String (artist) + ": il tilt arriva al suo valore anche a EQ tonale spenta",
+                   juce::String (tiltMeasured, 2) + " dB misurati a 8 kHz");
+        }
+    }
+
+    /*  3) LA CODA DICHIARATA ALL'HOST adesso segue il delay SINCRONIZZATO (B22): con `dlyFeedback`
+        alto e una divisione lunga, a BPM lenti la coda si allunga davvero. Due domande:
+          · qualche profilo chiede a Logic una coda assurda (> 10 s) a un tempo che si usa davvero?
+          · la coda dichiarata CONTIENE la coda reale, o l'host taglia il bounce?
+        La coda reale si misura a ingresso finito: quanti secondi passano prima che l'uscita scenda
+        sotto -60 dBFS, con le mandate del preset accese. */
+    {
+        const double sampleRate = 48000.0;
+        const int probeBlock = 512;
+        const float maxDeclaredSeconds = 10.0f;         // oltre, il bounce in Logic si allunga per niente
+
+        FixedBpmPlayHead playHead;
+        processor.setPlayHead (&playHead);
+
+        std::cout << "  --- coda dichiarata: caso peggiore col delay sincronizzato, e coda reale" << std::endl;
+
+        for (auto bpm : { 60.0, 90.0, 140.0 })
+        {
+            playHead.bpm = bpm;
+            float worstTail = 0.0f;
+            juce::String worstArtist;
+            for (auto* artist : kArtists)
+            {
+                processor.setRateAndBufferSizeDetails (sampleRate, probeBlock);
+                processor.prepareToPlay (sampleRate, probeBlock);
+                processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+
+                juce::AudioBuffer<float> buffer (2, probeBlock);
+                fillVoiceLike (buffer, sampleRate, 0.4f);
+                processor.processBlock (buffer, midi);         // il BPM arriva col primo blocco
+                processor.processBlock (buffer, midi);
+                const auto declared = static_cast<float> (processor.getTailLengthSeconds());
+                if (declared > worstTail) { worstTail = declared; worstArtist = artist; }
+            }
+            std::cout << "        a " << juce::String (bpm, 0) << " BPM la coda dichiarata piu' lunga e' "
+                      << juce::String (worstTail, 2) << " s (" << worstArtist << ")" << std::endl;
+            check (worstTail <= maxDeclaredSeconds,
+                   "a " + juce::String (bpm, 0) + " BPM nessun profilo chiede a Logic una coda assurda",
+                   juce::String (worstTail, 2) + " s su " + worstArtist);
+        }
+
+        // la coda dichiarata deve contenere quella vera: a ingresso finito si misura quando l'uscita
+        // scende sotto -60 dBFS, e la si confronta con quello che il plugin ha promesso all'host
+        playHead.bpm = 90.0;
+        for (auto* artist : kArtists)
+        {
+            processor.setRateAndBufferSizeDetails (sampleRate, probeBlock);
+            processor.prepareToPlay (sampleRate, probeBlock);
+            processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+
+            juce::AudioBuffer<float> buffer (2, probeBlock);
+            for (int i = 0; i < 40; ++i) { fillVoiceLike (buffer, sampleRate, 0.5f); processor.processBlock (buffer, midi); }
+            const auto declared = static_cast<float> (processor.getTailLengthSeconds());
+
+            int audibleBlocks = 0;
+            const int maxBlocks = static_cast<int> (20.0 * sampleRate / probeBlock);
+            for (int i = 0; i < maxBlocks; ++i)
+            {
+                buffer.clear();
+                processor.processBlock (buffer, midi);
+                if (juce::Decibels::gainToDecibels (buffer.getMagnitude (0, probeBlock), -140.0f) > -60.0f)
+                    audibleBlocks = i + 1;
+            }
+            const auto realTail = static_cast<float> (audibleBlocks * probeBlock / sampleRate);
+            const juce::String detail ("dichiarata " + juce::String (declared, 2) + " s, reale "
+                                       + juce::String (realTail, 2) + " s");
+            std::cout << "        " << artist << ": " << detail << std::endl;
+            check (realTail <= declared, juce::String (artist) + ": la coda dichiarata contiene quella vera", detail);
+        }
+
+        processor.setPlayHead (nullptr);
     }
 
     // ---- blocchi di lunghezza variabile: il contratto e' "<= maximumBlockSize", non "="

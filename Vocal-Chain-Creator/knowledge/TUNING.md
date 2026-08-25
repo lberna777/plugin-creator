@@ -616,3 +616,234 @@ apparteneva al limiter di JUCE che riamplificava di −threshold. Con il tetto v
 78%. I numeri buoni sono quelli del §2.
 
 Parità Python ↔ C++: 18 preset, 1683 valori, 0 differenze. Test Python: 84. Controlli headless: 229.
+
+---
+
+# Quarto giro: il gate che parte chiuso, l'EQ che si muove a rampa, la coda che segue il sync
+
+Il terzo giro ha tarato su un DSP che è cambiato di nuovo (`REVIEW.md`, "Quinto passaggio"):
+guadagni di EQ e tilt smussati con i coefficienti riscritti a control rate (R9), bus delle mandate
+che finiscono la coda e poi si azzerano (B21), coda dichiarata che segue il delay sincronizzato
+(B22), snap prima del reset (B23), **gate che parte chiuso** (B24), `round(x, n)` uguale nei due
+motori (R12), doubler senza overflow a più di due canali (B17).
+
+Questo giro **ha cambiato un numero** — `gateAtk` — e ha trovato **una regressione del DSP** che
+rendeva falsa una taratura del secondo giro. Tutto il resto è stato misurato sul DSP nuovo e
+**lasciato dov'era**. La misura si rifà con:
+
+```
+./build/vocalforge_selftest_artefacts/Release/vocalforge_selftest
+```
+
+Le tre sezioni nuove sono `gate`, `EQ smussata` e `coda dichiarata: caso peggiore col delay
+sincronizzato`; gli invarianti corrispondenti stanno in
+`tools/tests/test_gain_staging.py::TestFourthPass`. Controlli headless: **300**. Test Python: **90**.
+
+---
+
+## 1. Il tilt: la regressione che ha rimesso in discussione tre tabelle
+
+Prima di parlare del gate va detto quello che la prima misura ha trovato per sbaglio. La sezione
+`satTilt` del secondo giro, rifatta sul DSP nuovo, dava questo:
+
+| satTilt | inclinazione misurata 200 Hz → 8 kHz (terzo giro) | (prima di questo giro) |
+|---|---|---|
+| 3,0 dB | 6,15 dB | **3,50 dB** |
+| 1,5 dB | 3,08 dB | **4,67 dB** |
+
+Non monotona: più tilt, meno inclinazione. Il motivo è che con R9 la rampa di `tiltSmoothed` e la
+riscrittura dei coefficienti del tilt erano finite **dentro il blocco dell'EQ tonale**, che è lo
+stadio dopo. Con `eqToneOn` a zero — la condizione in cui B11 aveva messo il tilt apposta, perché la
+manopola dovesse funzionare da sola — quel blocco non gira: lo smoother non avanzava di un campione e
+i due shelf restavano ai coefficienti dell'ultimo snap. Cioè al valore di **un altro preset**.
+
+`satTilt` era tornato il parametro finto che B11 aveva tolto di mezzo, con in più il fatto che i
+valori vecchi si trascinavano da una misura all'altra: le tabelle del room tamer e delle mandate,
+rifatte, davano numeri diversi da quelli documentati al terzo giro.
+
+**Correzione (DSP, non regole):** il tilt ha il suo control rate, come lo stadio a sé che è.
+`refreshTiltCoefficients()` è staccata da `refreshToneCoefficients()`, e `processTilt` avanza
+`tiltSmoothed` e riscrive i suoi shelf ogni 16 campioni, indipendentemente da `eqToneOn`.
+`tiltCoeffCountdown` è azzerato da `reset()` come gli altri stati di B24.
+
+Con la correzione la sezione `satTilt` torna a **6,15 / 3,08 dB**, esattamente i numeri del secondo
+giro, e le tabelle del room tamer e delle mandate del terzo giro tornano riproducibili al centesimo
+(Sfera Ebbasta 1,17 / 3,29 / 2,10 dB sui modi; Shiva riverbero a −39,3 dB). `satTilt = 1.5 *
+brightness` **non è stato toccato**: era giusto, ed era la misura a essere rotta.
+
+---
+
+## 2. Il gate adesso parte chiuso: `gateAtk` è passato da 2,0 a 1,2 ms di base
+
+Prima di B24 il gate partiva **aperto**: il rumore di stanza passava intero per i primi ~200 ms di
+ogni take e `gateAtk` non apriva niente, perché non c'era niente da aprire. Adesso decide tutto, e
+decide **due volte**: è la costante dell'inviluppo del detector *e* la rampa con cui il guadagno
+risale dal fondo del range fino a zero. Il tempo di apertura vero è circa `gateAtk · ln(gateRange)`,
+non `gateAtk`.
+
+Segnale di prova nuovo, `fillNoiseThenWord()`: 250 ms di solo rumore di stanza, poi la **prima
+parola** con un attacco di 1 ms come una consonante occlusiva. Il rumore sta 38 dB sotto il picco
+della parola, cioè — dopo l'input trim — esattamente sul noise floor che il profilo dichiara
+(−50 dBFS). La catena è troncata a trim + gate: quello che sta a valle cambia il rapporto
+ingresso/uscita e falserebbe la misura dello stadio.
+
+```
+gateAtk:  clamp(2.0 - 1.5 * pos(aggression), 0.1, 20)  →  clamp(1.2 - 0.6 * pos(aggression), 0.1, 20)
+```
+
+Misura sul DSP vero. "apre in" è quando il guadagno applicato arriva a 1 dB dal valore a gate
+spalancato; "perde" è quanto si mangia dei primi 10 ms della parola. Formato `prima → dopo`.
+
+### Livello nominale (picchi a −6 dBFS)
+
+| profilo | gateAtk | apre in | perde sui primi 10 ms | rumore tolto prima della parola |
+|---|---|---|---|---|
+| Sfera Ebbasta | 1,70 → **1,08 ms** | 5,5 → **3,5 ms** | 1,94 → **1,12 dB** | 15,8 dB |
+| Shiva | 1,10 → **0,84 ms** | 4,0 → **3,0 ms** | 1,28 → **0,94 dB** | 19,0 dB |
+| Tony Boy | 1,85 → **1,14 ms** | 5,5 → **3,5 ms** | 1,80 → **1,01 dB** | 13,2 dB |
+| Glockyy | 1,02 → **0,81 ms** | 3,5 → **3,0 ms** | 1,23 → **0,93 dB** | 19,1 dB |
+| Guè | 1,62 → **1,05 ms** | 5,5 → **3,5 ms** | 2,02 → **1,19 dB** | 18,8 dB |
+| Capo Plaza | 1,40 → **0,96 ms** | 4,0 → **3,0 ms** | 1,29 → **0,82 dB** | 13,2 dB |
+
+### Gain d'ingresso basso (picchi a −18 dBFS)
+
+| profilo | apre in | perde sui primi 10 ms |
+|---|---|---|
+| Sfera Ebbasta | 8,5 → **6,5 ms** | 4,63 → **3,19 dB** |
+| Shiva | 7,0 → **6,0 ms** | 3,63 → **2,97 dB** |
+| Tony Boy | 8,5 → **4,0 ms** | 4,11 → **1,39 dB** |
+| Glockyy | 7,0 → **6,0 ms** | 3,57 → **3,03 dB** |
+| Guè | 8,5 → **7,0 ms** | 4,86 → **3,39 dB** |
+| Capo Plaza | 7,0 → **3,5 ms** | 3,30 → **1,13 dB** |
+
+**Il rumore non è entrato dalla porta di servizio.** `gateThresh` e `gateRange` **non sono stati
+toccati**: la soglia resta 6 dB sopra il noise floor dichiarato e il range resta quello che il
+profilo chiede. La misura lo conferma: prima della parola il rumore di stanza esce attenuato di
+13÷19 dB, esattamente come prima del cambio. C'è l'invariante che lo tiene fermo
+(`test_the_faster_gate_was_not_bought_with_noise`): accorciare l'attacco è lecito, comprarselo
+alzando la soglia o abbassando il range no.
+
+### Il residuo, dichiarato
+
+A −18 dBFS restano fino a **3,4 dB persi sui primi 10 ms** sui profili che chiedono il gate più
+profondo (Guè 18,8 dB di range, Glockyy 21,2). Non è `gateAtk`: la rampa deve attraversare più
+range, e la parola arriva 12 dB più vicina alla soglia, quindi il detector la aggancia più tardi.
+Si vede nell'ordine: Capo Plaza e Tony Boy, che di range ne chiedono 13,2, perdono 1,1÷1,4 dB anche
+a gain basso. Chiudere del tutto quel residuo vorrebbe dire abbassare il range — cioè lasciar
+passare la stanza per guadagnare un decimo di consonante. Si dichiara, non si compra.
+
+---
+
+## 3. Lo smoothing dell'EQ: le curve arrivano al valore dichiarato, in 26÷32 ms
+
+Con R9 i guadagni di EQ sottrattiva, tonale, aria e tilt sono a rampa (30 ms) e i coefficienti si
+riscrivono ogni 16 campioni. Due domande, due misure — e nessun numero da cambiare.
+
+Il metodo isola **una banda alla volta**: stessa catena, stesso segnale, il guadagno della banda
+portato da 0 al valore del preset **mentre l'audio gira**. Le altre bande sono identiche nei due
+render e si cancellano, quindi quello che resta è il guadagno di quella banda al suo centro — che per
+un peak RBJ è esattamente il valore dichiarato. Il guadagno si legge su una finestra lunga almeno
+quattro periodi della sonda (su 64 campioni una sinusoide a 200 Hz non fa un terzo di periodo, e la
+media di |x| ballerebbe più della rampa da misurare); metà finestra è ritardo dello strumento e viene
+tolta.
+
+| profilo | banda | dichiarato | misurato | rampa |
+|---|---|---|---|---|
+| Sfera Ebbasta | tone2 / tone3 | 0,7 / 0,9 dB | **0,70 / 0,90 dB** | 26,0 / 27,3 ms |
+| Shiva | tone2 | 0,9 dB | **0,90 dB** | 27,3 ms |
+| Tony Boy | tone1 / tone2 / tone3 | 0,4 / 0,9 / 0,6 dB | **0,40 / 0,90 / 0,60 dB** | 31,6 / 27,3 / 27,3 ms |
+| Glockyy | tone1 | 0,6 dB | **0,56 dB** | 31,6 ms |
+| Guè | tone1 | 0,5 dB | **0,50 dB** | 32,3 ms |
+| Capo Plaza | tone1 / tone2 / tone3 | 0,8 / 0,7 / 0,7 dB | **0,75 / 0,70 / 0,70 dB** | 32,3 / 27,3 / 27,3 ms |
+
+Scarto peggiore fra dichiarato e misurato: **0,05 dB**. La rampa dura 26÷32 ms, cioè i 30 ms
+dichiarati: è una dissolvenza, non un morphing. Un morphing si sente perché la curva *passa* per
+valori intermedi per un tempo lungo abbastanza da percepirli come un'altra EQ; a 30 ms su boost da
+0,4÷0,9 dB non c'è niente da percepire, e il controllo sul click resta verde.
+
+Il tilt, misurato con l'**EQ tonale spenta** — la condizione che ha fatto uscire la regressione del
+§1 — arriva a 0,53 dB per 0,50 dichiarati, in 27,3 ms.
+
+**Niente cambiato:** i guadagni di `tone1÷3`, `airGain` e `satTilt` restano quelli del secondo giro.
+Il tempo di rampa (30 ms) è nel DSP, non nelle regole, e la misura dice che è quello giusto.
+
+---
+
+## 4. La coda dichiarata: nessun profilo ne chiede una assurda, nemmeno a 60 BPM
+
+Da B22 la coda dichiarata all'host usa il tempo **sincronizzato**: a 60 BPM un 1/4 dura un secondo, e
+`dlyFeedback` lo moltiplica per il numero di ripetizioni che servono a scendere di 60 dB. È il caso
+in cui la coda può esplodere davvero, e al terzo giro non era misurabile perché il self test girava
+sempre a 120 BPM.
+
+Misura sul processore vero, con un playhead che dichiara il tempo:
+
+| BPM | coda dichiarata più lunga |
+|---|---|
+| 60 | **4,13 s** (Shiva) |
+| 90 | 2,92 s (Shiva) |
+| 140 | 2,52 s (Tony Boy) |
+
+Sui 21 prompt il massimo, calcolato con la stessa formula a 60 BPM, è **6,24 s** ("pop moderno", 1/4
+con feedback al 30 %). Il tetto di 45 % del parametro non lo tocca nessuno: le formule si fermano al
+30 %, e la divisione più lunga che le regole scelgono è il 1/4. **Sotto i 10 s con quasi 4 s di
+margine: niente da accorciare.**
+
+E la coda dichiarata **contiene** quella vera — l'host non taglia il bounce. A ingresso finito,
+quanto ci mette l'uscita a scendere sotto −60 dBFS:
+
+| profilo | dichiarata | reale |
+|---|---|---|
+| Sfera Ebbasta | 2,51 s | 0,50 s |
+| Shiva | 2,92 s | 0,99 s |
+| Tony Boy | 2,52 s | 0,75 s |
+| Glockyy | 1,01 s | 0,27 s |
+| Guè | 1,52 s | 0,33 s |
+| Capo Plaza | 2,71 s | 0,65 s |
+
+Il margine è largo perché la formula somma il mezzo secondo di sicurezza e prende il caso peggiore
+(riverbero *o* delay, il più lungo dei due, con la coda misurata a decay pieno). Sbagliare per
+eccesso qui costa qualche secondo di bounce; sbagliare per difetto taglia la coda.
+
+---
+
+## 5. Riverifica di quello che era già tarato: **regge tutto**
+
+Rimisurato sul DSP nuovo, con il tilt riparato (senza la riparazione tre di queste tabelle davano
+numeri diversi, e sarebbe stato l'errore del giro):
+
+- **De-esser:** GR 3,54÷4,92 dB su DS1 e 2,70÷3,50 su DS2, banda alta 2,5÷4,2 dB sotto il corpo,
+  corpo che **sale** di 0,3÷0,5 dB (niente lisp). Identico al secondo giro. Soglie e range **non
+  toccati**.
+- **Room tamer:** modi a −1,17 / −3,29 / −2,10 dB su Sfera, fino a −3,39 / −4,82 / −3,25 su Glockyy;
+  voce mai oltre 0,8 dB. Identico al terzo giro. `roomThresh`, profondità e Q **non toccati**.
+- **Limiter:** 0,00 dB di riduzione su tutti e sei i profili, a −6 e a −18 dBFS; picchi d'uscita
+  −5,6÷−7,3 dBFS contro un ceiling a −1,0. `outGain` e il suo tetto di 4 dB **non toccati**.
+- **Compressori:** comp 1 a 0,58÷1,33 dB, comp 2 a 0,79÷1,28. Nessuno stadio vicino ai 6 dB di
+  CLAUDE.md. Soglie e makeup **non toccati**.
+- **Mandate e MIX:** riverbero da −31,0 a −39,7 dB sotto la voce, delay da −38,6 a −42,1, doubler da
+  −30,1 a −31,9; il MIX sposta il rapporto di meno di 1,5 dB. `send_db` **non toccati**.
+- **Ducking:** riverbero e delay 3,9÷5,0 dB sotto la parola e meno di 1,2 dB nel vuoto; doubler
+  2,3÷3,0 dB, che è il numero rifatto al secondo giro. `duck_db` **non toccati**.
+- **Drive di saturazione e `satTilt`:** vedi §1 — il tilt torna ai numeri del secondo giro appena la
+  misura smette di essere rotta. `satDrive` **non toccato**.
+- **Profili distinguibili:** `test_artists.py` verde. Parità Python ↔ C++: 18 preset, 1695 valori,
+  0 differenze.
+
+Il salvataggio dei bus (B21) e lo snap prima del reset (B23) non hanno spostato nessun numero delle
+regole: si vedono nei controlli "riaccendere una mandata non spara fuori la coda vecchia" e "nessun
+click nemmeno subito dopo un reset dell'host", entrambi verdi, e non c'è niente da tarare in
+`rules.json` che li riguardi.
+
+---
+
+## 6. Il limite residuo, aggiornato
+
+Resta quello dichiarato ai tre giri precedenti, e adesso ha una riga in più:
+
+- a **−18 dBFS d'ingresso** de-esser e room tamer non agganciano (le soglie derivano da `work_peak`,
+  che assume l'input trim a −12 dBFS), e il gate perde fino a 3,4 dB sui primi 10 ms della prima
+  parola sui profili col gate più profondo;
+- la risposta è sempre la stessa: quando (F3) esisterà l'analisi del segnale, `work_peak` smetterà di
+  essere una stima e queste stesse formule diventeranno esatte. Fino ad allora la cosa onesta è
+  dirlo, non abbassare soglie e range fino a far lavorare i moduli sul rumore.

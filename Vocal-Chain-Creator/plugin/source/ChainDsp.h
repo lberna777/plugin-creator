@@ -184,6 +184,7 @@ private:
     void processTilt (juce::AudioBuffer<float>&, int numSamples);
     void refreshSubCoefficients();             // riscrive i biquad dai valori smussati (control rate)
     void refreshToneCoefficients();
+    void refreshTiltCoefficients();
     float syncedDelayMs() const noexcept;
     void processLimiter (juce::AudioBuffer<float>&, int numSamples);
     /** Un tratto lungo al massimo quanto il blocco dichiarato in prepare. */
@@ -228,7 +229,7 @@ private:
     // R9: i coefficienti dei filtri cambiavano di colpo. Ora i guadagni si muovono a rampa e
     // i biquad si riscrivono a control rate.
     juce::SmoothedValue<float> subGainSmoothed[3], toneGainSmoothed[3], airGainSmoothed, tiltSmoothed;
-    int subCoeffCountdown = 0, toneCoeffCountdown = 0;
+    int subCoeffCountdown = 0, toneCoeffCountdown = 0, tiltCoeffCountdown = 0;
 
     // mandate (bus paralleli)
     juce::dsp::Reverb reverb;

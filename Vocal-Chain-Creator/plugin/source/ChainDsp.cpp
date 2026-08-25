@@ -229,7 +229,7 @@ void ChainDsp::reset()
 
     // B24: anche gli stati che prima sopravvivevano al reset
     roomCoeffCountdown = 0;
-    subCoeffCountdown = toneCoeffCountdown = 0;
+    subCoeffCountdown = toneCoeffCountdown = tiltCoeffCountdown = 0;
     for (auto& depth : roomDepthSmoothed) depth.setCurrentAndTargetValue (0.0f);
     doublerPhase = 0.0f;
     gateOpen = false;
@@ -313,6 +313,7 @@ void ChainDsp::updateCoefficients()
         for (auto& gain : toneGainSmoothed) gain.setCurrentAndTargetValue (gain.getTargetValue());
         refreshSubCoefficients();
         refreshToneCoefficients();
+        refreshTiltCoefficients();
         if (! gateOpen) gateGainDb = -settings.gateRange;
         for (auto& depth : roomDepthSmoothed) depth.setCurrentAndTargetValue (0.0f);
         snapSmoothedOnNextUpdate = false;
@@ -344,10 +345,20 @@ void ChainDsp::refreshToneCoefficients()
                                            toneGainSmoothed[band].getCurrentValue());
 
     const auto air = airGainSmoothed.getCurrentValue();
+    for (int ch = 0; ch < kChannels; ++ch)
+        airFilter[ch].setShelf (sampleRate, safeFreq (12000.0f), 0.707f, air, true);
+}
+
+void ChainDsp::refreshTiltCoefficients()
+{
+    /*  Il tilt e' uno stadio SUO, non una banda dell'EQ tonale: sta davanti (subito dopo la
+        saturazione) e la manopola deve funzionare anche con l'EQ tonale spenta (B11). Se i suoi
+        coefficienti si riscrivessero dentro il blocco dell'EQ tonale, come facevano, con eqToneOn
+        a zero non si riscriverebbero mai: satTilt tornerebbe il parametro finto che B11 aveva
+        tolto di mezzo, e la rampa di R9 resterebbe ferma al valore snappato. */
     const auto tilt = tiltSmoothed.getCurrentValue();
     for (int ch = 0; ch < kChannels; ++ch)
     {
-        airFilter[ch].setShelf (sampleRate, safeFreq (12000.0f), 0.707f, air, true);
         tiltLow[ch].setShelf (sampleRate, 700.0f, 0.707f, -tilt, false);
         tiltHigh[ch].setShelf (sampleRate, 700.0f, 0.707f, tilt, true);
     }
@@ -550,12 +561,21 @@ void ChainDsp::processSaturation (juce::AudioBuffer<float>& buffer, int numSampl
 void ChainDsp::processTilt (juce::AudioBuffer<float>& buffer, int numSamples)
 {
     // Inclinazione spettrale: due shelf speculari a 700 Hz. Vive fuori dalla saturazione,
-    // così la manopola fa qualcosa anche con SAT spento (B11).
-    for (int ch = 0; ch < juce::jmin (kMaxChannels, buffer.getNumChannels()); ++ch)
+    // così la manopola fa qualcosa anche con SAT spento (B11), e fuori dall'EQ tonale, così la
+    // rampa di R9 avanza anche con l'EQ tonale spenta: il control rate se lo fa da sé.
+    const auto channels = juce::jmin (kMaxChannels, buffer.getNumChannels());
+    for (int sample = 0; sample < numSamples; ++sample)
     {
-        auto* data = buffer.getWritePointer (ch);
-        for (int sample = 0; sample < numSamples; ++sample)
-            data[sample] = tiltHigh[ch].process (tiltLow[ch].process (data[sample]));
+        if (tiltCoeffCountdown <= 0)
+        {
+            tiltSmoothed.skip (kControlInterval);
+            refreshTiltCoefficients();
+            tiltCoeffCountdown = kControlInterval;
+        }
+        --tiltCoeffCountdown;
+
+        for (int ch = 0; ch < channels; ++ch)
+            buffer.setSample (ch, sample, tiltHigh[ch].process (tiltLow[ch].process (buffer.getSample (ch, sample))));
     }
 }
 
@@ -838,7 +858,6 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
             {
                 for (auto& gain : toneGainSmoothed) gain.skip (kControlInterval);
                 airGainSmoothed.skip (kControlInterval);
-                tiltSmoothed.skip (kControlInterval);
                 refreshToneCoefficients();
                 toneCoeffCountdown = kControlInterval;
             }

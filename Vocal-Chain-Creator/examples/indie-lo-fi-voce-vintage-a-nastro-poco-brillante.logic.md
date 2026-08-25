@@ -24,7 +24,7 @@ Target: **-13.0 LUFS**, ceiling **-1.0 dBFS**.
 |---|---|---|
 | `gateThresh` | -39.5 dB | 6 dB sopra il noise floor stimato, più 0.45 di severità richiesta |
 | `gateRange` | 13.2 dB | attenuazione parziale: chiudere del tutto si sente più del rumore |
-| `gateAtk` | 2.0 ms | apertura rapida ma non istantanea, per non tagliare l'attacco delle consonanti |
+| `gateAtk` | 1.2 ms | il gate parte chiuso, quindi questo tempo entra due volte: e' la costante del detector E la rampa con cui il guadagno risale dal fondo del range fino a zero. Misurato sul DSP, la prima parola di una take esce piena dopo circa tre volte questo valore: a 2 ms perdeva 4,9 dB sui primi 10 ms con la sorgente 12 dB sotto il livello dichiarato, a 1,2 ne perde 3 |
 | `gateRel` | 160 ms | rilascio lungo per non troncare le code di parola |
 | `gateKeyLo` | 120 Hz | il detector ignora sotto la fondamentale: rumore di traffico e ronzii non aprono il gate |
 | `gateKeyHi` | 4000 Hz | il detector ignora sopra la banda di intelligibilità: ventole e fruscio non aprono il gate |
