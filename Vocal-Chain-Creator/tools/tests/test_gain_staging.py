@@ -6,7 +6,8 @@ ricostruisce, dai numeri del preset, il percorso del livello lungo i 13 moduli e
   · guadagno statico accumulato (c1Makeup + c2Makeup + outGain);
   · riduzione di guadagno attesa per stadio (nessuno oltre 6 dB — CLAUDE.md);
   · quanto la saturazione lavora RISPETTO al livello che le arriva (sat excess);
-  · headroom residuo davanti al limiter, e quanto il limiter è quindi costretto a fare.
+  · headroom residuo davanti al limiter — che dopo la correzione B4 è l'ULTIMO stadio, con
+    mix, mandate e output gain davanti a lui — e quanto il limiter è quindi costretto a fare.
 
 Il tutto a DUE livelli d'ingresso: quello nominale del profilo di sorgente e uno basso
 (-18 dBFS di picco). Il caso "gain basso" è quello che l'utente lamentava: con i makeup
@@ -92,14 +93,24 @@ def stage_trace(preset, input_peak_dbfs=None):
                               if k in tone]) if tone else 0.0
     level += tone_boost
 
+    # Da qui in poi l'ordine è quello del DSP DOPO la correzione B4: mix, mandate, output gain,
+    # e il limiter come ULTIMO stadio. Prima il limiter stava in mezzo e tutto quello che veniva
+    # dopo (output gain e tre bus paralleli) poteva superare il ceiling senza che nessuno lo vedesse.
+    out = _p(preset, "out")
+    level += 20.0 * math.log10(max(1e-6, out["mix"] / 100.0))
+
+    # le mandate sono bus paralleli sommati alla voce PRIMA del limiter: caso peggiore, in fase.
+    sends_gain = sum(10.0 ** (send["settings"]["send_db"] / 20.0)
+                     for send in preset.get("sends", [])
+                     if "send_db" in send.get("settings", {}))
+    level += 20.0 * math.log10(1.0 + sends_gain)
+
+    level += out["outGain"]
+
     ceiling = _p(preset, "limiter")["limCeiling"]
     headroom = ceiling - level
     limiter_gr = max(0.0, -headroom)
     level = min(level, ceiling)
-
-    out = _p(preset, "out")
-    level += out["outGain"]
-    level += 20.0 * math.log10(max(1e-6, out["mix"] / 100.0))
 
     return {
         "prompt": preset["prompt"],
@@ -191,6 +202,77 @@ class TestGainStaging(unittest.TestCase):
             m = cases["nominal"]
             self.assertLessEqual(m["makeup1_db"], m["gr1_db"] + 0.6, f"{prompt}/comp1")
             self.assertLessEqual(m["makeup2_db"], m["gr2_db"] + 0.6, f"{prompt}/comp2")
+
+
+class TestSecondPass(unittest.TestCase):
+    """Secondo giro di taratura: gli invarianti nati dopo le correzioni del DSP (REVIEW.md B2/B4/B5/B11).
+
+    Qui si controlla che i NUMERI abbiano ancora un riferimento; quanto poi facciano davvero sul
+    segnale lo misura `vocalforge_selftest` (banda sibilante, ducking per bus, inclinazione del tilt).
+    """
+
+    MAX_SAT_TILT_DB = 1.5        # il tilt vale il DOPPIO fra 200 Hz e 8 kHz: 1.5 -> 3.1 dB misurati
+    MAX_DOUBLER_DUCK_DB = 4.0    # il doubler allarga MENTRE la voce parla: duckarlo lo cancella
+
+    def setUp(self):
+        prompts = [RULES["lexicon"]["artists"][a]["aliases"][0] for a in ARTISTS] + list(EXAMPLE_PROMPTS)
+        self.presets = {p: compile_preset(p, rules=RULES) for p in dict.fromkeys(prompts)}
+
+    def test_de_esser_thresholds_are_referenced_to_the_working_level(self):
+        """Erano numeri assoluti in dBFS, scelti quando il de-esser era un allpass.
+
+        La banda alta di una 's' arriva ~10 dB sotto il picco di lavoro (misurato sul DSP): la soglia
+        deve stare sotto di quella, ma non cosi' sotto da agganciare anche le vocali.
+        """
+        for prompt, preset in self.presets.items():
+            work_peak = float(preset["source_profile"]["interface"]["target_peak_dbfs"])
+            for module, key in (("ds1", "ds1Thresh"), ("ds2", "ds2Thresh")):
+                params = _p(preset, module)
+                if params is None:
+                    continue
+                self.assertLessEqual(params[key], work_peak - 10.0,
+                                     f"{prompt}/{key}: aggancia anche la voce, non solo le esse")
+                self.assertGreaterEqual(params[key], work_peak - 26.0,
+                                        f"{prompt}/{key}: cosi' in basso non aggancia piu' niente")
+
+    def test_de_esser_range_cannot_produce_a_lisp(self):
+        """La riduzione sulla banda alta e' un tetto: oltre i 5 dB la 's' sparisce."""
+        for prompt, preset in self.presets.items():
+            ds1, ds2 = _p(preset, "ds1"), _p(preset, "ds2")
+            self.assertLessEqual(ds1["ds1Range"], 5.0, f"{prompt}/ds1Range")
+            if ds2 is not None:
+                self.assertLessEqual(ds2["ds2Range"], 3.5, f"{prompt}/ds2Range")
+                self.assertLess(ds2["ds2Range"], ds1["ds1Range"],
+                                f"{prompt}: il secondo de-esser deve rifinire, non correggere")
+
+    def test_both_de_essers_work_on_the_high_band_only(self):
+        """Da quando il crossover e' vero, il modo 'wide' abbassa TUTTA la voce a ogni 's'."""
+        for prompt, preset in self.presets.items():
+            for module, key in (("ds1", "ds1Mode"), ("ds2", "ds2Mode")):
+                params = _p(preset, module)
+                if params is not None:
+                    self.assertEqual(params[key], "split", f"{prompt}/{key}")
+
+    def test_sat_tilt_stays_a_colour(self):
+        """satTilt e' due shelf speculari: il dislivello che produce e' il DOPPIO del valore."""
+        for prompt, preset in self.presets.items():
+            sat = _p(preset, "sat")
+            if sat is not None:
+                self.assertLessEqual(abs(sat["satTilt"]), self.MAX_SAT_TILT_DB, f"{prompt}/satTilt")
+
+    def test_the_doubler_is_not_ducked_like_a_reverb(self):
+        """Il ducking del doubler non aveva effetto quando questi numeri sono stati scelti (B5)."""
+        for prompt, preset in self.presets.items():
+            for send in preset.get("sends", []):
+                if send["id"] == "fx_doubler":
+                    self.assertLessEqual(send["settings"]["duck_db"], self.MAX_DOUBLER_DUCK_DB, prompt)
+
+    def test_reverb_and_delay_are_still_ducked_under_the_voice(self):
+        """Questi invece restano dov'erano: misurati, fanno 3.9-5.0 dB sotto la parola."""
+        for prompt, preset in self.presets.items():
+            for send in preset.get("sends", []):
+                if send["group"] in ("reverb", "delay"):
+                    self.assertGreaterEqual(send["settings"]["duck_db"], 4.0, f"{prompt}/{send['id']}")
 
 
 def _table(report):

@@ -305,13 +305,13 @@
           "unit": "Hz"
         },
         "ds1Thresh": {
-          "value": -19.4,
-          "why": "quanto in basso agganciare le esse",
+          "value": -26.7,
+          "why": "riferita al livello di lavoro: la banda alta di una 's' arriva a -22.0 dBFS, la soglia sta sotto di quanto serve per togliere qualche dB alle esse e niente al resto",
           "unit": "dB"
         },
         "ds1Range": {
-          "value": 5.2,
-          "why": "attenuazione contenuta: il grosso lo fa il secondo de-esser",
+          "value": 3.6,
+          "why": "tetto della riduzione sulla sola banda alta: oltre i 4-5 dB la 's' sparisce e la voce blesa",
           "unit": "dB"
         },
         "ds1Mode": {
@@ -467,7 +467,7 @@
       "params": {
         "outGain": {
           "value": 4.0,
-          "why": "quanto manca davvero dal livello stimato in uscita dalla catena (-18.42 dBFS) al target di -14.0 LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness",
+          "why": "quanto manca davvero dal livello stimato in uscita dalla catena (-18.42 dBFS) al target di -14.0 LUFS, con tetto a 4 dB: questo stadio sta PRIMA del limiter, quindi tutto quello che chiede in più se lo mangia il limiter — e un limiter che lavora non è gain staging, è un effetto. Il resto lo fa il meter di loudness",
           "unit": "dB"
         },
         "mix": {

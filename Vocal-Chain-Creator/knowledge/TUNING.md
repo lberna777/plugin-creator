@@ -187,3 +187,216 @@ riduzione **istante per istante** (auto-gain nel compressore) chiuderebbe del tu
 basso, e sarebbe la mossa giusta se il problema si ripresentasse. Va nel DSP, non qui, e va
 dichiarato nel preset. Quando (F3) esisterà l'analisi del segnale, `assumed_peak` smetterà di essere
 una stima e `work_peak` diventerà una misura: a quel punto queste stesse formule diventano esatte.
+
+---
+
+# Secondo giro: dopo le correzioni del DSP
+
+Il primo giro (tutto quello che sta sopra) ha tarato i numeri su un DSP che poi è cambiato sotto:
+`REVIEW.md` ha trovato dodici difetti e sono stati corretti. Tre di quelle correzioni hanno tolto il
+terreno da sotto ai piedi a numeri che qui erano dati per buoni. Questa sezione dice **quali numeri
+non erano più veri**, **cosa è stato ritarato** e — importante quanto il resto — **cosa non è stato
+toccato, e perché**.
+
+La misura di questo giro non si rifà a mano sui preset: si rifà sul processore vero.
+
+```
+./build/vocalforge_selftest_artefacts/Release/vocalforge_selftest
+```
+
+Le tre sezioni nuove del self test sono la prova:
+`de-esser: banda sibilante`, `ducking: quanto scende ogni mandata`, `satTilt`.
+Gli invarianti corrispondenti sui numeri stanno in `tools/tests/test_gain_staging.py::TestSecondPass`.
+
+---
+
+## 1. Il de-esser: i numeri erano tarati su un modulo che faceva un'altra cosa
+
+Prima della correzione B2 il de-esser era un **allpass**: abbassava il corpo della voce di 5,3 dB a
+200 Hz e *alzava* le sibilanti di 0,9 dB. Le soglie `ds1Thresh`/`ds2Thresh` erano numeri assoluti in
+dBFS (`-14 - 12·sibilance_control`) scelti per quel comportamento. Adesso il crossover è vero, il
+detector guarda la banda alta vera — e quei numeri, misurati, **non agganciano niente**.
+
+Segnale di prova nuovo: `fillVoiceWithSibilants()`, una vocale con una **'s' vera** ogni 400 ms, la
+cui banda alta arriva ~10 dB sotto il picco della voce (è quello che fa una ripresa ravvicinata su
+cardioide). Il vecchio `fillVoiceLike()` aveva una riga fissa a 6,8 kHz 18 dB sotto la fondamentale:
+un segnale su cui nessun de-esser onesto interviene, e infatti non interveniva.
+
+Misura sul DSP vero, ingresso a −6 dBFS di picco. "relativo" è la banda alta **rispetto al corpo**:
+è la de-essatura vera, perché il corpo cambia anche lui (togliendo energia alle esse i compressori
+riducono meno). Formato `prima → dopo`.
+
+| profilo | riduz. DS1 | riduz. DS2 | banda alta vs. corpo | corpo (positivo = lisp) |
+|---|---|---|---|---|
+| Sfera Ebbasta | 2,12 → **4,92 dB** | 1,78 → **3,50 dB** | −1,20 → **−3,04 dB** | +0,56 → **+1,35** (sale) |
+| Shiva | 0,44 → **4,08 dB** | 0,78 → **3,20 dB** | −0,34 → **−2,51 dB** | +0,31 → **+1,12** (sale) |
+| Tony Boy | 1,28 → **4,50 dB** | 0,58 → **3,30 dB** | −0,64 → **−2,72 dB** | +0,49 → **+1,02** (sale) |
+| Glockyy | 0,95 → **4,40 dB** | 0,90 → **3,20 dB** | −0,75 → **−3,98 dB** | +0,41 → **+1,19** (sale) |
+| Gue | **0,00** → **3,54 dB** | **0,00** → **2,70 dB** | −0,45 → **−3,33 dB** | +0,35 → **+0,98** (sale) |
+| Capo Plaza | 1,70 → **4,71 dB** | 1,71 → **3,40 dB** | −0,86 → **−2,73 dB** | +0,50 → **+1,36** (sale) |
+
+La riga di Guè è la più eloquente: **zero**. Il de-esser era acceso, dichiarato nel preset, con il suo
+`why` — e non toccava una sola esse.
+
+### Cosa è cambiato nelle regole
+
+Le soglie diventano **derivate**, con lo stesso criterio con cui il primo giro aveva legato i makeup
+alla riduzione: si dichiara *dove sta la sibilante*, e la soglia si calcola da lì.
+
+```
+sib_peak   = work_peak - 10                                  ← misurato sul DSP, non ipotizzato
+ds1_thresh = clamp(sib_peak - 2 - 6·sibilance_control, -45, 0)
+ds1_range  = clamp(2.5 + 2.5·sibilance_control, 0, 8)        ← tetto: oltre 5 dB la 's' sparisce
+ds2_thresh = clamp(sib_peak - 1 - 4·sibilance_control - 3·character, -45, 0)
+ds2_range  = clamp(1.5 + 1.5·sibilance_control + 1.0·character, 0, 5)
+```
+
+`sib_peak` è la misura, non una stima di gusto: la banda sopra il crossover, durante una 's', arriva
+a circa 10 dB sotto il picco di lavoro. Le soglie stanno sotto di quello quanto basta per prendere le
+esse e lasciare stare le vocali, che nella stessa banda stanno 20 dB più giù.
+
+I `range` **scendono**, anche se la riduzione sale: prima erano 8,0 e 6,0 dB su un modulo che non ci
+arrivava mai; adesso sono un tetto vero (5,0 e 3,5 al massimo) e servono a impedire il lisp.
+
+| profilo | ds1Thresh | ds1Range | ds2Thresh | ds2Range | ds2Mode |
+|---|---|---|---|---|---|
+| Sfera Ebbasta | −26,0 → **−30,0** | 8,0 → **5,0** | −20,0 → **−28,5** | 6,0 → **3,5** | wide → **split** |
+| Shiva | −23,6 → **−28,8** | 7,0 → **4,5** | −18,6 → **−27,8** | 5,5 → **3,2** | wide → **split** |
+| Tony Boy | −24,8 → **−29,4** | 7,5 → **4,8** | −19,0 → **−28,0** | 5,6 → **3,3** | wide → **split** |
+| Glockyy | −23,0 → **−28,5** | 6,8 → **4,4** | −18,4 → **−27,8** | 5,5 → **3,2** | wide → **split** |
+| Gue | −19,4 → **−26,7** | 5,2 → **3,6** | −15,8 → **−26,4** | 4,5 → **2,7** | wide → **split** |
+| Capo Plaza | −25,4 → **−29,7** | 7,8 → **4,9** | −19,6 → **−28,3** | 5,8 → **3,4** | wide → **split** |
+
+### Il modo del secondo de-esser: da `wide` a `split`
+
+`wide` significa `(low + high) · gain`: la riduzione decisa dalla banda alta si applica a **tutta**
+la voce. Con l'allpass era un dettaglio invisibile — il modulo non riduceva quasi mai. Con il
+crossover vero e 3 dB di riduzione, `wide` abbassa l'intera voce di 3 dB a ogni 's': è un pompaggio a
+banda larga, cioè esattamente il "colloso" che questo lavoro deve togliere. Il de-esser 2 esiste per
+le armoniche che la saturazione rigenera **sulle sibilanti**: si tratta la banda alta, non il resto.
+
+---
+
+## 2. Il margine sul limiter: adesso è un tetto, e il conto va rifatto
+
+Con la correzione B4 il limiter è l'**ultimo** stadio: mix, tre bus di mandata e output gain stanno
+davanti a lui. Il modello di `tools/tests/test_gain_staging.py` metteva ancora il limiter in mezzo e
+l'output gain dopo — cioè calcolava un headroom che nessuno stadio reale vedeva. È stato riordinato,
+e ora somma anche le mandate (caso peggiore: tutte in fase).
+
+| | headroom davanti al limiter (nominale) | limiter |
+|---|---|---|
+| modello vecchio (limiter in mezzo) | 10,2 ÷ 13,3 dB | 0,00 dB |
+| modello corretto (limiter ultimo) | **6,6 ÷ 11,3 dB** | **0,00 dB** |
+
+Il margine è 3÷4 dB più stretto di quanto il primo giro credesse — ma c'è, su tutti i 21 prompt e a
+tutti e due i livelli d'ingresso. **Sul DSP vero il limiter resta a 0,00 dB di riduzione su tutti e
+sei i profili artista, sia a −6 sia a −18 dBFS.** Nessun numero è stato cambiato per questo: il tetto
+di 4 dB su `outGain` deciso al primo giro regge anche adesso che il limiter sta dopo. È cambiato il
+`why`, che diceva il contrario ("questo stadio sta DOPO il limiter").
+
+Picco d'uscita misurato, ingresso a −6 e a −18 dBFS di picco:
+
+| profilo | picco @ −6 | picco @ −18 | Δ per 12 dB d'ingresso |
+|---|---|---|---|
+| Sfera Ebbasta | −3,1 | −14,5 | **11,4 dB** |
+| Shiva | −2,9 | −12,6 | **9,7 dB** |
+| Tony Boy | −2,9 | −13,5 | **10,6 dB** |
+| Glockyy | −2,5 | −11,0 | **8,5 dB** |
+| Gue | −2,7 | −12,5 | **9,8 dB** |
+| Capo Plaza | −3,0 | −12,8 | **9,8 dB** |
+
+La riga più importante del primo giro diceva «12 dB in meno in ingresso danno 6,6 dB in meno in
+uscita». Con il DSP corretto **ne danno 10,0 di media**: parte di quel 6,6 non era taratura, era il
+de-esser allpass che si mangiava 5 dB di corpo prima dei compressori. Il numero va letto così, e la
+tabella del primo giro non è più riproducibile: quei valori appartengono a un DSP che non esiste più.
+
+---
+
+## 3. Ducking: misurato, e **lasciato dov'era** per riverbero e delay
+
+Prima della correzione B5 il detector di ducking non veniva aggiornato per delay e doubler: i
+`duck_db` delle regole erano numeri scelti al buio. Adesso hanno effetto su tutti e tre i bus, quindi
+sono stati misurati bus per bus — quanto scende la mandata **sotto la parola** e quanto risale **nel
+vuoto** dopo (parola di 300 ms, poi silenzio; il wet si isola per sottrazione).
+
+| profilo | riverbero: sotto la parola / nel vuoto | delay: sotto la parola / nel vuoto |
+|---|---|---|
+| Sfera Ebbasta | −4,08 / −0,85 dB | (1/8 puntato: il primo eco cade dopo la parola) |
+| Shiva | −4,25 / −0,81 dB | (1/8 puntato) |
+| Tony Boy | −3,91 / −0,79 dB | (1/8 puntato) |
+| Glockyy | −4,67 / −0,92 dB | −4,99 / −1,12 dB |
+| Gue | −3,90 / −0,80 dB | −4,03 / −1,02 dB |
+| Capo Plaza | −4,46 / −0,93 dB | (1/8 puntato) |
+
+È esattamente il comportamento voluto: **4÷5 dB sotto la parola, meno di 1 dB nel vuoto**. Le mandate
+si sentono fra le parole e non sopra. I `duck_db` di riverbero e delay (7,4 ÷ 9,0 dB nominali, che
+sull'inviluppo reale diventano i 4÷5 dB misurati) **non sono stati cambiati**: erano giusti, e adesso
+c'è la misura che lo dice invece della speranza.
+
+### Il doubler è l'eccezione, e lì il numero era sbagliato
+
+Il doubler non è un ambiente: **allarga la voce mentre parla**. Duckarlo come il riverbero lo spegne
+proprio dove serve. Con il ducking morto non si vedeva; adesso si misura.
+
+| | duck_db nelle regole | tolto al doubler sulla parola |
+|---|---|---|
+| prima | 8,0 dB (`4 + 4·density`) | **−4,88 dB** |
+| dopo | 3,4 ÷ 4,0 dB (`2 + 2·density`) | **−2,38 dB** |
+
+Restano quel paio di dB che servono a non raddoppiare il centro sulle consonanti, e sparisce la
+cancellazione del doubler proprio sulla sillaba che doveva allargare.
+
+---
+
+## 4. `satTilt`: era un parametro finto, adesso inclina davvero — e inclinava troppo
+
+Con la correzione B11 `satTilt` è due shelf speculari a 700 Hz, **attive anche a drive 0**. Il valore
+del parametro è quindi **metà** dell'inclinazione totale: la shelf bassa va a −satTilt e l'alta a
++satTilt. Misurato fra 200 Hz e 8 kHz, con la sola saturazione accesa e drive 0:
+
+| satTilt | dislivello misurato 200 Hz → 8 kHz |
+|---|---|
+| 3,0 dB (il massimo della formula vecchia) | **6,15 dB** |
+| 1,5 dB (il massimo della formula nuova) | **3,08 dB** |
+
+`3.0 · brightness` produceva fino a 2,8 dB sui profili — cioè **5,6 dB di inclinazione**, con il corpo
+della voce abbassato di 2,8 dB, sopra un'EQ tonale che la brillantezza la fa già lei (`tone2Gain`,
+`tone3Gain`, `airGain`). Era una seconda EQ mascherata da colore, e toglieva corpo di nascosto.
+
+```
+satTilt = clamp(1.5 * brightness, -2, 2)
+```
+
+| profilo | satTilt |
+|---|---|
+| Sfera Ebbasta | 1,4 → **0,7** |
+| Shiva | 0,3 → **0,2** |
+| Tony Boy | 0,9 → **0,4** |
+| Glockyy | −0,2 → **−0,1** |
+| Gue | 0,3 → **0,2** |
+| Capo Plaza ("voce molto brillante") | 2,8 → **1,4** |
+
+---
+
+## 5. Cosa NON è stato cambiato, e perché
+
+- **I makeup, le soglie dei compressori, il drive di saturazione, `outGain`, `mix`**: il primo giro
+  regge. Misurati sul DSP corretto, comp 1 e comp 2 fanno 0,25÷0,41 e 0,75÷1,15 dB al livello
+  nominale, il limiter 0,00: nessuno stadio oltre i 6 dB di CLAUDE.md, a nessuno dei due livelli.
+- **Il `duck_db` di riverbero e delay**: misurato giusto (vedi §3). Cambiarlo sarebbe stato fare
+  qualcosa per far vedere che si è fatto qualcosa.
+- **Il tetto di 4 dB su `outGain`**: regge anche con il limiter dopo. È cambiato solo il `why`.
+- **L'ordine della catena, i moduli, i profili artista**: identici. `test_artists.py` resta verde,
+  la parità Python ↔ C++ resta 18 preset / 1668 valori / 0 differenze.
+- **`logic_recipe`**: unica riga di documentazione toccata — output gain e limiter erano elencati
+  nell'ordine vecchio. Adesso dice quello che fa il DSP: `out` e poi `limiter`, ultimo.
+
+## 6. Il limite residuo, aggiornato
+
+A **−18 dBFS d'ingresso i de-esser non agganciano nulla** (riduzione 0,00 su tutti i profili), perché
+`sib_peak` è derivato da `work_peak`, che a sua volta assume che l'input trim abbia portato i picchi a
+−12 dBFS. Se la sorgente arriva 12 dB più bassa di quanto il profilo dichiara, la sibilante finisce
+sotto soglia. È lo stesso limite dichiarato al primo giro, con la stessa risposta: le regole sono
+statiche, e quando esisterà l'analisi del segnale (F3) `work_peak` smetterà di essere una stima. Fino
+ad allora la cosa onesta è dirlo, non alzare le soglie fino a far lavorare il de-esser sul rumore.

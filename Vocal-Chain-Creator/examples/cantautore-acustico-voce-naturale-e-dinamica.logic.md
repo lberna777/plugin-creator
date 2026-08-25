@@ -82,8 +82,8 @@ Target: **-14.0 LUFS**, ceiling **-1.0 dBFS**.
 | parametro | valore | perché |
 |---|---|---|
 | `ds1Freq` | 6650 Hz | centro sibilanza stimato del microfono sul registro mid |
-| `ds1Thresh` | -19.4 dB | quanto in basso agganciare le esse |
-| `ds1Range` | 5.2 dB | attenuazione contenuta: il grosso lo fa il secondo de-esser |
+| `ds1Thresh` | -26.7 dB | riferita al livello di lavoro: la banda alta di una 's' arriva a -22.0 dBFS, la soglia sta sotto di quanto serve per togliere qualche dB alle esse e niente al resto |
+| `ds1Range` | 3.6 dB | tetto della riduzione sulla sola banda alta: oltre i 4-5 dB la 's' sparisce e la voce blesa |
 | `ds1Mode` | split  | modo split: agisce solo sulla banda alta, non abbassa tutta la voce |
 
 ## 7. Compressor — Compressore 1 (veloce)
@@ -119,25 +119,25 @@ Target: **-14.0 LUFS**, ceiling **-1.0 dBFS**.
 | `airOn` | off  | aria solo se richiesta e se non contraddice il vintage |
 | `airGain` | 0.0 dB | shelf alta, tenuta bassa: la stanza non trattata ha già fruscio |
 
-## 9. Limiter — Limiter
+## 9. Gain — Output / Mix
+*Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.*
+
+> Gain = outGain, PRIMA del limiter (il MIX non ha equivalente stock: usa un bus parallelo)
+
+| parametro | valore | perché |
+|---|---|---|
+| `outGain` | 4.0 dB | quanto manca davvero dal livello stimato in uscita dalla catena (-18.42 dBFS) al target di -14.0 LUFS, con tetto a 4 dB: questo stadio sta PRIMA del limiter, quindi tutto quello che chiede in più se lo mangia il limiter — e un limiter che lavora non è gain staging, è un effetto. Il resto lo fa il meter di loudness |
+| `mix` | 100 % | compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%) |
+
+## 10. Limiter — Limiter
 *Tetto di sicurezza, non effetto: se lavora più di 2–3 dB sono sbagliati gli stadi prima.*
 
-> Output Level = limCeiling
+> ultimo della catena, dopo output gain e mandate: Output Level = limCeiling
 
 | parametro | valore | perché |
 |---|---|---|
 | `limCeiling` | -1.0 dBFS | 1 dB di margine per i true peak dopo la codifica lossy |
 | `limRelease` | 120 ms | rilascio coerente con l'energia richiesta |
-
-## 10. Gain — Output / Mix
-*Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.*
-
-> Gain = outGain (il MIX non ha equivalente stock: usa un bus parallelo)
-
-| parametro | valore | perché |
-|---|---|---|
-| `outGain` | 4.0 dB | quanto manca davvero dal livello stimato in uscita dalla catena (-18.42 dBFS) al target di -14.0 LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness |
-| `mix` | 100 % | compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%) |
 
 ## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
