@@ -14,8 +14,7 @@
     asset fotorealistici, si sostituisce il LookAndFeel e si legge layout.json — la struttura non cambia.
 */
 class VocalForgeEditor : public juce::AudioProcessorEditor,
-                         private juce::Timer,
-                         private juce::AsyncUpdater
+                         private juce::Timer
 {
 public:
     explicit VocalForgeEditor (VocalForgeProcessor&);
@@ -39,7 +38,7 @@ private:
     };
 
     void timerCallback() override;
-    void handleAsyncUpdate() override;      // setStateInformation puo' arrivare fuori dal message thread (R5)
+
     void forgeFromPrompt();
     void forgeFromArtist (int menuIndex);
     std::vector<vf::RulesEngine::ArtistEntry> artists;
@@ -72,6 +71,7 @@ private:
     juce::OwnedArray<juce::AudioProcessorValueTreeState::ComboBoxAttachment> comboAttachments;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sendsModeAttachment;
 
+    int lastPresetRevision = -1;           // la UI segue il contatore del processore (R5, R11)
     int selectedModule = 6;                       // Comp 1: il modulo che si guarda per primo
     float inLevel = 0.0f, outLevel = 0.0f;
 

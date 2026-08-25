@@ -102,7 +102,6 @@ public:
 
 private:
     juce::var rules;
-    mutable juce::StringArray failedExpressions;   // espressioni che non si sono valutate: diventano avvisi
 
     struct Context
     {
@@ -113,7 +112,8 @@ private:
     };
 
     Context buildContext (const Intent&, const juce::var& profile) const;
-    Param   resolveParam (const juce::String& id, const juce::var& spec, const Context&) const;
+    Param   resolveParam (const juce::String& id, const juce::var& spec, const Context&,
+                          juce::StringArray& errors) const;
     juce::String formatWhy (const juce::String& tmpl, const Context&) const;
 };
 

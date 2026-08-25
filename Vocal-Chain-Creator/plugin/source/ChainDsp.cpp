@@ -5,6 +5,7 @@ namespace vf
 
 static constexpr float kMinDb = -100.0f;
 static constexpr int   kMaxChannels = 8;
+static constexpr int   kControlInterval = 16;   // control rate dei coefficienti
 
 static inline float gainToDb (float gain) noexcept
 {
@@ -169,7 +170,11 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
     for (auto* s : { &trimGain, &outputGain, &mixAmount, &driveAmount, &revSendGain, &dlySendGain,
                      &fxSendGain, &comp1Makeup, &comp2Makeup })
         s->reset (sampleRate, 0.02);
-    delayTimeSamples.reset (sampleRate, 0.15);            // il tempo del delay si interpola: niente click (R7)
+    delayTimeSamples.reset (sampleRate, 0.15);
+    for (auto& gain : subGainSmoothed)  gain.reset (sampleRate, 0.03);
+    for (auto& gain : toneGainSmoothed) gain.reset (sampleRate, 0.03);
+    airGainSmoothed.reset (sampleRate, 0.03);
+    tiltSmoothed.reset (sampleRate, 0.03);            // il tempo del delay si interpola: niente click (R7)
     for (auto& depth : roomDepthSmoothed) depth.reset (sampleRate, 0.03);
     roomCoeffCountdown = 0;
     gateOpen = false;
@@ -178,11 +183,14 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
     comp2.reset();
     gateEnv.reset();
     duckEnv.reset();
-    gateGainDb = 0.0f;
+    gateOpen = false;
+    gateGainDb = -settings.gateRange;
     delayFeedbackState[0] = delayFeedbackState[1] = 0.0f;
+    revTailCountdown = dlyTailCountdown = fxTailCountdown = 0;
     prepared = true;
-    updateCoefficients();
     snapSmoothedOnNextUpdate = true;
+    updateCoefficients();
+    snapSmoothedOnNextUpdate = true;          // il primo setSettings vero parte già a destinazione
 }
 
 void ChainDsp::reset()
@@ -218,8 +226,20 @@ void ChainDsp::reset()
     gateEnv.reset();
     duckEnv.reset();
     delayFeedbackState[0] = delayFeedbackState[1] = 0.0f;
-    if (prepared) updateCoefficients();
+
+    // B24: anche gli stati che prima sopravvivevano al reset
+    roomCoeffCountdown = 0;
+    subCoeffCountdown = toneCoeffCountdown = 0;
+    for (auto& depth : roomDepthSmoothed) depth.setCurrentAndTargetValue (0.0f);
+    doublerPhase = 0.0f;
+    gateOpen = false;
+    gateGainDb = -settings.gateRange;          // il gate parte CHIUSO, come dice gateOpen
+    revTailCountdown = dlyTailCountdown = fxTailCountdown = 0;
+
+    // B23: lo snap si fa qui, subito. Armarlo per "il prossimo aggiornamento" significava
+    // farlo scattare sul primo movimento di manopola dell'utente, cioè un click.
     snapSmoothedOnNextUpdate = true;
+    if (prepared) updateCoefficients();
 }
 
 void ChainDsp::setSettings (const ChainSettings& newSettings)
@@ -240,27 +260,17 @@ void ChainDsp::updateCoefficients()
     keyLp.setCutoffFrequency (safeFreq (settings.gateKeyHi));
 
     for (int band = 0; band < 3; ++band)
-        for (int ch = 0; ch < kChannels; ++ch)
-        {
-            subFilters[band][ch].setPeak (sampleRate, safeFreq (settings.subFreq[band]),
-                                          juce::jlimit (0.2f, 12.0f, settings.subQ[band]), settings.subGain[band]);
-            toneFilters[band][ch].setPeak (sampleRate, safeFreq (settings.toneFreq[band]),
-                                           juce::jlimit (0.2f, 12.0f, settings.toneQ[band]), settings.toneGain[band]);
-        }
+    {
+        subGainSmoothed[band].setTargetValue (settings.subGain[band]);
+        toneGainSmoothed[band].setTargetValue (settings.toneGain[band]);
+    }
+    airGainSmoothed.setTargetValue (settings.airOn ? settings.airGain : 0.0f);
+    tiltSmoothed.setTargetValue (settings.satTilt);
 
     for (int band = 0; band < 3; ++band)
     {
         roomDetector[band].setCutoffFrequency (safeFreq (settings.roomFreq[band]));
         roomDetector[band].setResonance (juce::jlimit (0.5f, 12.0f, settings.roomQ[band]));
-    }
-
-    for (int ch = 0; ch < kChannels; ++ch)
-    {
-        airFilter[ch].setShelf (sampleRate, safeFreq (12000.0f), 0.707f,
-                                settings.airOn ? settings.airGain : 0.0f, true);
-        // tilt vero: due shelf speculari attorno a 700 Hz (B11)
-        tiltLow[ch].setShelf (sampleRate, 700.0f, 0.707f, -settings.satTilt, false);
-        tiltHigh[ch].setShelf (sampleRate, 700.0f, 0.707f, settings.satTilt, true);
     }
 
     deEsser1.setFrequency (safeFreq (settings.ds1Freq));
@@ -296,10 +306,50 @@ void ChainDsp::updateCoefficients()
     if (snapSmoothedOnNextUpdate)
     {
         for (auto* smoothed : { &trimGain, &outputGain, &mixAmount, &driveAmount, &revSendGain,
-                                &dlySendGain, &fxSendGain, &comp1Makeup, &comp2Makeup })
+                                &dlySendGain, &fxSendGain, &comp1Makeup, &comp2Makeup,
+                                &delayTimeSamples, &airGainSmoothed, &tiltSmoothed })
             smoothed->setCurrentAndTargetValue (smoothed->getTargetValue());
+        for (auto& gain : subGainSmoothed)  gain.setCurrentAndTargetValue (gain.getTargetValue());
+        for (auto& gain : toneGainSmoothed) gain.setCurrentAndTargetValue (gain.getTargetValue());
+        refreshSubCoefficients();
+        refreshToneCoefficients();
+        if (! gateOpen) gateGainDb = -settings.gateRange;
         for (auto& depth : roomDepthSmoothed) depth.setCurrentAndTargetValue (0.0f);
         snapSmoothedOnNextUpdate = false;
+    }
+}
+
+void ChainDsp::refreshSubCoefficients()
+{
+    // R9: i coefficienti seguono i guadagni SMUSSATI, non il salto del parametro
+    const auto nyquist = static_cast<float> (sampleRate * 0.5);
+    auto safeFreq = [nyquist] (float f) { return juce::jlimit (20.0f, nyquist * 0.95f, f); };
+
+    for (int band = 0; band < 3; ++band)
+        for (int ch = 0; ch < kChannels; ++ch)
+            subFilters[band][ch].setPeak (sampleRate, safeFreq (settings.subFreq[band]),
+                                          juce::jlimit (0.2f, 12.0f, settings.subQ[band]),
+                                          subGainSmoothed[band].getCurrentValue());
+}
+
+void ChainDsp::refreshToneCoefficients()
+{
+    const auto nyquist = static_cast<float> (sampleRate * 0.5);
+    auto safeFreq = [nyquist] (float f) { return juce::jlimit (20.0f, nyquist * 0.95f, f); };
+
+    for (int band = 0; band < 3; ++band)
+        for (int ch = 0; ch < kChannels; ++ch)
+            toneFilters[band][ch].setPeak (sampleRate, safeFreq (settings.toneFreq[band]),
+                                           juce::jlimit (0.2f, 12.0f, settings.toneQ[band]),
+                                           toneGainSmoothed[band].getCurrentValue());
+
+    const auto air = airGainSmoothed.getCurrentValue();
+    const auto tilt = tiltSmoothed.getCurrentValue();
+    for (int ch = 0; ch < kChannels; ++ch)
+    {
+        airFilter[ch].setShelf (sampleRate, safeFreq (12000.0f), 0.707f, air, true);
+        tiltLow[ch].setShelf (sampleRate, 700.0f, 0.707f, -tilt, false);
+        tiltHigh[ch].setShelf (sampleRate, 700.0f, 0.707f, tilt, true);
     }
 }
 
@@ -356,7 +406,6 @@ void ChainDsp::processRoomTamer (juce::AudioBuffer<float>& buffer, int numSample
     const auto attack  = msToCoeff (10.0f, sampleRate);
     const auto release = msToCoeff (120.0f, sampleRate);
     const auto channels = juce::jmin (kMaxChannels, buffer.getNumChannels());
-    constexpr int coefficientInterval = 16;          // control rate: aggiornare per campione costerebbe troppo
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -384,7 +433,7 @@ void ChainDsp::processRoomTamer (juce::AudioBuffer<float>& buffer, int numSample
                         juce::jlimit (20.0f, static_cast<float> (sampleRate * 0.45), settings.roomFreq[band]),
                         juce::jlimit (0.5f, 12.0f, settings.roomQ[band]), depth);
             }
-            roomCoeffCountdown = coefficientInterval;
+            roomCoeffCountdown = kControlInterval;
         }
         --roomCoeffCountdown;
         for (int band = 0; band < 3; ++band) roomDepthSmoothed[band].skip (1);
@@ -560,7 +609,33 @@ void ChainDsp::processSends (const juce::AudioBuffer<float>& source, juce::Audio
     // ---- bus riverbero
     const auto mixScale = juce::jlimit (0.0f, 1.0f, settings.mix * 0.01f);   // il MIX scala anche le mandate
 
-    const bool reverbActive = settings.revOn || revSendGain.getCurrentValue() > 1.0e-5f;
+    /*  Un bus spento non si ferma dopo la rampa della mandata (20 ms): continua a girare per tutta la
+        sua coda, e SOLO allora si azzera. Prima restava congelato con dentro il segnale vecchio, e
+        alla riaccensione lo risputava fuori più forte del segnale. (B21) */
+    const auto tailSamples = static_cast<int> (getTailSeconds() * sampleRate);
+    if (settings.revOn) revTailCountdown = tailSamples;
+    if (settings.dlyOn) dlyTailCountdown = tailSamples;
+    if (settings.fxOn)  fxTailCountdown  = tailSamples;
+
+    const bool reverbActive = settings.revOn || revTailCountdown > 0;
+    const bool delayActive  = settings.dlyOn || dlyTailCountdown > 0;
+    const bool doublerActive = settings.fxOn || fxTailCountdown > 0;
+
+    if (! settings.revOn)
+    {
+        revTailCountdown = juce::jmax (0, revTailCountdown - numSamples);
+        if (revTailCountdown == 0) { reverb.reset(); revPredelayLine.reset(); revHp.reset(); revLp.reset(); }
+    }
+    if (! settings.dlyOn)
+    {
+        dlyTailCountdown = juce::jmax (0, dlyTailCountdown - numSamples);
+        if (dlyTailCountdown == 0) { delayLine.reset(); dlyHp.reset(); dlyLp.reset(); }
+    }
+    if (! settings.fxOn)
+    {
+        fxTailCountdown = juce::jmax (0, fxTailCountdown - numSamples);
+        if (fxTailCountdown == 0) { doublerLine.reset(); fxHp.reset(); fxLp.reset(); }
+    }
     if (reverbActive)
     {
         const auto predelaySamples = juce::jlimit (0.0f, static_cast<float> (sampleRate * 0.1),
@@ -595,7 +670,7 @@ void ChainDsp::processSends (const juce::AudioBuffer<float>& source, juce::Audio
     }
 
     // ---- bus delay
-    if (settings.dlyOn || dlySendGain.getCurrentValue() > 1.0e-5f)
+    if (delayActive)
     {
         auto delayMs = settings.dlyTime;
         if (settings.dlySync && bpm > 0.0)
@@ -624,7 +699,7 @@ void ChainDsp::processSends (const juce::AudioBuffer<float>& source, juce::Audio
 
     // ---- bus doubler: due ritardi corti diversi L/R, stonati di pochi cent da un LFO lento.
     // Allarga la voce ai lati senza toccare il centro, dove restano main e 808.
-    if ((settings.fxOn || fxSendGain.getCurrentValue() > 1.0e-5f) && channels >= 1)
+    if (doublerActive && channels >= 1)
     {
         const auto lfoStep = static_cast<float> (juce::MathConstants<double>::twoPi * 0.7 / sampleRate);
         const auto detuneSamples = settings.fxDetune / 100.0f * 0.004f * static_cast<float> (sampleRate);
@@ -639,7 +714,7 @@ void ChainDsp::processSends (const juce::AudioBuffer<float>& source, juce::Audio
                               * juce::Decibels::decibelsToGain (-settings.fxDuck * duck[sample]);
 
             float copies[2] { 0.0f, 0.0f };
-            for (int ch = 0; ch < juce::jmin (kMaxChannels, channels); ++ch)
+            for (int ch = 0; ch < juce::jmin (2, channels); ++ch)      // il doubler è stereo: due copie, due indici
             {
                 const auto input = source.getSample (juce::jmin (ch, sourceChannels - 1), sample);
                 doublerLine.pushSample (ch, input);
@@ -672,7 +747,8 @@ void ChainDsp::processSends (const juce::AudioBuffer<float>& source, juce::Audio
 void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, int numSamples, double bpm)
 {
     juce::ScopedNoDenormals noDenormals;
-    const auto channels = juce::jmin (kMaxChannels, full.getNumChannels());
+    // i canali sono quelli PREPARATI: scratch e filtri sono dimensionati su quelli
+    const auto channels = juce::jmin (juce::jmin (kMaxChannels, numChannels), full.getNumChannels());
     if (numSamples <= 0 || channels == 0) return;
 
     // vista sul tratto: nessuna copia, nessuna allocazione
@@ -713,15 +789,25 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
     // 4) room tamer dinamico
     if (settings.roomOn) processRoomTamer (buffer, numSamples);
 
-    // 5) EQ sottrattiva
+    // 5) EQ sottrattiva — guadagni a rampa, coefficienti a control rate (R9)
     if (settings.eqSubOn)
-        for (int band = 0; band < 3; ++band)
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            if (subCoeffCountdown <= 0)
+            {
+                for (auto& gain : subGainSmoothed) gain.skip (kControlInterval);
+                refreshSubCoefficients();
+                subCoeffCountdown = kControlInterval;
+            }
+            --subCoeffCountdown;
+
             for (int ch = 0; ch < juce::jmin (kMaxChannels, channels); ++ch)
             {
-                auto* data = buffer.getWritePointer (ch);
-                for (int sample = 0; sample < numSamples; ++sample)
-                    data[sample] = subFilters[band][ch].process (data[sample]);
+                auto value = buffer.getSample (ch, sample);
+                for (int band = 0; band < 3; ++band) value = subFilters[band][ch].process (value);
+                buffer.setSample (ch, sample, value);
             }
+        }
 
     // 6) de-esser 1 (protegge i detector dei compressori)
     if (settings.ds1On) processDeEsser (buffer, numSamples, deEsser1, settings.ds1Thresh,
@@ -742,27 +828,30 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
 
     // 9) saturazione (+ inclinazione, che vale anche a SAT spento)
     if (settings.satOn) processSaturation (buffer, numSamples);
-    if (settings.satTilt != 0.0f) processTilt (buffer, numSamples);
+    if (settings.satTilt != 0.0f || tiltSmoothed.getCurrentValue() != 0.0f) processTilt (buffer, numSamples);
 
     // 10) EQ tonale + aria
     if (settings.eqToneOn)
-    {
-        for (int band = 0; band < 3; ++band)
-            for (int ch = 0; ch < juce::jmin (kMaxChannels, channels); ++ch)
+        for (int sample = 0; sample < numSamples; ++sample)
+        {
+            if (toneCoeffCountdown <= 0)
             {
-                auto* data = buffer.getWritePointer (ch);
-                for (int sample = 0; sample < numSamples; ++sample)
-                    data[sample] = toneFilters[band][ch].process (data[sample]);
+                for (auto& gain : toneGainSmoothed) gain.skip (kControlInterval);
+                airGainSmoothed.skip (kControlInterval);
+                tiltSmoothed.skip (kControlInterval);
+                refreshToneCoefficients();
+                toneCoeffCountdown = kControlInterval;
             }
+            --toneCoeffCountdown;
 
-        if (settings.airOn)
             for (int ch = 0; ch < juce::jmin (kMaxChannels, channels); ++ch)
             {
-                auto* data = buffer.getWritePointer (ch);
-                for (int sample = 0; sample < numSamples; ++sample)
-                    data[sample] = airFilter[ch].process (data[sample]);
+                auto value = buffer.getSample (ch, sample);
+                for (int band = 0; band < 3; ++band) value = toneFilters[band][ch].process (value);
+                if (settings.airOn) value = airFilter[ch].process (value);
+                buffer.setSample (ch, sample, value);
             }
-    }
+        }
 
     // 11) de-esser 2 (dopo saturazione e boost)
     if (settings.ds2On) processDeEsser (buffer, numSamples, deEsser2, settings.ds2Thresh,
@@ -783,8 +872,7 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
 
     // 13) mandate: bus PARALLELI, alimentati dall'uscita della catena, sommate PRIMA del limiter
     if (settings.revOn || settings.dlyOn || settings.fxOn
-        || revSendGain.getCurrentValue() > 1.0e-5f || dlySendGain.getCurrentValue() > 1.0e-5f
-        || fxSendGain.getCurrentValue() > 1.0e-5f)
+        || revTailCountdown > 0 || dlyTailCountdown > 0 || fxTailCountdown > 0)
     {
         for (int ch = 0; ch < juce::jmin (channels, dryScratch.getNumChannels()); ++ch)
             dryScratch.copyFrom (ch, 0, buffer, ch, 0, numSamples);
@@ -803,6 +891,14 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
     else meters.limGr.store (0.0f);
 }
 
+float ChainDsp::syncedDelayMs() const noexcept
+{
+    // stessa formula usata dal bus: se il delay è sincronizzato il tempo lo detta il BPM
+    if (settings.dlySync && lastBpm > 0.0)
+        return static_cast<float> (60000.0 / lastBpm * settings.dlyDivisionBeats);
+    return settings.dlyTime;
+}
+
 double ChainDsp::getTailSeconds() const noexcept
 {
     // riverbero: decay dichiarato + predelay. delay: quante ripetizioni servono a scendere di 60 dB.
@@ -815,7 +911,7 @@ double ChainDsp::getTailSeconds() const noexcept
         const auto repeats = feedback > 0.01f
                              ? juce::jlimit (1.0f, 40.0f, -60.0f / juce::Decibels::gainToDecibels (feedback))
                              : 1.0f;
-        delayTail = settings.dlyTime * 0.001f * repeats;
+        delayTail = syncedDelayMs() * 0.001f * repeats;      // B22: col sync il tempo non è dlyTime
     }
     return juce::jlimit (0.5, 20.0, static_cast<double> (juce::jmax (reverbTail, delayTail)) + 0.5);
 }
@@ -828,6 +924,7 @@ void ChainDsp::process (juce::AudioBuffer<float>& buffer, double bpm)
     if (total <= 0 || channels == 0) return;
 
     meters.inPeak.store (buffer.getMagnitude (0, total));
+    if (bpm > 0.0) lastBpm = bpm;
 
     // Un blocco più lungo di quello dichiarato in prepare non può essere ignorato né troncato:
     // si spezza in tratti della dimensione preparata, così esce processato tutto (B1).

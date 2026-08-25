@@ -84,3 +84,34 @@ class TestExpressionSemantics(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBrokenRulesAreDeclared(unittest.TestCase):
+    """T7: una regola rotta deve diventare un avviso visibile, non uno zero silenzioso."""
+
+    def _rules_with_broken(self, where):
+        import copy
+        rules = copy.deepcopy(RULES)
+        if where == "enabled":
+            rules["chain"][6]["enabled"] = "nonexistent_variable > 0"
+        elif where == "param":
+            rules["chain"][6]["params"]["c1Thresh"]["expr"] = "clamp(1 / (density - density), -40, 0)"
+        elif where == "send":
+            # dev'essere una mandata che il preset usa davvero, altrimenti l'espressione non si valuta
+            for send in rules["sends"]:
+                if send["id"] == "fx_doubler":
+                    send["settings"]["send_db"]["expr"] = "min()"
+        return rules
+
+    def test_a_broken_module_condition_becomes_a_warning(self):
+        preset = compile_preset("voce tipo sfera ebbasta", rules=self._rules_with_broken("enabled"))
+        self.assertTrue(any("non valutabile" in w for w in preset["warnings"]), preset["warnings"])
+
+    def test_a_broken_parameter_expression_becomes_a_warning_not_a_traceback(self):
+        # era il difetto B19: una regola rotta in un parametro faceva esplodere il compilatore
+        preset = compile_preset("voce tipo sfera ebbasta", rules=self._rules_with_broken("param"))
+        self.assertTrue(any("non valutabile" in w for w in preset["warnings"]), preset["warnings"])
+
+    def test_a_broken_send_expression_becomes_a_warning(self):
+        preset = compile_preset("voce tipo sfera ebbasta", rules=self._rules_with_broken("send"))
+        self.assertTrue(any("non valutabile" in w for w in preset["warnings"]), preset["warnings"])

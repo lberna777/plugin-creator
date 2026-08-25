@@ -2,9 +2,12 @@
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
+#include <cmath>
 
 namespace vf
 {
+
+static double roundTo (double value, int decimals);
 
 //==============================================================================
 // Valutatore di espressioni: le stesse funzioni del valutatore Python
@@ -89,7 +92,7 @@ namespace expr
         }
         double parseProduct()
         {
-            auto left = parseUnary();
+            auto left = parsePower();
             while (true)
             {
                 skipWs();
@@ -97,12 +100,31 @@ namespace expr
                 else if (pos < text.length() && text[pos] == '/')
                 {
                     ++pos;
-                    const auto divisor = parseUnary();
+                    const auto divisor = parsePower();
                     if (divisor == 0.0) { failed = true; return 0.0; }
                     left /= divisor;
                 }
+                else if (pos < text.length() && text[pos] == '%')
+                {
+                    ++pos;
+                    const auto divisor = parsePower();
+                    if (divisor == 0.0) { failed = true; return 0.0; }
+                    left = std::fmod (left, divisor);
+                    if (left != 0.0 && ((left < 0.0) != (divisor < 0.0))) left += divisor;   // segno come in Python
+                }
                 else return left;
             }
+        }
+        double parsePower()
+        {
+            auto base = parseUnary();
+            skipWs();
+            if (pos + 1 < text.length() && text[pos] == '*' && text[pos + 1] == '*')
+            {
+                pos += 2;
+                return std::pow (base, parsePower());        // associativo a destra, come in Python
+            }
+            return base;
         }
         double parseUnary()
         {
@@ -129,6 +151,17 @@ namespace expr
             {
                 const int start = pos;
                 while (pos < text.length() && (juce::CharacterFunctions::isDigit (text[pos]) || text[pos] == '.')) ++pos;
+                // notazione scientifica: 1e-3, 2E+4
+                if (pos < text.length() && (text[pos] == 'e' || text[pos] == 'E'))
+                {
+                    const auto save = pos;
+                    ++pos;
+                    if (pos < text.length() && (text[pos] == '+' || text[pos] == '-')) ++pos;
+                    if (pos < text.length() && juce::CharacterFunctions::isDigit (text[pos]))
+                        while (pos < text.length() && juce::CharacterFunctions::isDigit (text[pos])) ++pos;
+                    else
+                        pos = save;
+                }
                 return text.substring (start, pos).getDoubleValue();
             }
 
@@ -170,14 +203,30 @@ namespace expr
         double callFunction (const juce::String& name, const std::vector<double>& a)
         {
             auto arg = [&a] (size_t i) { return i < a.size() ? a[i] : 0.0; };
-            if (name == "clamp") return juce::jlimit (arg (1), arg (2), arg (0));
-            if (name == "min")   return std::min (arg (0), arg (1));
-            if (name == "max")   return std::max (arg (0), arg (1));
-            if (name == "abs")   return std::abs (arg (0));
-            if (name == "round") return std::nearbyint (arg (0));
-            if (name == "pos")   return std::max (0.0, arg (0));
-            if (name == "neg")   return std::max (0.0, -arg (0));
-            if (name == "lerp")  { auto t = juce::jlimit (0.0, 1.0, arg (2)); return arg (0) + (arg (1) - arg (0)) * t; }
+            auto arity = [this, &a] (size_t wanted) { if (a.size() != wanted) failed = true; };
+
+            // l'arità conta: min(a,b,c) in Python guarda tre valori, e round(x, n) arrotonda a n decimali
+            if (name == "clamp") { arity (3); return juce::jlimit (arg (1), arg (2), arg (0)); }
+            if (name == "min")   { if (a.empty()) { failed = true; return 0.0; }
+                                   return *std::min_element (a.begin(), a.end()); }
+            if (name == "max")   { if (a.empty()) { failed = true; return 0.0; }
+                                   return *std::max_element (a.begin(), a.end()); }
+            if (name == "abs")   { arity (1); return std::abs (arg (0)); }
+            if (name == "round")
+            {
+                if (a.size() == 1) return std::nearbyint (arg (0));
+                if (a.size() == 2)
+                {
+                    // come round() di Python: si arrotonda la rappresentazione DECIMALE,
+                    // non il prodotto x * 10^n (0.45 -> 0.5, non 0.4)
+                    return roundTo (arg (0), static_cast<int> (arg (1)));
+                }
+                failed = true; return 0.0;
+            }
+            if (name == "pos")   { arity (1); return std::max (0.0, arg (0)); }
+            if (name == "neg")   { arity (1); return std::max (0.0, -arg (0)); }
+            if (name == "lerp")  { arity (3); auto t = juce::jlimit (0.0, 1.0, arg (2));
+                                   return arg (0) + (arg (1) - arg (0)) * t; }
             failed = true;
             return 0.0;
         }
@@ -669,7 +718,8 @@ juce::String RulesEngine::formatWhy (const juce::String& tmpl, const Context& ct
     return out;
 }
 
-Param RulesEngine::resolveParam (const juce::String& id, const juce::var& spec, const Context& ctx) const
+Param RulesEngine::resolveParam (const juce::String& id, const juce::var& spec, const Context& ctx,
+                                 juce::StringArray& errors) const
 {
     bool ok = true;
     Param param;
@@ -687,14 +737,14 @@ Param RulesEngine::resolveParam (const juce::String& id, const juce::var& spec, 
             {
                 const bool matches = ! choice.hasProperty ("when")
                                      || expr::evaluate (choice.getProperty ("when", {}).toString(), ctx.vars, &ok) != 0.0;
-                if (! ok) failedExpressions.add (choice.getProperty ("when", {}).toString());
+                if (! ok) errors.addIfNotAlreadyThere (choice.getProperty ("when", {}).toString());
                 if (matches) { param.value = choice.getProperty ("value", {}); break; }
             }
     }
     else
     {
         const auto raw = expr::evaluate (spec.getProperty ("expr", {}).toString(), ctx.vars, &ok);
-        if (! ok) failedExpressions.add (spec.getProperty ("expr", {}).toString());
+        if (! ok) errors.addIfNotAlreadyThere (spec.getProperty ("expr", {}).toString());
         if (spec.hasProperty ("round"))
         {
             const int decimals = static_cast<int> (spec.getProperty ("round", 0));
@@ -722,7 +772,6 @@ namespace
 
 Preset RulesEngine::compile (const juce::String& prompt, const juce::String& profileId) const
 {
-    failedExpressions.clear();
     juce::StringArray expressionErrors;
     auto evaluateChecked = [&expressionErrors] (const juce::String& expression,
                                                 const std::map<juce::String, double>& vars)
@@ -759,7 +808,7 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
             if (module.enabled)
                 if (auto* params = spec.getProperty ("params", {}).getDynamicObject())
                     for (auto& prop : params->getProperties())
-                        module.params.push_back (resolveParam (prop.name.toString(), prop.value, ctx));
+                        module.params.push_back (resolveParam (prop.name.toString(), prop.value, ctx, expressionErrors));
 
             preset.modules.push_back (std::move (module));
         }
@@ -813,7 +862,7 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
 
             if (auto* settings = spec.getProperty ("settings", {}).getDynamicObject())
                 for (auto& prop : settings->getProperties())
-                    send.settings.push_back (resolveParam (prop.name.toString(), prop.value, ctx));
+                    send.settings.push_back (resolveParam (prop.name.toString(), prop.value, ctx, expressionErrors));
 
             preset.sends.push_back (std::move (send));
         }
@@ -827,8 +876,6 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
     preset.stereoIsDualMono   = static_cast<bool> (profile.getProperty ("io", {})
                                                           .getProperty ("stereo_is_dual_mono", false));
 
-    for (const auto& expression : failedExpressions)
-        if (! expressionErrors.contains (expression)) expressionErrors.add (expression);
     for (const auto& expression : expressionErrors)
         preset.warnings.add (expressionWarning (expression));
 

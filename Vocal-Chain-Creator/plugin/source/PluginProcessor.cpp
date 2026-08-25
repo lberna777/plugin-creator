@@ -238,7 +238,10 @@ bool VocalForgeProcessor::isBusesLayoutSupported (const BusesLayout& layouts) co
 void VocalForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     chain.prepare (sampleRate, samplesPerBlock, juce::jmax (getTotalNumOutputChannels(), 1));
-    chain.reset();                 // due render della stessa istanza devono coincidere: bounce == ascolto
+    // le impostazioni VERE prima del reset: così i valori smussati si agganciano al loro obiettivo
+    // reale invece di rampare dal residuo del render precedente (bounce == ascolto)
+    chain.setSettings (currentSettings());
+    chain.reset();
     settingsDirty.store (true);
 
     // Latenza DICHIARATA: dev'essere quella VERA. Il limiter di JUCE non ha lookahead,
@@ -248,7 +251,10 @@ void VocalForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 
 void VocalForgeProcessor::reset()
 {
-    chain.reset();                 // l'host la chiama al ritorno del transport: la coda non deve sopravvivere
+    // l'host la chiama al ritorno del transport: la coda non deve sopravvivere, e lo stato
+    // dev'essere quello delle impostazioni correnti, non un residuo
+    chain.setSettings (currentSettings());
+    chain.reset();
 }
 
 vf::ChainSettings VocalForgeProcessor::currentSettings() const
@@ -512,7 +518,7 @@ void VocalForgeProcessor::applyPrompt (const juce::String& prompt, const juce::S
 
     // La latenza NON si cambia mentre il transport gira: Logic ricostruirebbe il grafo PDC
     // (buco audio) per un valore che oggi è comunque zero. La fissa prepareToPlay. (R3)
-    if (onPresetGenerated) onPresetGenerated();
+    presetRevision.fetch_add (1);
 }
 
 juce::String VocalForgeProcessor::getPrompt() const
@@ -574,7 +580,7 @@ void VocalForgeProcessor::setStateInformation (const void* data, int sizeInBytes
 
         apvts.replaceState (state);
         settingsDirty.store (true);
-        if (onPresetGenerated) onPresetGenerated();
+        presetRevision.fetch_add (1);
     }
 }
 

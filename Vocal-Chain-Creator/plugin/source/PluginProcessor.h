@@ -59,7 +59,9 @@ public:
     /** Testo della ricetta per i bus aux di Logic (modo sendsMode = logic). */
     juce::String getLogicSendsRecipe() const;
 
-    std::function<void()> onPresetGenerated;
+    /** Cambia a ogni preset generato o stato caricato: la UI se ne accorge dal suo timer.
+        Una std::function scritta da un thread e letta da un altro era una corsa. (R11) */
+    std::atomic<int> presetRevision { 0 };
 
     /** Lo stato che il DSP riceve adesso. Pubblico perché il self test verifica che ogni
         parametro dichiarato arrivi davvero fin qui: un knob che non muove nulla è un knob finto. */

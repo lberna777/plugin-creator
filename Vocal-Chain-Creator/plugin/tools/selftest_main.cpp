@@ -24,8 +24,23 @@ void* operator new (std::size_t size)
     if (vfalloc::armed.load()) vfalloc::count.fetch_add (1);
     return std::malloc (size);
 }
+void* operator new[] (std::size_t size)
+{
+    if (vfalloc::armed.load()) vfalloc::count.fetch_add (1);
+    return std::malloc (size);
+}
 void operator delete (void* pointer) noexcept { std::free (pointer); }
+void operator delete[] (void* pointer) noexcept { std::free (pointer); }
 void operator delete (void* pointer, std::size_t) noexcept { std::free (pointer); }
+void operator delete[] (void* pointer, std::size_t) noexcept { std::free (pointer); }
+
+#if defined (__GLIBC__)
+ #include <malloc.h>
+ // sostituire operator new non vede una malloc() vera: mallinfo2 guarda l'heap, e quella la vede
+ static size_t heapInUse() { return mallinfo2().uordblks; }
+#else
+ static size_t heapInUse() { return 0; }
+#endif
 
 namespace
 {
@@ -321,28 +336,44 @@ int main()
         prepare (sampleRate);
         processor.applyPrompt ("cantautore acustico, voce naturale", vf::RulesEngine::defaultProfileId());
 
-        auto worstJumpWith = [&] (bool changePrompt)
+        // Su una sinusoide ferma il salto fra campioni consecutivi e' noto e costante: qualunque
+        // discontinuita' introdotta da un cambio di parametro salta fuori subito. Con il segnale
+        // "voce" di prova, invece, il rumore copriva tutto e il controllo non poteva fallire.
+        auto worstJumpWith = [&] (bool moveParameters, bool afterReset)
         {
             prepare (sampleRate);
-            processor.applyPrompt ("cantautore acustico, voce naturale", vf::RulesEngine::defaultProfileId());
+            setAllModules (processor, false);
+            if (auto* p = processor.apvts.getParameter ("eqToneOn")) p->setValueNotifyingHost (1.0f);
+            if (afterReset) processor.reset();
+
             juce::AudioBuffer<float> buffer (2, blockSize);
             float worst = 0.0f;
             for (int i = 0; i < 12; ++i)
             {
-                fillVoiceLike (buffer, sampleRate, 0.4f);
-                if (i == 6 && changePrompt)
-                    processor.applyPrompt ("metal, voce urlata molto aggressiva", vf::RulesEngine::defaultProfileId());
+                for (int sample = 0; sample < blockSize; ++sample)
+                {
+                    const auto t = (i * blockSize + sample) / sampleRate;
+                    const auto value = 0.3f * static_cast<float> (
+                        std::sin (juce::MathConstants<double>::twoPi * 220.0 * t));
+                    buffer.setSample (0, sample, value);
+                    buffer.setSample (1, sample, value);
+                }
+                if (i == 6 && moveParameters)
+                    if (auto* p = processor.apvts.getParameter ("outGain"))
+                        p->setValueNotifyingHost (p->convertTo0to1 (-24.0f));   // scende: le pendenze calano
                 processor.processBlock (buffer, midi);
                 if (i >= 6) worst = juce::jmax (worst, maxJump (buffer));
             }
             return worst;
         };
 
-        const auto baseline = worstJumpWith (false);
-        const auto changed = worstJumpWith (true);
-        // il riferimento e' la catena stessa: il cambio di preset non deve saltare piu' del normale
-        check (changed < baseline * 3.0f + 0.02f, "cambio di prompt in corsa senza click",
-               "salto normale " + juce::String (baseline, 4) + ", col cambio " + juce::String (changed, 4));
+        const auto baseline = worstJumpWith (false, false);
+        const auto moved = worstJumpWith (true, false);
+        const auto movedAfterReset = worstJumpWith (true, true);
+        check (moved < baseline * 2.0f, "muovere output gain ed EQ in corsa non produce click",
+               "fermo " + juce::String (baseline, 4) + ", in movimento " + juce::String (moved, 4));
+        check (movedAfterReset < baseline * 2.0f, "nessun click nemmeno subito dopo un reset dell'host",
+               "fermo " + juce::String (baseline, 4) + ", dopo reset " + juce::String (movedAfterReset, 4));
     }
 
     // ---- le mandate sono parallele: spegnendole la voce resta quella
@@ -945,11 +976,15 @@ int main()
 
         vfalloc::count.store (0);
         vfalloc::armed.store (true);
+        const auto heapBefore = heapInUse();
         for (int i = 0; i < 10; ++i) processor.processBlock (buffer, midi);
+        const auto heapAfter = heapInUse();
         vfalloc::armed.store (false);
         const auto steady = vfalloc::count.load();
-        check (steady == 0, "processBlock non alloca (regime)",
-               juce::String (steady) + " allocazioni in 10 blocchi");
+        check (steady == 0 && heapBefore == heapAfter, "processBlock non alloca (regime)",
+               juce::String (steady) + " new, heap "
+               + juce::String (static_cast<juce::int64> (heapAfter) - static_cast<juce::int64> (heapBefore))
+               + " byte in 10 blocchi");
 
         if (auto* p = processor.apvts.getParameter ("c1Thresh"))
             p->setValueNotifyingHost (p->convertTo0to1 (-18.0f));
@@ -1174,32 +1209,43 @@ int main()
 
         auto renderWithBlocks = [&] (int chunk)
         {
+            processor.applyPrompt ("voce tipo sfera ebbasta", vf::RulesEngine::defaultProfileId());
             processor.setRateAndBufferSizeDetails (sampleRate, chunk);
             processor.prepareToPlay (sampleRate, chunk);
-            processor.applyPrompt ("voce tipo sfera ebbasta", vf::RulesEngine::defaultProfileId());
 
             juce::AudioBuffer<float> out (2, total);
             for (int ch = 0; ch < 2; ++ch) out.copyFrom (ch, 0, source, ch, 0, total);
             juce::AudioBuffer<float> view (2, chunk);
-            for (int start = 0; start + chunk <= total; start += chunk)
+            for (int start = 0; start < total; start += chunk)
             {
-                for (int ch = 0; ch < 2; ++ch) view.copyFrom (ch, 0, out, ch, start, chunk);
-                processor.processBlock (view, midi);
-                for (int ch = 0; ch < 2; ++ch) out.copyFrom (ch, start, view, ch, 0, chunk);
+                const auto count = juce::jmin (chunk, total - start);   // anche l'ultimo tratto, corto
+                juce::AudioBuffer<float> partial (view.getArrayOfWritePointers(), 2, count);
+                for (int ch = 0; ch < 2; ++ch) partial.copyFrom (ch, 0, out, ch, start, count);
+                processor.processBlock (partial, midi);
+                for (int ch = 0; ch < 2; ++ch) out.copyFrom (ch, start, partial, ch, 0, count);
             }
             return out;
         };
 
-        const auto small = renderWithBlocks (64);
-        const auto large = renderWithBlocks (1024);
-        float difference = 0.0f;
-        for (int ch = 0; ch < 2; ++ch)
-            for (int sample = 0; sample < total; ++sample)
-                difference = juce::jmax (difference, std::abs (small.getSample (ch, sample)
-                                                               - large.getSample (ch, sample)));
-        check (juce::Decibels::gainToDecibels (difference, -200.0f) < -60.0f,
+        // 37 e 100 NON sono multipli del control rate dei coefficienti: se lo fossero tutti,
+        // un contatore azzerato a ogni blocco passerebbe il controllo senza essere corretto
+        const auto reference = renderWithBlocks (1024);
+        float worst = 0.0f;
+        juce::String detail;
+        for (int chunk : { 64, 37, 100, 512, 1 })
+        {
+            const auto rendered = renderWithBlocks (chunk);
+            float difference = 0.0f;
+            for (int ch = 0; ch < 2; ++ch)
+                for (int sample = 0; sample < total; ++sample)
+                    difference = juce::jmax (difference, std::abs (rendered.getSample (ch, sample)
+                                                                   - reference.getSample (ch, sample)));
+            worst = juce::jmax (worst, difference);
+            detail << chunk << ":" << juce::String (juce::Decibels::gainToDecibels (difference, -200.0f), 0) << " ";
+        }
+        check (juce::Decibels::gainToDecibels (worst, -200.0f) < -60.0f,
                "il risultato non dipende dalla dimensione del buffer (ascolto == bounce)",
-               "blocchi 64 vs 1024: " + juce::String (juce::Decibels::gainToDecibels (difference, -200.0f), 1) + " dBFS");
+               "scarto per blocco, dBFS: " + detail);
     }
 
     // ---- R8: nella banda di isteresi il gate resta APERTO, non si congela a mezza corsa
@@ -1259,21 +1305,42 @@ int main()
             fillVoiceLike (buffer, sampleRate, 0.5f);
             processor.processBlock (buffer, midi);
         }
-        if (auto* p = processor.apvts.getParameter ("revOn")) p->setValueNotifyingHost (0.0f);
+        // 1) a ingresso finito, con la mandata accesa, la coda deve durare
+        int audibleBlocks = 0;
+        for (int i = 0; i < 100; ++i)                       // ~1 s a 48 kHz con blocchi da 512
+        {
+            buffer.clear();
+            processor.processBlock (buffer, midi);
+            if (juce::Decibels::gainToDecibels (buffer.getMagnitude (0, blockSize), -120.0f) > -60.0f)
+                audibleBlocks = i + 1;
+        }
+        const auto tailMs = audibleBlocks * blockSize * 1000.0 / sampleRate;
+        check (tailMs > 200.0, "a ingresso finito la coda del riverbero continua",
+               juce::String (tailMs, 0) + " ms con decay dichiarato 3 s");
 
+        // 2) spegnere e riaccendere non deve far tornare fuori la coda congelata
+        if (auto* p = processor.apvts.getParameter ("revOn")) p->setValueNotifyingHost (0.0f);
+        for (int i = 0; i < 40; ++i) { buffer.clear(); processor.processBlock (buffer, midi); }
+
+        // e riaccendendo non deve uscire la coda vecchia messa in pausa
+        if (auto* p = processor.apvts.getParameter ("revOn")) p->setValueNotifyingHost (1.0f);
         buffer.clear();
         processor.processBlock (buffer, midi);
-        const auto justAfter = juce::Decibels::gainToDecibels (buffer.getMagnitude (0, blockSize), -120.0f);
-        check (justAfter > -60.0f, "spegnere il riverbero non tronca la coda di colpo",
-               juce::String (justAfter, 1) + " dBFS nel blocco successivo");
+        const auto burst = juce::Decibels::gainToDecibels (buffer.getMagnitude (0, blockSize), -120.0f);
+        check (burst < -60.0f, "riaccendere una mandata non spara fuori la coda vecchia",
+               juce::String (burst, 1) + " dBFS a ingresso muto");
 
-        set ("dlyTime", 1200.0f); set ("dlyFeedback", 40.0f);
+        if (auto* p = processor.apvts.getParameter ("revOn")) p->setValueNotifyingHost (0.0f);
         if (auto* p = processor.apvts.getParameter ("dlyOn")) p->setValueNotifyingHost (1.0f);
-        if (auto* p = processor.apvts.getParameter ("dlySync")) p->setValueNotifyingHost (0.0f);
+        if (auto* p = processor.apvts.getParameter ("dlySync")) p->setValueNotifyingHost (1.0f);
+        set ("dlyTime", 100.0f);          // volutamente diverso dal tempo sincronizzato
+        set ("dlyFeedback", 45.0f);
+        set ("dlyDivision", 0.0f);        // 1/4: a 120 BPM sono 500 ms, cioe' 5 volte dlyTime
         processor.processBlock (buffer, midi);
-        check (processor.getTailLengthSeconds() >= 1.2,
-               "la coda dichiarata all'host contiene davvero il delay",
-               juce::String (processor.getTailLengthSeconds(), 2) + " s con delay da 1,2 s");
+
+        const auto declared = processor.getTailLengthSeconds();
+        check (declared >= 3.0, "la coda dichiarata segue il delay SINCRONIZZATO, non dlyTime",
+               juce::String (declared, 2) + " s con 1/4 a 120 BPM e feedback 45 %");
     }
 
     // ---- R2: la catena regge piu' di due canali senza timbri diversi fra loro

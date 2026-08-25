@@ -72,6 +72,54 @@
     {
       "expr": "not (brightness > 0.5 and density > 0.5)",
       "value": 1.0
+    },
+    {
+      "expr": "not brightness > 0.5 and density > 0.5",
+      "value": 1.0
+    },
+    {
+      "expr": "not not brightness",
+      "value": 1.0
+    },
+    {
+      "expr": "min(brightness, density, cleanliness)",
+      "value": 0.45
+    },
+    {
+      "expr": "max(brightness, density, cleanliness)",
+      "value": 0.8
+    },
+    {
+      "expr": "round(brightness, 1)",
+      "value": 0.5
+    },
+    {
+      "expr": "2 ** 3 ** 2",
+      "value": 512.0
+    },
+    {
+      "expr": "7 % 3",
+      "value": 1.0
+    },
+    {
+      "expr": "-7 % 3",
+      "value": 2.0
+    },
+    {
+      "expr": "1e-3 * 1000",
+      "value": 1.0
+    },
+    {
+      "expr": "2.5e2 + 1",
+      "value": 251.0
+    },
+    {
+      "expr": "clamp(1 / (1 + density), 0, 1)",
+      "value": 0.555555556
+    },
+    {
+      "expr": "pos(brightness) * 2 - neg(weight) * 3",
+      "value": 0.3
     }
   ]
 }

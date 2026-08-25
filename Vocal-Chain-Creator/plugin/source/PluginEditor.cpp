@@ -201,8 +201,6 @@ VocalForgeEditor::VocalForgeEditor (VocalForgeProcessor& p)
     controlsViewport.setScrollBarsShown (true, false);
     addAndMakeVisible (controlsViewport);
 
-    processor.onPresetGenerated = [this] { triggerAsyncUpdate(); };
-
     rebuildControls();
     refreshFromPreset();
     startTimerHz (24);
@@ -211,15 +209,8 @@ VocalForgeEditor::VocalForgeEditor (VocalForgeProcessor& p)
     setSize (1080, 680);
 }
 
-void VocalForgeEditor::handleAsyncUpdate()
-{
-    refreshFromPreset();
-}
-
 VocalForgeEditor::~VocalForgeEditor()
 {
-    processor.onPresetGenerated = nullptr;
-    cancelPendingUpdate();
     setLookAndFeel (nullptr);
 }
 
@@ -338,6 +329,13 @@ void VocalForgeEditor::refreshFromPreset()
 
     // il pannello "perché": prima il modulo selezionato, poi tutto il resto
     juce::String why;
+    if (! preset.warnings.isEmpty())
+    {
+        for (const auto& warning : preset.warnings)
+            why << "! " << warning << juce::newLine;
+        why << juce::newLine;
+    }
+
     if (processor.hasGeneratedChain())
     {
         const auto moduleId = moduleIds[selectedModule];
@@ -367,11 +365,6 @@ void VocalForgeEditor::refreshFromPreset()
                 << "che si sente sui dischi, a partire dal tuo segnale." << juce::newLine;
         }
 
-        if (! preset.warnings.isEmpty())
-        {
-            why << juce::newLine << "———— avvisi ————" << juce::newLine;
-            for (const auto& warning : preset.warnings) why << "· " << warning << juce::newLine;
-        }
     }
     else
     {
@@ -416,6 +409,15 @@ void VocalForgeEditor::refreshFromPreset()
 //==============================================================================
 void VocalForgeEditor::timerCallback()
 {
+    // il preset puo' cambiare da un altro thread (setStateInformation): la UI se ne accorge qui,
+    // sul message thread, invece di farsi chiamare da dove capita
+    const auto revision = processor.presetRevision.load();
+    if (revision != lastPresetRevision)
+    {
+        lastPresetRevision = revision;
+        refreshFromPreset();
+    }
+
     auto& meters = processor.getMeters();
     const auto smooth = [] (float current, float target) { return current + 0.35f * (target - current); };
 

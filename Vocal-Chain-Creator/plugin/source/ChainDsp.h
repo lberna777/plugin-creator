@@ -182,6 +182,9 @@ private:
                             juce::SmoothedValue<float>& makeup, std::atomic<float>& meter);
     void processSaturation (juce::AudioBuffer<float>&, int numSamples);
     void processTilt (juce::AudioBuffer<float>&, int numSamples);
+    void refreshSubCoefficients();             // riscrive i biquad dai valori smussati (control rate)
+    void refreshToneCoefficients();
+    float syncedDelayMs() const noexcept;
     void processLimiter (juce::AudioBuffer<float>&, int numSamples);
     /** Un tratto lungo al massimo quanto il blocco dichiarato in prepare. */
     void processChunk (juce::AudioBuffer<float>&, int startSample, int numSamples, double bpm);
@@ -222,12 +225,19 @@ private:
     juce::SmoothedValue<float> trimGain, outputGain, mixAmount, driveAmount,
                                revSendGain, dlySendGain, fxSendGain,
                                comp1Makeup, comp2Makeup, delayTimeSamples;
+    // R9: i coefficienti dei filtri cambiavano di colpo. Ora i guadagni si muovono a rampa e
+    // i biquad si riscrivono a control rate.
+    juce::SmoothedValue<float> subGainSmoothed[3], toneGainSmoothed[3], airGainSmoothed, tiltSmoothed;
+    int subCoeffCountdown = 0, toneCoeffCountdown = 0;
 
     // mandate (bus paralleli)
     juce::dsp::Reverb reverb;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> delayLine { 96000 };
     juce::dsp::StateVariableTPTFilter<float> revHp, revLp, dlyHp, dlyLp, fxHp, fxLp;
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> revPredelayLine { 8192 };
+    // B21: quanti campioni ancora far girare un bus dopo lo spegnimento, prima di azzerarlo
+    int revTailCountdown = 0, dlyTailCountdown = 0, fxTailCountdown = 0;
+    double lastBpm = 120.0;                    // B22: serve a dichiarare la coda di un delay sincronizzato
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Linear> doublerLine { 16384 };
     float doublerPhase = 0.0f;
     juce::AudioBuffer<float> dryScratch, revScratch, duckScratch;

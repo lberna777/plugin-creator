@@ -127,7 +127,12 @@ def _eval(node, ctx, src):
     if isinstance(node, ast.Compare) and len(node.ops) == 1 and type(node.ops[0]) in _CMP_OPS:
         return _CMP_OPS[type(node.ops[0])](_eval(node.left, ctx, src), _eval(node.comparators[0], ctx, src))
     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in _FUNCS:
-        return _FUNCS[node.func.id](*[_eval(a, ctx, src) for a in node.args])
+        args = [_eval(a, ctx, src) for a in node.args]
+        try:
+            return _FUNCS[node.func.id](*args)
+        except (TypeError, ValueError) as exc:
+            # arità sbagliata o argomento impossibile: è un errore di regola, non un crash
+            raise ExprError(f"{node.func.id}() con {len(args)} argomenti in {src!r}: {exc}") from exc
     raise ExprError(f"costrutto non permesso in {src!r}")
 
 
@@ -345,17 +350,27 @@ def _fmt_why(template, ctx, ctx_text, value=None):
         return template
 
 
-def _resolve_param(spec, ctx, ctx_text):
+def _safe_eval(expression, ctx, on_error):
+    """Un'espressione rotta diventa un avviso, non un traceback in faccia all'utente."""
+    try:
+        return evaluate(expression, ctx)
+    except ExprError:
+        if on_error is not None:
+            on_error(expression)
+        return 0.0
+
+
+def _resolve_param(spec, ctx, ctx_text, on_error=None):
     if "value" in spec:
         value = spec["value"]
     elif "choices" in spec:
         value = None
         for choice in spec["choices"]:
-            if "when" not in choice or evaluate(choice["when"], ctx):
+            if "when" not in choice or _safe_eval(choice["when"], ctx, on_error):
                 value = choice["value"]
                 break
     else:
-        value = evaluate(spec["expr"], ctx)
+        value = _safe_eval(spec["expr"], ctx, on_error)
         if isinstance(value, bool):
             pass
         elif "round" in spec:
@@ -380,14 +395,13 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
 
     failed_expressions = []
 
+    def note_failure(expression):
+        if expression not in failed_expressions:
+            failed_expressions.append(expression)
+
     def checked(expression):
         """Un'espressione che non si valuta diventa un avviso, non uno zero silenzioso."""
-        try:
-            return evaluate(expression, ctx)
-        except ExprError:
-            if expression not in failed_expressions:
-                failed_expressions.append(expression)
-            return 0.0
+        return _safe_eval(expression, ctx, note_failure)
 
     modules = []
     for spec in rules["chain"]:
@@ -397,7 +411,7 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
         params = {}
         if enabled:
             for pid, pspec in spec["params"].items():
-                params[pid] = _resolve_param(pspec, ctx, ctx_text)
+                params[pid] = _resolve_param(pspec, ctx, ctx_text, note_failure)
         modules.append({"id": spec["id"], "label": spec["label"], "enabled": enabled,
                         "why": why, "params": params})
 
@@ -416,7 +430,8 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
         chosen_groups.add(spec["group"])
         if spec.get("skip"):          # il gruppo si chiude senza mandata: è una scelta, non un buco
             continue
-        settings = {pid: _resolve_param(dict(p, why=p.get("why", spec["why"])), ctx, ctx_text)["value"]
+        settings = {pid: _resolve_param(dict(p, why=p.get("why", spec["why"])), ctx, ctx_text,
+                                        note_failure)["value"]
                     for pid, p in spec["settings"].items()}
         why = _fmt_why(spec["why"], ctx, ctx_text)
         if group in forced:
