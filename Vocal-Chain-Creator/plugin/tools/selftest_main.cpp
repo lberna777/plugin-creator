@@ -184,6 +184,9 @@ namespace
                 parameter->setValueNotifyingHost (parameter->convertTo0to1 (0.0f));
         if (auto* mix = processor.apvts.getParameter ("mix"))
             mix->setValueNotifyingHost (mix->convertTo0to1 (100.0f));
+        // le mandate interne devono essere accese: un test precedente puo' aver lasciato "logic"
+        if (auto* mode = processor.apvts.getParameter ("sendsMode"))
+            mode->setValueNotifyingHost (0.0f);
     }
 }
 
@@ -885,11 +888,231 @@ int main()
                 for (int sample = 0; sample < blockSize; ++sample)
                     difference = juce::jmax (difference, std::abs (rendered.getSample (ch, sample)
                                                                    - reference.getSample (ch, sample)));
-            if (juce::Decibels::gainToDecibels (difference, -120.0f) < -100.0f)
+            if (juce::Decibels::gainToDecibels (difference, -200.0f) < -80.0f)
                 dead.add (id);
         }
         check (dead.isEmpty(), "nessun parametro finto: tutti cambiano il suono",
                dead.isEmpty() ? juce::String() : "inerti: " + dead.joinIntoString (", "));
+    }
+
+
+    // ---- due render identici devono dare lo stesso risultato (bounce == ascolto)
+    {
+        const double sampleRate = 48000.0;
+        auto render = [&] ()
+        {
+            prepare (sampleRate);
+            processor.applyPrompt ("voce tipo sfera ebbasta", vf::RulesEngine::defaultProfileId());
+            juce::AudioBuffer<float> buffer (2, blockSize), tail (2, blockSize);
+            for (int i = 0; i < 12; ++i)
+            {
+                fillVoiceLike (buffer, sampleRate, 0.4f);
+                processor.processBlock (buffer, midi);
+            }
+            for (int ch = 0; ch < 2; ++ch) tail.copyFrom (ch, 0, buffer, ch, 0, blockSize);
+            return tail;
+        };
+
+        const auto first = render();
+        const auto second = render();
+        float difference = 0.0f;
+        for (int ch = 0; ch < 2; ++ch)
+            for (int sample = 0; sample < blockSize; ++sample)
+                difference = juce::jmax (difference, std::abs (first.getSample (ch, sample)
+                                                               - second.getSample (ch, sample)));
+        check (juce::Decibels::gainToDecibels (difference, -200.0f) < -120.0f,
+               "due render della stessa istanza coincidono (prepareToPlay azzera lo stato)",
+               juce::String (juce::Decibels::gainToDecibels (difference, -200.0f), 1) + " dBFS di scarto");
+    }
+
+    // ---- un blocco piu' LUNGO di quello dichiarato esce processato, non crudo
+    {
+        const double sampleRate = 48000.0;
+        processor.setRateAndBufferSizeDetails (sampleRate, 256);
+        processor.prepareToPlay (sampleRate, 256);
+        processor.applyPrompt ("voce tipo sfera ebbasta", vf::RulesEngine::defaultProfileId());
+
+        juce::AudioBuffer<float> buffer (2, 1024), reference (2, 1024);
+        fillVoiceLike (buffer, sampleRate, 0.4f);
+        for (int ch = 0; ch < 2; ++ch) reference.copyFrom (ch, 0, buffer, ch, 0, 1024);
+        processor.processBlock (buffer, midi);
+
+        float rawTail = 0.0f;
+        for (int sample = 256; sample < 1024; ++sample)          // la parte oltre il blocco dichiarato
+            rawTail = juce::jmax (rawTail, std::abs (buffer.getSample (0, sample)
+                                                     - reference.getSample (0, sample)));
+        check (isFinite (buffer) && juce::Decibels::gainToDecibels (rawTail, -200.0f) > -60.0f,
+               "un blocco piu' lungo del dichiarato esce processato per intero",
+               "scarto dall'ingresso oltre i 256 campioni: "
+               + juce::String (juce::Decibels::gainToDecibels (rawTail, -200.0f), 1) + " dB");
+    }
+
+    // ---- il ceiling e' un ceiling a QUALSIASI valore (e abbassarlo non deve alzare l'uscita)
+    {
+        const double sampleRate = 48000.0;
+        auto peakFor = [&] (float ceilingDb)
+        {
+            prepare (sampleRate);
+            setAllModules (processor, false);
+            auto set = [&processor] (const char* id, float value)
+            {
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+            };
+            if (auto* p = processor.apvts.getParameter ("limOn")) p->setValueNotifyingHost (1.0f);
+            set ("limCeiling", ceilingDb); set ("outGain", 12.0f);
+
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            float peak = 0.0f;
+            int atFullScale = 0;
+            for (int i = 0; i < 20; ++i)
+            {
+                fillVoiceLike (buffer, sampleRate, 0.8f);
+                processor.processBlock (buffer, midi);
+                if (i >= 4)
+                    for (int sample = 0; sample < blockSize; ++sample)
+                    {
+                        const auto value = std::abs (buffer.getSample (0, sample));
+                        peak = juce::jmax (peak, value);
+                        if (value >= 0.999f) ++atFullScale;
+                    }
+            }
+            return std::make_pair (juce::Decibels::gainToDecibels (peak), atFullScale);
+        };
+
+        bool holds = true, monotonic = true;
+        float previous = 0.0f;
+        juce::String detail;
+        for (float ceiling : { -1.0f, -2.0f, -4.0f, -6.0f })
+        {
+            const auto measured = peakFor (ceiling);
+            holds = holds && measured.first <= ceiling + 0.2f && measured.second == 0;
+            if (ceiling < -1.0f) monotonic = monotonic && measured.first < previous + 0.2f;
+            previous = measured.first;
+            detail << juce::String (ceiling, 0) << " -> " << juce::String (measured.first, 2) << " dBFS  ";
+        }
+        check (holds, "il ceiling tiene a ogni valore, senza campioni a fondo scala", detail);
+        check (monotonic, "abbassare il ceiling abbassa l'uscita, non la alza", detail);
+    }
+
+    // ---- il MIX scala anche le mandate
+    {
+        const double sampleRate = 48000.0;
+        auto sendTail = [&] (float mixPercent)
+        {
+            prepare (sampleRate);
+            setAllModules (processor, false);
+            auto set = [&processor] (const char* id, float value)
+            {
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+            };
+            if (auto* p = processor.apvts.getParameter ("revOn")) p->setValueNotifyingHost (1.0f);
+            set ("revSend", -6.0f); set ("revDuck", 0.0f); set ("mix", mixPercent);
+
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            for (int i = 0; i < 12; ++i)
+            {
+                fillVoiceLike (buffer, sampleRate, 0.4f);
+                processor.processBlock (buffer, midi);
+            }
+            buffer.clear();                                  // coda: solo il riverbero
+            float tail = 0.0f;
+            for (int i = 0; i < 4; ++i)
+            {
+                processor.processBlock (buffer, midi);
+                tail = juce::jmax (tail, buffer.getMagnitude (0, blockSize));
+            }
+            return juce::Decibels::gainToDecibels (tail, -120.0f);
+        };
+
+        const auto wet = sendTail (100.0f);
+        const auto dry = sendTail (0.0f);
+        check (dry < wet - 12.0f, "il MIX scala anche le mandate, non solo la catena",
+               "mix 100 % " + juce::String (wet, 1) + " dB, mix 0 % " + juce::String (dry, 1) + " dB");
+    }
+
+    // ---- il tilt funziona anche con la saturazione spenta
+    {
+        const double sampleRate = 48000.0;
+        auto toneBalance = [&] (float tiltDb)
+        {
+            prepare (sampleRate);
+            setAllModules (processor, false);
+            if (auto* p = processor.apvts.getParameter ("satTilt"))
+                p->setValueNotifyingHost (p->convertTo0to1 (tiltDb));
+
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            float low = 0.0f, high = 0.0f;
+            for (int block = 0; block < 8; ++block)
+            {
+                for (int sample = 0; sample < blockSize; ++sample)
+                {
+                    const auto t = (block * blockSize + sample) / sampleRate;
+                    const auto value = 0.2f * static_cast<float> (
+                        std::sin (juce::MathConstants<double>::twoPi * 200.0 * t)
+                        + std::sin (juce::MathConstants<double>::twoPi * 8000.0 * t));
+                    buffer.setSample (0, sample, value);
+                    buffer.setSample (1, sample, value);
+                }
+                processor.processBlock (buffer, midi);
+                if (block >= 4)
+                    for (int sample = 0; sample < blockSize; ++sample)
+                    {
+                        const auto t = (block * blockSize + sample) / sampleRate;
+                        const auto v = buffer.getSample (0, sample);
+                        low  += v * static_cast<float> (std::sin (juce::MathConstants<double>::twoPi * 200.0 * t));
+                        high += v * static_cast<float> (std::sin (juce::MathConstants<double>::twoPi * 8000.0 * t));
+                    }
+            }
+            return juce::Decibels::gainToDecibels (std::abs (high), -120.0f)
+                 - juce::Decibels::gainToDecibels (std::abs (low), -120.0f);
+        };
+
+        const auto flat = toneBalance (0.0f);
+        const auto tilted = toneBalance (4.0f);
+        check (tilted > flat + 2.0f, "il tilt inclina lo spettro anche con SAT spento",
+               "piatto " + juce::String (flat, 2) + " dB, tilt +4 " + juce::String (tilted, 2) + " dB");
+    }
+
+    // ---- la soglia del room tamer non deve dipendere dal Q del detector
+    {
+        const double sampleRate = 48000.0;
+        auto attenuationAtQ = [&] (float q)
+        {
+            prepare (sampleRate);
+            setAllModules (processor, false);
+            auto set = [&processor] (const char* id, float value)
+            {
+                if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (value));
+            };
+            if (auto* p = processor.apvts.getParameter ("roomOn")) p->setValueNotifyingHost (1.0f);
+            set ("room1Freq", 200.0f); set ("room1Q", q); set ("room1Depth", -12.0f);
+            set ("room2Depth", 0.0f); set ("room3Depth", 0.0f);
+            set ("roomThresh", -20.0f);                        // il segnale di prova sta ben sotto
+
+            juce::AudioBuffer<float> buffer (2, blockSize);
+            float inSum = 0.0f, outSum = 0.0f;
+            for (int block = 0; block < 12; ++block)
+            {
+                for (int sample = 0; sample < blockSize; ++sample)
+                {
+                    const auto t = (block * blockSize + sample) / sampleRate;
+                    const auto value = 0.01f * static_cast<float> (   // -40 dBFS: 20 dB sotto la soglia
+                        std::sin (juce::MathConstants<double>::twoPi * 200.0 * t));
+                    buffer.setSample (0, sample, value);
+                    buffer.setSample (1, sample, value);
+                }
+                if (block >= 6) for (int i = 0; i < blockSize; ++i) inSum += std::abs (buffer.getSample (0, i));
+                processor.processBlock (buffer, midi);
+                if (block >= 6) for (int i = 0; i < blockSize; ++i) outSum += std::abs (buffer.getSample (0, i));
+            }
+            return juce::Decibels::gainToDecibels (outSum / juce::jmax (1.0e-9f, inSum));
+        };
+
+        const auto lowQ = attenuationAtQ (1.0f);
+        const auto highQ = attenuationAtQ (12.0f);
+        check (highQ > -1.5f && std::abs (highQ - lowQ) < 1.5f,
+               "sotto soglia il room tamer non morde, qualunque sia il Q",
+               "Q 1 " + juce::String (lowQ, 2) + " dB, Q 12 " + juce::String (highQ, 2) + " dB");
     }
 
     // ---- stato: il prompt fa parte del progetto

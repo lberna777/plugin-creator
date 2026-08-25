@@ -140,7 +140,6 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
     // mandate — bus paralleli, mai in serie
     layout.add (choiceParam ("sendsMode", "Sends", { "internal", "logic" }, 0));
     layout.add (boolParam ("revOn", "Reverb Send", true),
-                choiceParam ("revVariant", "Reverb", { "none", "ambience", "room", "hall", "plate" }, 4, false),
                 floatParam ("revDecay", "Rev Decay", 0.2f, 4.0f, 1.4f, "s", 1.5f),
                 floatParam ("revPredelay", "Rev Predelay", 0.0f, 80.0f, 20.0f, "ms"),
                 floatParam ("revSize", "Rev Size", 10.0f, 100.0f, 55.0f, "%"),
@@ -151,7 +150,6 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 floatParam ("revSend", "Rev Send", -40.0f, -6.0f, -24.0f, "dB"));
 
     layout.add (boolParam ("dlyOn", "Delay Send", true),
-                choiceParam ("dlyVariant", "Delay", { "slap", "eighth", "quarter" }, 1, false),
                 boolParam ("dlySync", "Delay Sync", true),
                 floatParam ("dlyTime", "Delay Time", 60.0f, 1500.0f, 375.0f, "ms", 400.0f),
                 choiceParam ("dlyDivision", "Division", { "1/4", "1/8 dotted", "1/8", "1/16" }, 1),
@@ -162,7 +160,6 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 floatParam ("dlySend", "Delay Send Level", -40.0f, -8.0f, -24.0f, "dB"));
 
     layout.add (boolParam ("fxOn", "Doubler", false),
-                choiceParam ("fxVariant", "Doubler Type", { "none", "doubler" }, 0, false),
                 floatParam ("fxTimeL", "Doubler L", 8.0f, 45.0f, 22.0f, "ms"),
                 floatParam ("fxTimeR", "Doubler R", 8.0f, 45.0f, 32.0f, "ms"),
                 floatParam ("fxDetune", "Detune", 0.0f, 18.0f, 8.0f, "cent"),
@@ -243,11 +240,17 @@ bool VocalForgeProcessor::isBusesLayoutSupported (const BusesProperties&) const 
 void VocalForgeProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     chain.prepare (sampleRate, samplesPerBlock, juce::jmax (getTotalNumOutputChannels(), 1));
+    chain.reset();                 // due render della stessa istanza devono coincidere: bounce == ascolto
     settingsDirty.store (true);
 
     // Latenza DICHIARATA: dev'essere quella VERA. Il limiter di JUCE non ha lookahead,
     // nessuno stadio ritarda: dichiarare 2 ms faceva anticipare la traccia a Logic di 96 campioni.
     setLatencySamples (static_cast<int> (sampleRate * lastPreset.declaredLatencyMs * 0.001));
+}
+
+void VocalForgeProcessor::reset()
+{
+    chain.reset();                 // l'host la chiama al ritorno del transport: la coda non deve sopravvivere
 }
 
 vf::ChainSettings VocalForgeProcessor::currentSettings() const
@@ -423,7 +426,6 @@ void VocalForgeProcessor::writePresetToParameters (const vf::Preset& preset)
     setValue ("revOn", reverb != nullptr ? 1.0f : 0.0f);
     if (reverb != nullptr)
     {
-        setChoice ("revVariant", reverb->id.fromFirstOccurrenceOf ("rev_", false, false));
         auto get = [reverb] (const char* id, float fallback)
         {
             const auto* found = reverb->find (id);
@@ -443,7 +445,6 @@ void VocalForgeProcessor::writePresetToParameters (const vf::Preset& preset)
     setValue ("dlyOn", delay != nullptr ? 1.0f : 0.0f);
     if (delay != nullptr)
     {
-        setChoice ("dlyVariant", delay->id.fromFirstOccurrenceOf ("dly_", false, false));
         auto get = [delay] (const char* id, float fallback)
         {
             const auto* found = delay->find (id);
@@ -463,7 +464,6 @@ void VocalForgeProcessor::writePresetToParameters (const vf::Preset& preset)
     setValue ("fxOn", doubler != nullptr ? 1.0f : 0.0f);
     if (doubler != nullptr)
     {
-        setChoice ("fxVariant", doubler->id.fromFirstOccurrenceOf ("fx_", false, false));
         auto get = [doubler] (const char* id, float fallback)
         {
             const auto* found = doubler->find (id);

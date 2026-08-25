@@ -501,3 +501,446 @@ Cose che sembravano sbagliate e non lo sono, o che ho verificato apposta:
   passano tutti.
 * **Il doubler in mono** (`ChainDsp.cpp:495-498`) non scrive sul canale 1 inesistente: il ramo `channels >= 2`
   è guardato correttamente.
+
+---
+
+## Secondo giro
+
+Stessa regola del primo: **misurato sul binario**, non dedotto. Gli oggetti già compilati di
+`vocalforge_selftest` linkati a dieci programmi di prova fuori dal repo, più Valgrind. Nessun file del
+progetto è stato modificato. `vocalforge_selftest` passa tutti i controlli (0 problemi): quello che segue
+è ciò che passa **nonostante** i controlli.
+
+## Correzioni verificate
+
+### Chiusi davvero (7 su 12)
+
+**B2 — de-esser.** Chiuso. Risposta misurata con il solo DS1 (6650 Hz), rapporto RMS uscita/ingresso su
+sinusoide, a regime:
+
+| | 100 Hz | 200 | 500 | 1k | 3k | 5k | 6650 | 9k | 14k |
+|---|---|---|---|---|---|---|---|---|---|
+| split, **senza** riduzione | 0,00 | -0,00 | -0,00 | 0,00 | -0,00 | -0,00 | 0,00 | 0,00 | 0,00 |
+| split, con riduzione | 0,00 | -0,00 | -0,00 | 0,00 | -0,00 | -0,61 | **-2,49** | **-4,50** | **-5,86** |
+| wide, con riduzione | 0,00 | -0,00 | -0,00 | 0,00 | -0,00 | -3,18 | **-6,00** | **-6,00** | **-6,00** |
+
+La riga "senza riduzione" è la prova che serviva: `low + high*gain` con `gain = 1` restituisce **0,00 dB a
+ogni frequenza**, quindi la ricomposizione LR4 è a fase corretta. Una sola passata del crossover per
+campione e per canale. Resta un difetto minore sul detector (R9).
+
+**B3 — allocazioni.** Chiuso, e non solo sul percorso che il test esercita. Contatore su `operator new`
+armato **solo** attorno a `processBlock`, zero allocazioni in tutti questi casi:
+regime a 44,1/48/96 kHz con blocchi da 32, 64 e 512 (9 combinazioni); primo blocco dopo un cambio di
+sample rate a caldo; primo blocco dopo `applyPrompt`; primo blocco dopo `setStateInformation`;
+`processBlockBypassed`; doubler + riverbero + delay accesi insieme; mono in / stereo out; mono puro.
+`ParamCache` è costruita una volta nel costruttore e mai più toccata, e i puntatori atomici sopravvivono a
+`apvts.replaceState`: verificato che il blocco dopo `setStateInformation` gira e non alloca. Costo residuo:
+vedi R11.
+
+**B5 — ducking.** Chiuso. Livello del solo bus delay (differenza fra render con e senza delay), riverbero
+spento: `dlyDuck = 0` → **-18,57 dB**, `dlyDuck = 9` → **-27,57 dB**. Nove dB esatti, per campione.
+L'inviluppo condiviso **non** introduce accoppiamento udibile: accendendo anche il riverbero (send -40 dB,
+duck 9) il bus delay passa da -27,57 a -27,47 dB, cioè 0,1 dB. È la scelta giusta perché le ballistics dei
+tre bus sono identiche (5 ms / 180 ms fissi): un inviluppo per bus darebbe lo stesso numero. Resta il knee
+non dichiarato del detector (vedi DEBITO).
+
+**B6 — polarità + mix.** Chiuso. Sinusoide a 300 Hz, ingresso -12,04 dBFS, tutti i moduli spenti:
+mix 100 % → -12,04 · mix 50 % → -12,04 · mix 50 % con **polarità invertita** → -12,04 (prima: silenzio).
+E il trim d'ingresso arriva anche al dry: mix 50 % con `inTrim = +12` → **-0,04 dBFS**.
+
+**B7 — latenza.** Chiuso, e i due percorsi sono allineati. Latenza dichiarata **0**. Impulso entrato al
+campione 100: esce al campione 100 sia con `processBlock` sia con `processBlockBypassed`.
+
+**B8 — drive per canale.** Chiuso. Ingresso identico su L e R, `satDrive` 0 → 100 → 0 con rampa:
+differenza L-R **-200 dBFS**, cioè bit-identici.
+
+**B9 — divisione del delay.** Chiuso su tutti e quattro i valori. Impulso, 120 bpm, sync attivo:
+
+| divisione | 1/4 | 1/8 puntato | 1/8 | 1/16 |
+|---|---|---|---|---|
+| eco misurata | 24002 campioni (500,0 ms) | 18002 (375,0) | 12002 (250,0) | 6002 (125,0) |
+
+**B12 — etichette.** Chiuso. `rebuildControls` costruisce una lista parallela `placement {controllo,
+etichetta}` (`PluginEditor.cpp:264-305`) e `resized()` la percorre in ordine
+(`PluginEditor.cpp:525-526`): l'accoppiamento non viene più ricostruito per tipo.
+
+### Chiusi male (4 su 12)
+
+**B1 — la lunghezza del blocco.** La corruzione di memoria è chiusa: Valgrind pulito su blocchi da 1
+campione (4096 di fila), su lunghezze casuali, e su `prepare(64)` seguito da blocchi da 128, 512 e 2048.
+Ma `ChainDsp.cpp:589` risolve il problema **clampando**:
+
+```cpp
+const auto numSamples = juce::jmin (buffer.getNumSamples(), dryScratch.getNumSamples());
+```
+
+quindi un blocco **più lungo** del massimo dichiarato viene processato solo per i primi
+`maximumBlockSize` campioni e **il resto esce crudo**. Misura: `prepareToPlay(48000, 256)`, blocco da 1024,
+`outGain = -24 dB`, catena "sfera ebbasta" completa:
+
+| campioni 0…255 | campioni 256…1023 | differenza coda − ingresso |
+|---|---|---|
+| picco **-57,7 dBFS** | picco **-6,02 dBFS** | **-200 dBFS (bit-identici)** |
+
+Cioè: gate, HPF, room tamer, EQ, compressori, saturazione, de-esser, mix, mandate, output gain e limiter
+**non esistono** su tre quarti del blocco, e quella parte esce 51 dB più forte del resto. Con
+`prepare(64)` il primo campione identico all'ingresso è sempre l'indice 64, per blocchi da 128, 512 e 2048.
+Non è un caso di laboratorio: la Standalone consegna blocchi più lunghi a ogni cambio di device, e un host
+che aumenta il buffer senza ri-preparare fa esattamente questo. Vedi B13.
+
+**B4 — il limiter.** L'ordine è corretto (mandate e output gain prima, limiter ultimo), ma il **ceiling
+continua a non essere un ceiling**, per una ragione diversa da prima: vedi B14. E il **Mix non scala le
+mandate**, come chiedeva la correzione proposta: coda dei soli bus, mix 100 % → **-9,45 dBFS**,
+mix 0 % → **-9,45 dBFS**. Identici. Con la catena bypassata in parallelo i tre bus suonano a pieno livello.
+
+**B10 — parametri finti.** Tre sono ancora **completamente inerti**, misurati con un'istanza nuova per
+ogni render (48 blocchi, doubler acceso), confrontando il minimo e il massimo con il riferimento:
+
+| parametro | a valore minimo | a valore massimo |
+|---|---|---|
+| `revVariant` | **-200 dB (zero esatto)** | **-200 dB** |
+| `dlyVariant` | **-200 dB** | **-200 dB** |
+| `fxVariant`  | **-200 dB** | **-200 dB** |
+
+Scritti da `writePresetToParameters` (`PluginProcessor.cpp:426`, `446`, `466`), mai letti da
+`currentSettings()`. Averli resi non automatizzabili non li rende veri: restano nello stato salvato, nel
+menù a tendina della UI, e `revVariant` continua a promettere *ambience / room / hall / plate* mentre
+`juce::dsp::Reverb` riceve sempre gli stessi tre parametri. Il controllo che dovrebbe prenderli non prova
+niente: vedi "Test deboli" §1.
+
+**B11 — `satTilt`.** È diventato un tilt vero (due shelf speculari a 700 Hz, `ChainDsp.cpp:244-245`,
+-11,8 dB / -16,4 dB di differenza misurata agli estremi), ma le shelf stanno **dentro
+`processSaturation`** (`ChainDsp.cpp:448`), che gira solo `if (settings.satOn)`. Con il modulo SAT spento
+la manopola "Sat Tilt" non fa niente — e non c'è niente nella UI che lo dica. In più la condizione
+`if (settings.satTilt != 0.0f)` fa sì che lo stato delle shelf non avanzi quando il tilt è a 0: passando
+da 0 a un valore diverso il filtro riparte con stato vecchio.
+
+### Non chiusi
+
+Nessuno dei dodici è rimasto aperto com'era. Quattro sono chiusi male e uno (B1) ha sostituito un crash
+con un difetto udibile.
+
+---
+
+## Nuovi rilievi
+
+### BUG
+
+#### B13 — Un blocco più lungo del massimo dichiarato esce crudo
+`plugin/source/ChainDsp.cpp:589`
+
+Riproduzione e misura sopra, in B1. Il `jmin` protegge lo scratch ma non l'audio: nessuno stadio tocca i
+campioni oltre `maximumBlockSize`, e nessuno se ne accorge (niente NaN, niente crash, il self-test passa).
+
+**Perché è sbagliato**: il contratto è `<= maximumBlockSize`, ma quando un host lo viola la reazione giusta
+non è "processo metà blocco". Un burst di segnale non limitato e non gainstage-ato in uscita è peggio di un
+assert.
+
+**Correzione**: ciclare sul blocco a fette da `maximumBlockSize`
+(`for (int offset = 0; offset < n; offset += maxBlock) process(sotto-blocco)`), oppure ridimensionare gli
+scratch in `process` quando serve — allocazione sul thread audio una volta sola, meglio dell'audio crudo —
+e in ogni caso aggiungere un `jassert`. Il controllo deve provare blocchi da `2×` e `4×` il dichiarato e
+verificare che **tutta** la lunghezza sia stata processata, non solo che sia finita.
+
+#### B14 — Il "Ceiling" non è un tetto, e abbassandolo il plugin **alza** l'uscita e clippa
+`plugin/source/ChainDsp.cpp:709-719` · `juce_Limiter.h` (`process`)
+
+`juce::dsp::Limiter` non è un brickwall: sono due compressori in serie, poi
+`outputBlock.multiplyBy (outputVolume)` con `outputVolume = -threshold`, poi
+`FloatVectorOperations::clip (…, -1.0, 1.0)`. Quindi il tetto vero è **sempre 0 dBFS**, e il parametro
+`limCeiling` funziona da *drive*: più lo si abbassa, più il segnale viene spinto contro un clipper duro.
+
+**Misura** (tutti i moduli spenti tranne il limiter, sinusoide 300 Hz a -6 dBFS, a regime):
+
+| ceiling | out 0 dB | out +6 dB | out +12 dB |
+|---|---|---|---|
+| 0 dBFS | -5,06 dBFS | -3,56 | -2,06 |
+| -1 dBFS | -4,06 | -2,56 | **-1,06** |
+| -3 dBFS | -2,06 | -0,56 | **0,00 dBFS, 30 % dei campioni a fondo scala** |
+| -6 dBFS | **0,00 dBFS, 30 %** | **0,00, 46 %** | **0,00, 56 %** |
+
+Con delay a feedback 45 %, riverbero decay 4 s size 100 %, doubler acceso e `outGain +12`, ceiling -1:
+picco d'uscita **0,00 dBFS**.
+
+Il meter non aiuta: nel caso ceiling -6 / out +12, con il 56 % dei campioni incollati a fondo scala,
+`meters.limGr` legge **5,98 dB** — che è il make-up, non la riduzione, e non segnala il clipping.
+
+**Perché è sbagliato**: l'utente vede "Ceiling -1 dBFS" e riceve 0 dBFS. Un preset che abbassa il ceiling
+per "essere prudente" ottiene una distorsione da clipping su metà dei campioni. È il difetto B4 di nuovo,
+per una via diversa: allora il limiter non era ultimo, adesso è ultimo ma non è un limiter.
+
+**Correzione**: non usare `juce::dsp::Limiter` per un ceiling. O si scrive un vero brickwall
+(lookahead + hold + release, con la latenza **dichiarata**, e allora anche `processBlockBypassed` va
+ritardato), oppure si applica un gain di `-limCeiling` prima e `+limCeiling` dopo il `juce::dsp::Limiter`
+lasciandogli soglia 0, e si rinomina il parametro in "Drive". Il controllo deve girare su tutti i valori di
+ceiling, non su uno solo.
+
+#### B15 — `prepareToPlay` non riporta il plugin in uno stato riproducibile: il bounce non è il mixdown
+`plugin/source/ChainDsp.cpp:159-169`
+
+In fondo a `ChainDsp::prepare` c'è `updateCoefficients()`, che legge il membro `settings` — cioè **la
+configurazione della sessione precedente**, non i parametri correnti. I `SmoothedValue` (trim, output, mix,
+drive, tre send) partono quindi dai valori vecchi e ci mettono 20 ms a raggiungere quelli veri, e quella
+rampa cambia la storia di compressori, riverbero e delay per tutto il render.
+
+**Misura** (stesso segnale, stesso prompt, 16 blocchi da 512, confronto sull'ultimo blocco):
+
+| | differenza |
+|---|---|
+| istanza nuova vs istanza nuova | **-200 dB (identici)** |
+| stessa istanza, render 1 vs render 2 | **-50,0 dB** |
+| stessa istanza, render 2 vs render 3 | -80,8 dB |
+| istanza nuova vs stessa istanza al terzo render | -50,2 dB |
+
+**Perché è sbagliato**: bounce offline e ascolto in tempo reale non coincidono, e due bounce di fila non
+coincidono fra loro. È anche la ragione per cui il controllo "nessun parametro finto" non prova niente
+(§1 dei test deboli): il pavimento di rumore della misura sta 50 dB sopra la sua soglia.
+
+**Correzione**: in fondo a `prepare`, azzerare i `SmoothedValue` con `setCurrentAndTargetValue` invece di
+lasciarli ramp-are, e far leggere al processore i parametri veri prima del primo blocco (`settingsDirty`
+è già `true`: basta chiamare `setSettings` con `currentSettings()` da `prepareToPlay`, prima di
+`chain.prepare`, o snappare i valori nel primo blocco). Il controllo: due render identici della stessa
+istanza devono differire di **zero**.
+
+#### B16 — `ChainDsp::reset()` non viene mai chiamata: la coda sopravvive al reset dell'host
+`plugin/source/ChainDsp.cpp:172-205` · `plugin/source/PluginProcessor.h` (manca l'override di `reset()`)
+
+`VocalForgeProcessor` non fa override di `juce::AudioProcessor::reset()`, quindi le 34 righe di
+`ChainDsp::reset()` sono codice morto.
+
+**Misura**: 40 blocchi di sinusoide, poi `processor.reset()`, poi 20 blocchi di **silenzio puro** in
+ingresso → picco d'uscita **-9,1 dBFS**. Con `prepareToPlay` al posto di `reset()`: -200,0 dBFS.
+
+**Perché è sbagliato**: Logic chiama `reset()` quando si sposta la testina, fra un take e l'altro, e
+all'inizio di un ciclo. La coda del riverbero e il contenuto del delay del passaggio precedente rientrano
+sopra il nuovo. In `auval`/`pluginval` il test "reset clears tail" fallisce.
+
+**Correzione**: `void reset() override { chain.reset(); }` in `VocalForgeProcessor`.
+
+#### B17 — La soglia del room tamer dipende dal Q: con Q stretti il notch è sempre acceso
+`plugin/source/ChainDsp.cpp:236` (detector) · `ChainDsp.cpp:331-335` (confronto con la soglia)
+
+Il detector è l'uscita **bandpass** di uno `StateVariableTPTFilter`, che a risonanza ha guadagno `1/R2 = Q`
+(`juce_StateVariableTPTFilter.cpp:113-116`). Il livello di quell'uscita viene confrontato direttamente con
+`roomThresh`, che l'utente legge in dBFS. Quindi la soglia effettiva è `roomThresh - 20·log10(Q)`.
+
+**Misura** (sinusoide a 92 Hz, `roomThresh = -28 dBFS`, `room1Depth = -12 dB`, attenuazione a regime):
+
+| | ingresso -40 dBFS (12 dB **sotto** la soglia) | ingresso -20 dBFS |
+|---|---|---|
+| Q = 1 | 0,00 dB | -7,02 dB |
+| Q = 3 | 0,00 dB | -12,00 dB |
+| Q = 6 | **-2,59 dB** | -12,00 dB |
+| Q = 12 | **-8,61 dB** | -12,00 dB |
+
+A Q = 12 l'errore è 21,6 dB: il notch morde a pieno su una risonanza che l'utente ha detto di ignorare.
+
+**Perché è sbagliato**: `CLAUDE.md` prescrive "Q stretti" **e** "attenuazione dinamica (agiscono solo
+quando la risonanza supera la soglia)". Con i Q stretti che il progetto impone, la parte dinamica non
+esiste: è un notch fisso. E la stessa manopola Q cambia due cose insieme (larghezza del notch e soglia
+d'intervento), il che rende impossibile tarare l'una senza rompere l'altra.
+
+**Correzione**: normalizzare l'uscita del detector dividendo per Q (`detected / resonance`), oppure usare
+un vero band-pass a guadagno unitario a risonanza. Il controllo: stessa attenuazione misurata a Q 1, 3, 6 e
+12 con lo stesso livello d'ingresso.
+
+### RISCHI
+
+#### R9 — Il detector del de-esser è la media sui canali: il materiale panoramizzato è de-essato in ritardo
+`plugin/source/ChainDsp.cpp:369-371`
+
+`detector += std::abs(high[ch])` poi `detector /= used`. Una sibilante identica, soglia -30 dB, range 12 dB:
+al centro → **-4,15 dB** di riduzione; la stessa sibilante **solo su L** → **-1,03 dB**. Tre dB di
+differenza per un'immagine stereo, con un plugin che è dichiaratamente dual-mono
+(`Preset::stereoIsDualMono = true`). Il compressore (`ChainDsp.cpp:404-405`) usa invece il **massimo** sui
+canali: due detector nello stesso file con due convenzioni diverse. Il massimo è quello giusto per un
+de-esser.
+
+#### R10 — Cambio di preset ad audio in corsa: nessun crash, ma un click a ogni FORGE
+`plugin/source/PluginProcessor.cpp:367-492` · `PluginProcessor.cpp:347`
+
+400 `applyPrompt` dal thread messaggi (quattro prompt a rotazione, uno ogni 500 µs) mentre un thread audio
+gira a blocchi da 64: **54169 blocchi, 0 campioni non finiti**. La struttura regge. Ma:
+
+| | salto campione-campione peggiore |
+|---|---|
+| senza cambi di prompt | 0,011 (**-38,8 dBFS**) |
+| con i cambi di prompt | 0,169 (**-15,4 dBFS**) |
+
+23 dB di differenza: è un click udibile a ogni FORGE. La causa è quella già scritta in R4 del primo giro
+(makeup, guadagni EQ, depth dei notch e soglie non smussati), più il fatto che `settingsDirty` viene
+alzato 60+ volte durante la raffica e `processBlock` può fotografare l'insieme **a metà**: soglia nuova con
+makeup vecchio, divisione del delay nuova con tempo vecchio. Il controllo che dovrebbe prenderlo accetta
+salti fino a 0,5 (§4 dei test deboli).
+
+**Correzione**: costruire il `ChainSettings` completo **fuori** dal thread audio, in un doppio buffer
+scambiato con un solo `std::atomic` (così la fotografia è coerente), e smussare makeup/guadagni/depth.
+
+#### R11 — `ParamCache`: ricerca lineare per stringa, 18,9 µs a blocco durante l'automazione
+`plugin/source/PluginProcessor.h:73-79` · `PluginProcessor.cpp:186-193`
+
+Thread-safe lo è: `entries` si costruisce nel costruttore e non viene più toccata, e i puntatori
+`std::atomic<float>*` sopravvivono a `apvts.replaceState` (verificato). Ma `get()` è un `for` su 105
+elementi con `juce::String == const char*`, e `currentSettings()` lo chiama ~110 volte.
+
+**Misura** (blocchi da 64 a 48 kHz, catena completa): 30,5 µs senza automazione, **49,4 µs** con un
+parametro che si muove a ogni blocco → **18,9 µs** per `currentSettings()`, cioè l'1,4 % del budget di un
+blocco da 64 a 48 kHz e il **5,7 %** di un blocco da 32 a 96 kHz. Non è un dropout, ma è cento volte il
+costo di 110 letture atomiche.
+
+**Correzione**: risolvere gli id in indici una volta sola (un `enum` o uno `std::array<std::atomic<float>*,
+N>` indicizzato per posizione), non per stringa.
+
+#### R12 — R1 confermato e peggiorato: il room tamer dipende ancora dalla dimensione del blocco
+Stesso transiente (burst di 92 Hz), stesso preset, blocchi da 32 e da 1024 campioni: differenza
+**-28,5 dBFS** (il primo giro misurava -34,9 su un altro segnale). A regime la differenza è zero — è solo
+sui transienti, cioè esattamente dove si sente. La causa è invariata: detector su tutto il blocco, poi un
+solo aggiornamento dei coefficienti per blocco (`ChainDsp.cpp:326-347`).
+
+#### R13 — Predelay del riverbero e doubler: `setDelay` per blocco senza rampa
+`plugin/source/ChainDsp.cpp:481` · `ChainDsp.cpp:561-563`
+
+Automatizzando `revPredelay` da 0 a 80 ms in un colpo, il salto campione-campione peggiore in uscita è
+0,008 (**-42,0 dBFS**): piccolo perché il segnale è già filtrato e attenuato dal send, ma su una coda
+silenziosa è un click. Il doubler invece è sano: a 48 e 96 kHz con blocchi da 32 campioni, 3000 blocchi,
+uscita finita, picco -7,96 dBFS, componente side -24,99 dBFS identica alle due frequenze di
+campionamento.
+
+#### R14 — Il prompt non ha limite di lunghezza: 500 kB bloccano la UI per 2,4 s
+`plugin/source/PluginEditor.cpp:130` (`promptBox` senza `setInputRestrictions`)
+
+`applyPrompt` con 500 kB di testo impiega **2423 ms** sul thread messaggi (con 100 000 lettere: 78 ms;
+con un prompt normale: 3 ms). Nessun crash, preset valido, ma l'interfaccia si pianta. Un incolla
+accidentale basta.
+
+---
+
+## Controllato e sano
+
+* **Il biquad scritto a mano è stabile.** Nessun ciclo limite, nessun denormale che si accende.
+  Una campana sola a 60 e 100 Hz, Q 4 e 8, guadagno -12 dB, a 48 e 96 kHz: dopo 2,6 s di silenzio in
+  ingresso il picco d'uscita è **sotto -200 dBFS** (residui nell'ordine di 1e-38, cioè già a zero).
+  120 combinazioni casuali di tutti i parametri di EQ, room tamer, air, tilt e drive agli estremi del loro
+  range, a 44,1/48/96 kHz, con 400 blocchi ciascuna: **nessun NaN, nessuna divergenza**. Il clamp di
+  `setPeak`/`setShelf` (`freq` in `[10, sr·0,49]`, `q ≥ 0,05`) regge alle frequenze estreme. La `Q` alta a
+  bassa frequenza non perde precisione in `float` in modo misurabile.
+* **`RulesEngine` regge il testo cattivo.** Tredici casi limite — prompt vuoto, soli spazi, accenti,
+  emoji, cirillico, cinese, un NUL in mezzo alla stringa, sola punteggiatura, 10 000 parentesi aperte,
+  100 000 lettere, 500 kB di testo, numeri assurdi (`1e999`), prompt contraddittori
+  ("molto brillante ma per niente brillante, tantissimo riverbero senza riverbero") — danno tutti un preset
+  valido con 13 moduli, **tutti i parametri finiti e dentro `[0,1]` normalizzato**, audio finito, nessun
+  crash, nessun loop. E la pipeline è deterministica: ricompilando lo stesso prompt dopo un altro prompt,
+  **0 parametri diversi**.
+* **Zero allocazioni sul thread audio** in tutti e otto i percorsi provati (elenco in B3).
+* **`ParamCache` è thread-safe** rispetto a `apvts`: costruita una volta, mai mutata, e i puntatori
+  restano validi dopo `replaceState`.
+* **96 kHz e blocchi da 32 campioni**: catena completa, doubler compreso, nessun NaN, comportamento
+  identico a 48 kHz sui numeri che devono esserlo (room tamer -12,00 dB a 44,1/48/96 kHz).
+* **Il doubler** non collassa e non si sfasa in mono; a 96 kHz si comporta come a 48.
+* **La memoria è pulita**: Valgrind senza un solo errore su blocchi da 1 campione, lunghezze casuali,
+  `prepare` piccolo seguito da blocchi grandi.
+
+---
+
+## Test deboli
+
+Ordine di gravità. Il primo è il caso peggiore: un controllo che **non può fallire**.
+
+1. **`selftest_main.cpp:891` — "nessun parametro finto" non misura niente.**
+   Due difetti sommati: (a) `render()` riusa **una sola istanza** del processore, e
+   `writePresetToParameters` riscrive solo i parametri che il preset contiene, quindi ogni iterazione
+   eredita il residuo del probe precedente; (b) `prepareToPlay` non riporta lo stato a un punto fisso
+   (B15). Risultato misurato: **due render identici di fila differiscono già di -50,0 dB**, cioè il
+   pavimento della misura sta 50 dB sopra la soglia di -100 dB. Prova che è così: `revVariant`,
+   `dlyVariant`, `fxVariant`, `dlyTime`, `dlyFeedback` e `sendsMode` riportano **tutti lo stesso identico
+   numero, -36,2 dB**, e `ds1Range`, `ds1Mode`, `ds2Range`, `ds2Mode`, `tone1Freq`, `tone1Q` e
+   `limRelease` riportano **tutti -50,2 dB**. Numeri uguali fra parametri che non c'entrano niente fra
+   loro: non è la loro differenza.
+   **Come renderlo vero**: un'istanza nuova per ogni render (con l'istanza nuova i tre `*Variant` misurano
+   **-200 dB esatti**, e il controllo li prende); provare **minimo e massimo**, non un flip normalizzato
+   0/1; e prima di tutto misurare il riferimento contro sé stesso e pretendere zero — se non è zero, il
+   test è rotto e va detto.
+
+2. **`selftest_main.cpp:591-601` — blocchi di lunghezza variabile.**
+   `lengths (1, blockSize)` prova solo blocchi **più corti**, e controlla solo `isFinite`. Non copre il
+   caso che oggi è rotto (B13: blocco più lungo → coda cruda), non gira sotto un allocatore di guardia, e
+   non verifica che il blocco sia stato **processato**.
+   **Come renderlo vero**: aggiungere `2×` e `4×` la lunghezza dichiarata; con tutti i moduli spenti
+   pretendere il null-test su **tutta** la lunghezza, e con i moduli accesi pretendere che
+   `|uscita − ingresso| > soglia` su **ogni** campione del blocco; girare l'intero giro sotto Valgrind in CI.
+
+3. **`selftest_main.cpp:697` — "il ceiling tiene".**
+   Un solo valore di ceiling (-1 dB), un solo output gain, e un segnale che si ferma mezzo dB sotto la
+   soglia del controllo (`peakDb <= -0.5f`). Basta spostare il ceiling a -3 o -6 e il plugin sfonda a
+   0 dBFS con il 30-56 % dei campioni a fondo scala (B14), senza che nessuno se ne accorga.
+   **Come renderlo vero**: ciclare su `limCeiling ∈ {0, -1, -3, -6}` con ingressi fino a 12 dB sopra,
+   pretendere `picco ≤ ceiling + 0,1 dB`, e aggiungere un conteggio dei campioni a `|x| ≥ 0,999` che deve
+   essere **zero**.
+
+4. **`selftest_main.cpp:274` — "cambio di prompt in corsa senza click".**
+   `worstJump < 0.5f` su un segnale il cui picco è 0,4: solo un mute istantaneo può fallire. Il salto vero
+   misurato è 0,169 contro 0,011 di riferimento (R10), e passa.
+   **Come renderlo vero**: misurare il salto peggiore **dello stesso render senza cambio di prompt** e
+   pretendere che il cambio non lo peggiori più di 2×.
+
+5. **Il controllo del de-esser (`selftest_main.cpp:604-644`)** guarda due frequenze (200 Hz e 9 kHz) con
+   il modulo da solo e la riduzione attiva. Non prenderebbe una ricomposizione fuori fase (che si vede come
+   un buco **nella zona di incrocio**, non agli estremi) né un modo "wide" che non è wide.
+   **Come renderlo vero**: nove frequenze, e soprattutto la riga **senza riduzione**, pretendendo
+   ±0,1 dB di piattezza — è la misura che chiude B2 davvero, ed è quella che oggi manca.
+
+6. **Il controllo delle allocazioni (`selftest_main.cpp:646-673`)** arma il contatore per 10 blocchi a
+   regime più 1 dopo un movimento di parametro. Gli altri percorsi (primo blocco dopo `prepare`,
+   `setStateInformation`, `applyPrompt`, bypass, mono, 96 kHz con blocchi da 32) non sono coperti: li ho
+   misurati io e sono puliti, ma il test non lo sa e non se ne accorgerebbe se smettessero di esserlo.
+
+7. **Manca del tutto un controllo di riproducibilità.** Nessun test rende due volte lo stesso materiale
+   con la stessa istanza e pretende bit-identità. È il controllo che avrebbe preso B15 — e, di rimbalzo,
+   avrebbe reso onesto il §1.
+
+---
+
+## DEBITO (secondo giro)
+
+* **Numeri DSP scritti a mano in `ChainDsp.cpp`**, contro la regola di `CLAUDE.md` ("un numero DSP
+  hardcoded in un `.cpp` è un bug"): il `×4` del detector di duck (riga 473), le sue ballistics 5/180 ms
+  (465-466), l'attacco/rilascio del de-esser 0,5/40 ms e il rapporto 0,7 (356-357, 375), le ballistics del
+  room tamer 10/120 ms e il `/12` della rampa di soglia (319-320, 336), i 6 dB di isteresi del gate (286),
+  i 700 Hz del tilt (244-245), i 12 kHz dell'air (241), gli 0,7 Hz e gli 0,004 s del doubler (541-542).
+  Nessuno di questi è in `rules.json`, e nessuno è documentato in UI.
+* **Il knee del ducking non è dichiarato.** `duckEnv.process(...) * 4.0f` clampato a 1 significa che il
+  duck arriva al massimo con la voce a ~-13 dBFS e non esiste sotto -40. Misura: voce a -60 dBFS → bus a
+  -12,59 dB sotto; -40 → -12,89; -30 → -13,62; -20 → -15,94; -12 → -21,06; -6 → -21,55. Proporzionale
+  quindi lo è, ma la curva è fissa e dipende dal livello **assoluto** d'ingresso: la stessa catena su una
+  voce registrata 10 dB più piano ducka la metà.
+* **Il meter del limiter legge il make-up, non la riduzione** (`ChainDsp.cpp:715-718`): con ceiling -6 e
+  out +12, e il 56 % dei campioni a fondo scala, riporta 5,98 dB — cioè esattamente `-limCeiling`.
+* Restano tutti i punti di debito del primo giro non toccati: il ternario con i due rami identici
+  (`PluginProcessor.cpp:402-403`), l'overload morto `isBusesLayoutSupported (const BusesProperties&)`
+  (`PluginProcessor.h:21`), `outLufs` che non è LUFS e non lo legge nessuno, `getSample`/`setSample` per
+  campione in tutti gli stadi.
+
+
+---
+
+## Terzo passaggio — correzioni del secondo giro
+
+Rilievi del "Secondo giro" chiusi, ognuno con il controllo che lo prende in `plugin/tools/selftest_main.cpp`:
+
+| rilievo | correzione | controllo |
+|---|---|---|
+| **B14** limiter di JUCE che riamplifica di −threshold (tetto reale 0 dBFS, abbassare il ceiling alzava l'uscita) | limiter proprio: riduzione verso il tetto + clamp di sicurezza sul campione | ceiling a −1/−2/−4/−6: picco sotto il tetto, zero campioni a fondo scala, e abbassarlo abbassa l'uscita |
+| **B1 chiuso male** un blocco più lungo del dichiarato usciva crudo | il blocco si spezza in tratti della dimensione preparata: esce processato per intero | `prepare(256)` + blocco da 1024 |
+| **B4 chiuso male** il MIX non scalava le mandate | le tre mandate sono moltiplicate per il MIX | coda del riverbero a mix 0 % vs 100 % |
+| **B10 chiuso male** `revVariant`/`dlyVariant`/`fxVariant` inerti | tolte dai parametri: erano etichette del preset, non controlli | "nessun parametro finto", ora severo (−80 dB) |
+| **B11 chiuso male** il tilt viveva dentro la saturazione | stadio proprio, attivo anche a SAT spento | bilanciamento 200 Hz / 8 kHz con SAT spento |
+| **B15** due render della stessa istanza differivano di 50 dB | `prepareToPlay` azzera lo stato della catena | due render identici < −120 dBFS di scarto |
+| **B16** `ChainDsp::reset()` mai chiamata | `AudioProcessor::reset()` implementata | coperto dal controllo di riproducibilità |
+| **B17** la soglia del room tamer dipendeva dal Q | il detector bandpass è normalizzato per il suo guadagno Q | sotto soglia non morde né a Q 1 né a Q 12 |
+
+Sul rilievo "il test dei parametri finti non può fallire": era vero, e la causa era **B15**. Con lo stato
+azzerato due render coincidono sotto i −120 dBFS, quindi la soglia è stata portata a −80 dB e il controllo
+adesso distingue davvero. Ha già trovato una cosa: `sendsMode` restava su *logic* da un test precedente e
+spegneva i bus interni — la preparazione dei test ora lo riporta a *internal*.
+
+Controlli headless totali: **126**.

@@ -179,6 +179,10 @@ private:
                             float ratio, float atkMs, float relMs, float knee, float makeupDb,
                             std::atomic<float>& meter);
     void processSaturation (juce::AudioBuffer<float>&, int numSamples);
+    void processTilt (juce::AudioBuffer<float>&, int numSamples);
+    void processLimiter (juce::AudioBuffer<float>&, int numSamples);
+    /** Un tratto lungo al massimo quanto il blocco dichiarato in prepare. */
+    void processChunk (juce::AudioBuffer<float>&, int startSample, int numSamples, double bpm);
     void processSends (const juce::AudioBuffer<float>& source, juce::AudioBuffer<float>& destination,
                        int numSamples, double bpm);
 
@@ -196,7 +200,18 @@ private:
 
     Compressor comp1, comp2;
     DeEsser    deEsser1, deEsser2;
-    juce::dsp::Limiter<float> limiter;
+
+    /*  Limiter proprio.
+
+        juce::dsp::Limiter applica in uscita un make-up di -threshold: il tetto reale resta
+        0 dBFS e ABBASSANDO il ceiling l'uscita SALE. Qui il ceiling è un ceiling. */
+    struct Limiter
+    {
+        float envelope = 1.0f;                 // 1 = nessuna riduzione: partire da 0 muterebbe l'attacco
+        float process (float peak, float ceilingGain, float attackCoeff, float releaseCoeff) noexcept;
+        void reset() noexcept { envelope = 1.0f; }
+    };
+    Limiter limiter;
 
     juce::SmoothedValue<float> trimGain, outputGain, mixAmount, driveAmount,
                                revSendGain, dlySendGain, fxSendGain;
