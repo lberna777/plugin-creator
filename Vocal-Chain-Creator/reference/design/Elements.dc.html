@@ -1,0 +1,180 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #0c0e11; font-family: 'Barlow', system-ui, sans-serif; }
+    a { color: #e0a04a; } a:hover { color: #f0b96a; }
+    .lab { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .12em; }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+    .cell { background: #14171b; border: 1px solid #22262c; border-radius: 7px; padding: 13px; display: flex; flex-direction: column; gap: 9px; }
+    .cap { font-size: 10px; line-height: 1.45; color: #6f7885; }
+  </style>
+</helmet>
+
+<div style="width: 1000px; height: 640px; box-sizing: border-box; padding: 20px 22px; background: linear-gradient(180deg, #1a1d22 0%, #0f1114 100%); color: #d8dde5; display: flex; flex-direction: column; gap: 14px;">
+
+  <div style="display: flex; align-items: baseline; gap: 12px;">
+    <span class="lab" style="font-size: 17px; font-weight: 700; color: #e8edf4; letter-spacing: .2em;">ELEMENTI</span>
+    <span class="lab" style="font-size: 11px; color: #6f7885;">asset mobili — PNG con alpha @2x, uno per elemento</span>
+    <div style="flex-grow: 1;"></div>
+    <span class="lab" style="font-size: 10px; color: #c9552f; border: 1px solid #4a2317; background: rgba(201,85,47,.1); border-radius: 3px; padding: 3px 9px;">MAI COTTI NELLA PIASTRA</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;">
+
+    <div class="cell">
+      <span class="lab" style="font-size: 10.5px; color: {{accent}};">KNOB GRANDE · 92 px</span>
+      <div style="display: flex; gap: 16px; align-items: center; justify-content: center; padding: 6px 0;">
+        <sc-for list="{{bigKnobs}}" as="k" hint-placeholder-count="3">
+          <div style="position: relative; width: 84px; height: 84px;">
+            <svg viewBox="0 0 84 84" style="position: absolute; inset: 0; width: 84px; height: 84px;">
+              <circle cx="42" cy="42" r="35" fill="none" stroke="#0a0c0e" stroke-width="6" stroke-linecap="round" stroke-dasharray="164.9 220" transform="rotate(135 42 42)"></circle>
+              <circle cx="42" cy="42" r="35" fill="none" stroke="{{accent}}" stroke-width="6" stroke-linecap="round" stroke-dasharray="{{k.dash}}" transform="rotate(135 42 42)"></circle>
+            </svg>
+            <div style="position: absolute; left: 13px; top: 13px; width: 58px; height: 58px; border-radius: 50%; background: radial-gradient(circle at 36% 26%, #40474f 0%, #262b32 52%, #14171b 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 4px 9px rgba(0,0,0,.6);"></div>
+            <div style="{{k.pointerStyle}}"></div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="cap">min · ore 12 · max. L'indicatore è nell'asset, la corona di valore è codice.</div>
+    </div>
+
+    <div class="cell">
+      <span class="lab" style="font-size: 10.5px; color: {{accent}};">KNOB PICCOLO · 68 px</span>
+      <div style="display: flex; gap: 14px; align-items: center; justify-content: center; padding: 12px 0;">
+        <sc-for list="{{smallKnobs}}" as="k" hint-placeholder-count="3">
+          <div style="position: relative; width: 60px; height: 60px;">
+            <svg viewBox="0 0 60 60" style="position: absolute; inset: 0; width: 60px; height: 60px;">
+              <circle cx="30" cy="30" r="25" fill="none" stroke="#0a0c0e" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="117.8 160" transform="rotate(135 30 30)"></circle>
+              <circle cx="30" cy="30" r="25" fill="none" stroke="{{accent}}" stroke-width="4.5" stroke-linecap="round" stroke-dasharray="{{k.dash}}" transform="rotate(135 30 30)"></circle>
+            </svg>
+            <div style="position: absolute; left: 10px; top: 10px; width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 38% 28%, #3b424c 0%, #23282f 55%, #15181c 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 3px 6px rgba(0,0,0,.55);"></div>
+            <div style="{{k.pointerStyle}}"></div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="cap">Stessa fusione, corona più sottile: la griglia dei parametri ne mostra sei per riga.</div>
+    </div>
+
+    <div class="cell">
+      <span class="lab" style="font-size: 10.5px; color: {{accent}};">SWITCH · due stati</span>
+      <div style="display: flex; gap: 18px; align-items: center; justify-content: center; padding: 14px 0;">
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 7px;">
+          <div style="width: 54px; height: 26px; border-radius: 13px; background: linear-gradient(180deg, #0e1013 0%, #171b20 100%); border: 1px solid #0a0b0d; box-shadow: inset 0 2px 3px rgba(0,0,0,.7); display: flex; align-items: center; padding: 0 3px;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 36% 28%, #454c56 0%, #2a3037 70%); box-shadow: 0 2px 4px rgba(0,0,0,.6);"></div>
+          </div>
+          <span class="lab" style="font-size: 9px; color: #545c67;">OFF</span>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: center; gap: 7px;">
+          <div style="width: 54px; height: 26px; border-radius: 13px; background: linear-gradient(180deg, #2a3a2e 0%, #1d2a22 100%); border: 1px solid #10170f; box-shadow: inset 0 2px 3px rgba(0,0,0,.6); display: flex; align-items: center; justify-content: flex-end; padding: 0 3px;">
+            <div style="width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 36% 28%, #8ef0a8 0%, #4bb96a 70%); box-shadow: 0 0 9px rgba(111,220,140,.55), 0 2px 4px rgba(0,0,0,.5);"></div>
+          </div>
+          <span class="lab" style="font-size: 9px; color: #6fdc8c;">ON</span>
+        </div>
+      </div>
+      <div class="cap">Un file per stato. Lo stato è dato, non decorazione: lo scrive il preset.</div>
+    </div>
+
+    <div class="cell">
+      <span class="lab" style="font-size: 10.5px; color: {{accent}};">LED · modulo attivo</span>
+      <div style="display: flex; gap: 22px; align-items: center; justify-content: center; padding: 16px 0;">
+        <sc-for list="{{leds}}" as="l" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
+            <span style="{{l.style}}"></span>
+            <span class="lab" style="font-size: 9px; color: #6f7885;">{{l.name}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div class="cap">Verde acceso, spento incassato, ambra per «modificato a mano».</div>
+    </div>
+
+    <div class="cell">
+      <span class="lab" style="font-size: 10.5px; color: {{accent}};">CAP FADER · meter GR</span>
+      <div style="display: flex; flex-direction: column; gap: 11px; padding: 12px 4px;">
+        <sc-for list="{{meters}}" as="m" hint-placeholder-count="3">
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <span class="lab" style="font-size: 9px; color: #6f7885; width: 52px;">{{m.name}}</span>
+            <div style="flex-grow: 1; height: 7px; border-radius: 3.5px; background: #0a0c0e; box-shadow: inset 0 1px 2px rgba(0,0,0,.75);">
+              <div style="{{m.barStyle}}"></div>
+            </div>
+            <span class="num" style="font-size: 9.5px; color: #98a1ad; width: 46px; text-align: right;">{{m.value}}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div class="cap">La scala è codice: cambia con il valore, quindi non sta nella piastra.</div>
+    </div>
+
+    <div class="cell">
+      <span class="lab" style="font-size: 10.5px; color: {{accent}};">CORNICE PROMPT</span>
+      <div style="padding: 14px 0; display: flex; flex-direction: column; gap: 9px;">
+        <div style="background: #0d0f12; border: 1px solid #2b3138; border-radius: 5px; padding: 9px 11px; display: flex; align-items: center; gap: 9px;">
+          <span class="lab" style="font-size: 9.5px; color: {{accent}};">PROMPT</span>
+          <span style="font-size: 12px; color: #5a626d;">il testo è codice, la cornice è asset</span>
+        </div>
+        <div style="display: flex; gap: 7px;">
+          <div style="background: linear-gradient(180deg, {{accent}} 0%, #b87d2e 100%); border: 1px solid #7d5418; border-radius: 5px; padding: 7px 20px; box-shadow: inset 0 1px 0 rgba(255,255,255,.35);">
+            <span class="lab" style="font-size: 12px; font-weight: 700; color: #241703;">FORGE</span>
+          </div>
+          <div style="background: linear-gradient(180deg, #3a4048 0%, #262b32 100%); border: 1px solid #12151a; border-radius: 5px; padding: 7px 20px;">
+            <span class="lab" style="font-size: 12px; font-weight: 700; color: #7c8593;">FORGE</span>
+          </div>
+        </div>
+      </div>
+      <div class="cap">Attivo e a riposo. Dentro non c'è testo cotto: la scritta è un layer separato.</div>
+    </div>
+  </div>
+
+  <div style="background: #101317; border: 1px solid #0a0b0d; border-radius: 7px; padding: 12px 15px; display: flex; gap: 26px; align-items: flex-start;">
+    <div style="flex-grow: 1;">
+      <div class="lab" style="font-size: 10px; color: #6fdc8c; margin-bottom: 5px;">BAKED — la piastra</div>
+      <div style="font-size: 11px; line-height: 1.5; color: #8b94a3;">Fondo, cornici dei pannelli, viti, texture, separatori. Tutto ciò che non cambia mai.</div>
+    </div>
+    <div style="width: 1px; align-self: stretch; background: #22262c;"></div>
+    <div style="flex-grow: 1;">
+      <div class="lab" style="font-size: 10px; color: #c9552f; margin-bottom: 5px;">CODICE — mai baked</div>
+      <div style="font-size: 11px; line-height: 1.5; color: #8b94a3;">Prompt e testo dell'utente, pannello PERCHÉ, meter GR dei cinque stadi, curva EQ, valori numerici, LED, badge «modificato», numero di versione.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e0a04a","options":["#e0a04a","#4aa3e0","#6fdc8c","#c9552f"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#e0a04a';
+    const knob = (circ, cx, top, len, origin) => (norm) => ({
+      dash: (circ * norm).toFixed(1) + ' 400',
+      pointerStyle: 'position: absolute; left: ' + cx + 'px; top: ' + top + 'px; width: 3px; height: ' + len
+        + 'px; border-radius: 1.5px; background: ' + accent + '; transform-origin: 1.5px ' + origin
+        + 'px; transform: rotate(' + (-135 + norm * 270).toFixed(1) + 'deg);'
+    });
+    const big = knob(164.9, 40.5, 17, 18, 25);
+    const small = knob(117.8, 28.5, 12, 13, 18);
+
+    return {
+      accent,
+      bigKnobs: [big(0.02), big(0.5), big(0.98)],
+      smallKnobs: [small(0.02), small(0.5), small(0.98)],
+      leds: [
+        { name: 'ON', style: 'width: 12px; height: 12px; border-radius: 50%; background: #6fdc8c; box-shadow: 0 0 10px rgba(111,220,140,.65); display: inline-block;' },
+        { name: 'OFF', style: 'width: 12px; height: 12px; border-radius: 50%; background: #1b1f24; box-shadow: inset 0 1px 3px rgba(0,0,0,.85); display: inline-block;' },
+        { name: 'MODIFICATO', style: 'width: 12px; height: 12px; border-radius: 50%; background: ' + accent + '; box-shadow: 0 0 10px ' + accent + 'a0; display: inline-block;' }
+      ],
+      meters: [
+        { name: 'GATE', value: '−2.4 dB', barStyle: 'height: 7px; border-radius: 3.5px; background: #4aa3e0; width: 22%;' },
+        { name: 'COMP 1', value: '−3.2 dB', barStyle: 'height: 7px; border-radius: 3.5px; background: #4aa3e0; width: 53%;' },
+        { name: 'LIMIT', value: '−0.6 dB', barStyle: 'height: 7px; border-radius: 3.5px; background: #c9552f; width: 10%;' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

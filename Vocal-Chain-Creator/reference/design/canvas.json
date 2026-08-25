@@ -1,0 +1,14 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "x": 0, "y": 0, "w": 1080, "h": 680, "title": "Finestra principale — catena generata" },
+    { "file": "Empty.dc.html", "x": 1200, "y": 0, "w": 1080, "h": 680, "title": "Finestra vuota — prima di FORGE" },
+    { "file": "Sends.dc.html", "x": 0, "y": 820, "w": 1000, "h": 560, "title": "SENDS — riverbero, delay, doubler" },
+    { "file": "Comp1.dc.html", "x": 1120, "y": 820, "w": 820, "h": 560, "title": "Zoom modulo — Comp 1" },
+    { "file": "Elements.dc.html", "x": 2060, "y": 820, "w": 1000, "h": 640, "title": "Elementi — asset mobili" }
+  ],
+  "annotations": [
+    { "id": "brief", "x": 0, "y": -150, "w": 520, "text": "VOCAL FORGE — interfaccia del plugin.\nPalette e tipografia prese dal codice dell'editor JUCE: piastra #14161a, ambra #e0a04a, LED #6fdc8c.\nI valori sono quelli veri del preset \"voce tipo sfera ebbasta\"." },
+    { "id": "regola-piastra", "x": 2060, "y": 660, "w": 400, "text": "Regola dello scaffold: lo sfondo è una piastra INERTE. Tutto ciò che cambia o si muove è un elemento separato — qui sotto la lista completa." }
+  ],
+  "launch": { "view": "canvas" }
+}
