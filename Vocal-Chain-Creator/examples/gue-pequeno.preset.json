@@ -333,15 +333,15 @@
       "id": "comp1",
       "label": "Compressore 1 (veloce)",
       "enabled": true,
-      "why": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.",
+      "why": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. La soglia è calcolata all'indietro dalla riduzione voluta (4.12 dB al livello di lavoro), non scelta a occhio: così non supera mai i 6 dB di CLAUDE.md.",
       "params": {
         "c1Thresh": {
-          "value": -19.8,
-          "why": "profondità di lavoro secondo densità (0.85) e aggressività richieste",
+          "value": -18.0,
+          "why": "posta dove, con un picco al livello di lavoro (-12.0 dBFS) e rapporto 3.23:1, la riduzione si ferma a 4.12 dB",
           "unit": "dB"
         },
         "c1Ratio": {
-          "value": 3.8,
+          "value": 3.2,
           "why": "rapporto moderato, il livellamento vero lo fa il secondo stadio",
           "unit": ":1"
         },
@@ -351,18 +351,18 @@
           "unit": "ms"
         },
         "c1Rel": {
-          "value": 82,
-          "why": "rilascio legato alla densità richiesta",
+          "value": 92,
+          "why": "rilascio abbastanza lungo da non inseguire le sillabe: è il rilascio corto che fa il suono 'colloso'",
           "unit": "ms"
         },
         "c1Knee": {
-          "value": 5.0,
-          "why": "ginocchio morbido salvo richiesta aggressiva",
+          "value": 7.0,
+          "why": "ginocchio largo: la riduzione entra gradualmente invece di agganciare di colpo",
           "unit": "dB"
         },
         "c1Makeup": {
-          "value": 4.5,
-          "why": "recupero del livello perso, stimato sulla riduzione attesa",
+          "value": 2.7,
+          "why": "recupera il 65% dei 4.12 dB tolti qui: la riduzione è sui picchi, il livello medio ne perde meno, restituire tutto vorrebbe dire alzare",
           "unit": "dB"
         }
       }
@@ -371,15 +371,15 @@
       "id": "comp2",
       "label": "Compressore 2 (lento, glue)",
       "enabled": true,
-      "why": "Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante.",
+      "why": "Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante: qui la riduzione voluta è 2.84 dB, meno del primo stadio, perché i picchi li ha già presi lui.",
       "params": {
         "c2Thresh": {
-          "value": -23.1,
-          "why": "aggancia il corpo della frase, non i picchi",
+          "value": -18.4,
+          "why": "calcolata sul livello che esce davvero dal primo stadio (-13.44 dBFS), non su un'ipotesi: la riduzione si ferma a 2.84 dB",
           "unit": "dB"
         },
         "c2Ratio": {
-          "value": 2.8,
+          "value": 2.3,
           "why": "rapporto basso: colla, non controllo",
           "unit": ":1"
         },
@@ -389,8 +389,8 @@
           "unit": "ms"
         },
         "c2Rel": {
-          "value": 198,
-          "why": "rilascio lungo, segue la frase",
+          "value": 235,
+          "why": "rilascio lungo, segue la frase e non la sillaba",
           "unit": "ms"
         },
         "c2Knee": {
@@ -399,8 +399,8 @@
           "unit": "dB"
         },
         "c2Makeup": {
-          "value": 3.2,
-          "why": "recupero del livello dello stadio lento",
+          "value": 1.8,
+          "why": "recupera il 65% dei 2.84 dB tolti qui, con lo stesso criterio del primo stadio",
           "unit": "dB"
         }
       }
@@ -409,11 +409,11 @@
       "id": "sat",
       "label": "Saturazione",
       "enabled": true,
-      "why": "Dopo la dinamica il livello che la attacca è stabile, quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.",
+      "why": "Dopo la dinamica il livello che la attacca è stabile (-14.44 dBFS di picco stimato), quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.",
       "params": {
         "satDrive": {
-          "value": 45,
-          "why": "quantità di carattere richiesta dal testo (0.55)",
+          "value": 25,
+          "why": "carattere richiesto (0.55), ridotto perché il segnale arriva già compresso (densità 0.85) e riferito al livello che lo attacca: il drive non è più un valore assoluto slegato dal gain",
           "unit": "%"
         },
         "satType": {
@@ -542,12 +542,12 @@
       "params": {
         "outGain": {
           "value": 4.0,
-          "why": "stima iniziale per il target di -10.0 LUFS, poi corretta dal meter",
+          "why": "quanto manca davvero dal livello stimato in uscita dalla catena (-20.44 dBFS) al target di -10.0 LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness",
           "unit": "dB"
         },
         "mix": {
-          "value": 93,
-          "why": "un filo di segnale non compresso quando la densità richiesta è alta",
+          "value": 78,
+          "why": "compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%)",
           "unit": "%"
         }
       }
@@ -569,8 +569,8 @@
         "feedback": 10,
         "hpf": 255,
         "lpf": 3080,
-        "duck_db": 5.5,
-        "send_db": -24.5
+        "duck_db": 7.4,
+        "send_db": -27.5
       },
       "why": "Scelta dal profilo Gue. Carattere vintage: una sola ripetizione corta al posto della coda, tiene la voce avanti e asciutta."
     },
@@ -586,8 +586,8 @@
         "hpf": 272,
         "lpf": 3975,
         "width_pct": 70,
-        "duck_db": 6.4,
-        "send_db": -24.0
+        "duck_db": 7.4,
+        "send_db": -27.0
       },
       "why": "Scelta dal profilo Gue. Timbro vintage richiesto: una camera corta e scura invece di un riverbero moderno, coerente con il carattere a nastro."
     }

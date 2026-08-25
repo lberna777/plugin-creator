@@ -91,41 +91,41 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `ds1Mode` | split  | modo split: agisce solo sulla banda alta, non abbassa tutta la voce |
 
 ## 7. Compressor — Compressore 1 (veloce)
-*Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.*
+*Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. La soglia è calcolata all'indietro dalla riduzione voluta (4.8 dB al livello di lavoro), non scelta a occhio: così non supera mai i 6 dB di CLAUDE.md.*
 
 > circuito FET (Platinum se preferisci più trasparenza)
 
 | parametro | valore | perché |
 |---|---|---|
-| `c1Thresh` | -21.6 dB | profondità di lavoro secondo densità (1) e aggressività richieste |
-| `c1Ratio` | 4.3 :1 | rapporto moderato, il livellamento vero lo fa il secondo stadio |
+| `c1Thresh` | -18.6 dB | posta dove, con un picco al livello di lavoro (-12.0 dBFS) e rapporto 3.6:1, la riduzione si ferma a 4.8 dB |
+| `c1Ratio` | 3.6 :1 | rapporto moderato, il livellamento vero lo fa il secondo stadio |
 | `c1Atk` | 5.6 ms | più aggressivo = attacco più corto = più controllo sui transienti |
-| `c1Rel` | 68 ms | rilascio legato alla densità richiesta |
-| `c1Knee` | 4.4 dB | ginocchio morbido salvo richiesta aggressiva |
-| `c1Makeup` | 5.0 dB | recupero del livello perso, stimato sulla riduzione attesa |
+| `c1Rel` | 78 ms | rilascio abbastanza lungo da non inseguire le sillabe: è il rilascio corto che fa il suono 'colloso' |
+| `c1Knee` | 6.4 dB | ginocchio largo: la riduzione entra gradualmente invece di agganciare di colpo |
+| `c1Makeup` | 3.1 dB | recupera il 65% dei 4.8 dB tolti qui: la riduzione è sui picchi, il livello medio ne perde meno, restituire tutto vorrebbe dire alzare |
 
 ## 8. Compressor — Compressore 2 (lento, glue)
-*Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante.*
+*Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante: qui la riduzione voluta è 3.2 dB, meno del primo stadio, perché i picchi li ha già presi lui.*
 
 > circuito VCA o Opto
 
 | parametro | valore | perché |
 |---|---|---|
-| `c2Thresh` | -24.0 dB | aggancia il corpo della frase, non i picchi |
-| `c2Ratio` | 3.0 :1 | rapporto basso: colla, non controllo |
+| `c2Thresh` | -19.0 dB | calcolata sul livello che esce davvero dal primo stadio (-13.68 dBFS), non su un'ipotesi: la riduzione si ferma a 3.2 dB |
+| `c2Ratio` | 2.5 :1 | rapporto basso: colla, non controllo |
 | `c2Atk` | 25 ms | attacco lento: lascia passare i transienti |
-| `c2Rel` | 180 ms | rilascio lungo, segue la frase |
+| `c2Rel` | 220 ms | rilascio lungo, segue la frase e non la sillaba |
 | `c2Knee` | 8.0 dB | ginocchio morbido: deve essere invisibile |
-| `c2Makeup` | 3.5 dB | recupero del livello dello stadio lento |
+| `c2Makeup` | 2.1 dB | recupera il 65% dei 3.2 dB tolti qui, con lo stesso criterio del primo stadio |
 
 ## 9. Phat FX — Saturazione
-*Dopo la dinamica il livello che la attacca è stabile, quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.*
+*Dopo la dinamica il livello che la attacca è stabile (-14.8 dBFS di picco stimato), quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.*
 
 > solo la sezione Distortion; tape→Tape saturation, tube→Tube, transistor→Transistor
 
 | parametro | valore | perché |
 |---|---|---|
-| `satDrive` | 42 % | quantità di carattere richiesta dal testo (0.5) |
+| `satDrive` | 22 % | carattere richiesto (0.5), ridotto perché il segnale arriva già compresso (densità 1) e riferito al livello che lo attacca: il drive non è più un valore assoluto slegato dal gain |
 | `satType` | transistor  | tipo di armoniche coerente con vintage/aggressività richieste |
 | `satTilt` | 2.8 dB | inclina lo spettro delle armoniche verso il timbro richiesto |
 
@@ -177,8 +177,8 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 
 | parametro | valore | perché |
 |---|---|---|
-| `outGain` | 5.0 dB | stima iniziale per il target di -9.0 LUFS, poi corretta dal meter |
-| `mix` | 86 % | un filo di segnale non compresso quando la densità richiesta è alta |
+| `outGain` | 4.0 dB | quanto manca davvero dal livello stimato in uscita dalla catena (-20.8 dBFS) al target di -9.0 LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness |
+| `mix` | 78 % | compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%) |
 
 ## Mandate (bus aux — bus PARALLELI, mai in serie sulla voce)
 
@@ -192,8 +192,8 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `feedback` | 21 |
 | `hpf` | 350 |
 | `lpf` | 4000 |
-| `duck_db` | 8.0 |
-| `send_db` | -22.8 |
+| `duck_db` | 9.0 |
+| `send_db` | -25.8 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
@@ -208,8 +208,8 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `width_pct` | 91 |
 | `hpf` | 300 |
 | `lpf` | 7000 |
-| `duck_db` | 5.0 |
-| `send_db` | -14.0 |
+| `duck_db` | 8.0 |
+| `send_db` | -19.0 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 
@@ -224,8 +224,8 @@ Target: **-9.0 LUFS**, ceiling **-1.0 dBFS**.
 | `hpf` | 300 |
 | `lpf` | 8425 |
 | `width_pct` | 99 |
-| `duck_db` | 8.0 |
-| `send_db` | -24.9 |
+| `duck_db` | 9.0 |
+| `send_db` | -27.9 |
 
 > Manda la voce a un bus aux e imposta il livello di send a `send_db`. Se il bus ha un compressore in sidechain dalla voce, usa `duck_db` come riduzione.
 

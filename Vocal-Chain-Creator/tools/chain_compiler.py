@@ -316,6 +316,13 @@ def build_context(intent, profile, rules):
     })
     for name in ("spoken", "rapped", "sung", "screamed", "whispered"):
         ctx[f"delivery_is_{name}"] = 1 if intent["delivery"] == name else 0
+    # grandezze DERIVATE: livello di lavoro stimato lungo la catena, riduzioni attese,
+    # recuperi di makeup. Stanno in rules.json come tutto il resto (qui non c'è un numero):
+    # servono perché una soglia e il suo makeup devono parlare della STESSA riduzione,
+    # invece di essere due formule indipendenti che si sommano alla cieca.
+    for name, spec in rules.get("derived", {}).items():
+        ctx[name] = float(evaluate(spec["expr"], ctx))
+
     # variabili solo testuali, per i template delle motivazioni
     ctx_text = {"pitch_class": intent["pitch_class"], "delivery": intent["delivery"], "genre": intent["genre"]}
     return ctx, ctx_text

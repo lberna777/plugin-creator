@@ -44,6 +44,18 @@ namespace
         }
     }
 
+    /*  fillVoiceLike genera ~10 ms per blocco: la modulazione di sillaba (2.5 Hz) non fa in tempo
+        ad arrivare al massimo, quindi il picco reale del blocco è parecchio sotto il valore chiesto.
+        Per misurare il gain staging serve invece un livello d'ingresso ESATTO — qui il blocco viene
+        normalizzato al picco voluto, in dBFS. */
+    void fillAtPeak (juce::AudioBuffer<float>& buffer, double sampleRate, float peakDbfs)
+    {
+        fillVoiceLike (buffer, sampleRate, 1.0f);
+        const auto current = buffer.getMagnitude (0, buffer.getNumSamples());
+        if (current > 0.0f)
+            buffer.applyGain (juce::Decibels::decibelsToGain (peakDbfs) / current);
+    }
+
     bool isFinite (const juce::AudioBuffer<float>& buffer)
     {
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
@@ -225,6 +237,52 @@ int main()
             }
             check (finite && peak <= 1.0f, juce::String (artist) + ": suona pulito, senza clipping",
                    juce::String (juce::Decibels::gainToDecibels (peak), 2) + " dBFS");
+        }
+    }
+
+    // ---- gain staging misurato sul DSP vero, a gain d'ingresso NORMALE e BASSO.
+    //      È la contro-prova di tools/tests/test_gain_staging.py: là si misura sul preset,
+    //      qui si misura la riduzione che i compressori fanno davvero sul segnale.
+    //      Il caso a -18 dBFS è quello lamentato dall'utente ("saturata anche con poco gain"):
+    //      se i makeup fossero slegati dalla riduzione, la catena spingerebbe lo stesso.
+    {
+        const double sampleRate = 48000.0;
+        const float maxStageGrDb = 6.0f;      // CLAUDE.md: nessuno stadio oltre 6 dB
+        const float maxLimiterGrDb = 3.0f;    // CHAIN_ARCHITECTURE: il limiter è un tetto, non un effetto
+
+        struct Level { const char* name; float peakDbfs; };
+        for (auto level : { Level { "-6 dBFS (nominale)", -6.0f }, Level { "-18 dBFS (gain basso)", -18.0f } })
+        {
+            for (auto* artist : { "sfera ebbasta", "shiva", "tony boy", "glockyy", "gue pequeno", "capo plaza" })
+            {
+                prepare (sampleRate);
+                processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+
+                juce::AudioBuffer<float> buffer (2, blockSize);
+                float gr1 = 0.0f, gr2 = 0.0f, grLim = 0.0f, outPeak = 0.0f;
+                for (int i = 0; i < 24; ++i)
+                {
+                    fillAtPeak (buffer, sampleRate, level.peakDbfs);
+                    processor.processBlock (buffer, midi);
+                    if (i < 4) continue;                       // lascia assestare envelope e smoothing
+                    gr1    = juce::jmax (gr1,    processor.getMeters().comp1Gr.load());
+                    gr2    = juce::jmax (gr2,    processor.getMeters().comp2Gr.load());
+                    grLim  = juce::jmax (grLim,  processor.getMeters().limGr.load());
+                    outPeak = juce::jmax (outPeak, buffer.getMagnitude (0, blockSize));
+                }
+
+                const juce::String detail ("comp1 " + juce::String (gr1, 2) + " dB, comp2 "
+                                           + juce::String (gr2, 2) + " dB, limiter " + juce::String (grLim, 2)
+                                           + " dB, picco " + juce::String (juce::Decibels::gainToDecibels (outPeak), 1)
+                                           + " dBFS");
+                check (gr1 <= maxStageGrDb && gr2 <= maxStageGrDb,
+                       juce::String (artist) + " @ " + level.name + ": nessuno stadio oltre 6 dB", detail);
+                check (grLim <= maxLimiterGrDb,
+                       juce::String (artist) + " @ " + level.name + ": il limiter resta un tetto", detail);
+                check (outPeak <= 1.0f,
+                       juce::String (artist) + " @ " + level.name + ": nessuno stadio clippa", detail);
+                std::cout << "        " << detail << std::endl;
+            }
         }
     }
 

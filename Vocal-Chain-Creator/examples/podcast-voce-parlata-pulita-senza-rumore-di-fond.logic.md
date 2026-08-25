@@ -87,32 +87,32 @@ Target: **-16.0 LUFS**, ceiling **-1.0 dBFS**.
 | `ds1Mode` | split  | modo split: agisce solo sulla banda alta, non abbassa tutta la voce |
 
 ## 7. Compressor — Compressore 1 (veloce)
-*Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.*
+*Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. La soglia è calcolata all'indietro dalla riduzione voluta (4.05 dB al livello di lavoro), non scelta a occhio: così non supera mai i 6 dB di CLAUDE.md.*
 
 > circuito FET (Platinum se preferisci più trasparenza)
 
 | parametro | valore | perché |
 |---|---|---|
-| `c1Thresh` | -19.6 dB | profondità di lavoro secondo densità (0.95) e aggressività richieste |
-| `c1Ratio` | 3.4 :1 | rapporto moderato, il livellamento vero lo fa il secondo stadio |
+| `c1Thresh` | -18.1 dB | posta dove, con un picco al livello di lavoro (-12.0 dBFS) e rapporto 2.95:1, la riduzione si ferma a 4.05 dB |
+| `c1Ratio` | 3.0 :1 | rapporto moderato, il livellamento vero lo fa il secondo stadio |
 | `c1Atk` | 8.0 ms | più aggressivo = attacco più corto = più controllo sui transienti |
-| `c1Rel` | 83 ms | rilascio legato alla densità richiesta |
-| `c1Knee` | 6.0 dB | ginocchio morbido salvo richiesta aggressiva |
-| `c1Makeup` | 4.8 dB | recupero del livello perso, stimato sulla riduzione attesa |
+| `c1Rel` | 93 ms | rilascio abbastanza lungo da non inseguire le sillabe: è il rilascio corto che fa il suono 'colloso' |
+| `c1Knee` | 8.0 dB | ginocchio largo: la riduzione entra gradualmente invece di agganciare di colpo |
+| `c1Makeup` | 2.6 dB | recupera il 65% dei 4.05 dB tolti qui: la riduzione è sui picchi, il livello medio ne perde meno, restituire tutto vorrebbe dire alzare |
 
 ## 8. Compressor — Compressore 2 (lento, glue)
-*Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante.*
+*Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante: qui la riduzione voluta è 3.08 dB, meno del primo stadio, perché i picchi li ha già presi lui.*
 
 > circuito VCA o Opto
 
 | parametro | valore | perché |
 |---|---|---|
-| `c2Thresh` | -23.7 dB | aggancia il corpo della frase, non i picchi |
-| `c2Ratio` | 2.9 :1 | rapporto basso: colla, non controllo |
+| `c2Thresh` | -18.6 dB | calcolata sul livello che esce davvero dal primo stadio (-13.42 dBFS), non su un'ipotesi: la riduzione si ferma a 3.08 dB |
+| `c2Ratio` | 2.4 :1 | rapporto basso: colla, non controllo |
 | `c2Atk` | 26 ms | attacco lento: lascia passare i transienti |
-| `c2Rel` | 186 ms | rilascio lungo, segue la frase |
+| `c2Rel` | 225 ms | rilascio lungo, segue la frase e non la sillaba |
 | `c2Knee` | 8.0 dB | ginocchio morbido: deve essere invisibile |
-| `c2Makeup` | 3.4 dB | recupero del livello dello stadio lento |
+| `c2Makeup` | 2.0 dB | recupera il 65% dei 3.08 dB tolti qui, con lo stesso criterio del primo stadio |
 
 ## 9. Channel EQ — EQ tonale
 *Qui si aggiunge, su un segnale già pulito e già denso: i boost non riportano su fango o rumore.*
@@ -162,8 +162,8 @@ Target: **-16.0 LUFS**, ceiling **-1.0 dBFS**.
 
 | parametro | valore | perché |
 |---|---|---|
-| `outGain` | -2.0 dB | stima iniziale per il target di -16.0 LUFS, poi corretta dal meter |
-| `mix` | 89 % | un filo di segnale non compresso quando la densità richiesta è alta |
+| `outGain` | 4.0 dB | quanto manca davvero dal livello stimato in uscita dalla catena (-20.5 dBFS) al target di -16.0 LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness |
+| `mix` | 78 % | compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%) |
 
 ## Avvisi
 

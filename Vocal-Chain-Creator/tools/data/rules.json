@@ -206,6 +206,27 @@
     }
   },
 
+  "derived_notes": "Grandezze intermedie calcolate PRIMA della catena e disponibili come variabili nelle espressioni. Esistono per un motivo solo: soglia, rapporto e makeup di uno stesso compressore devono parlare della STESSA riduzione. Prima erano tre formule indipendenti che si sommavano alla cieca (makeup che cresceva con la densità anche quando il compressore non riduceva niente), ed è da lì che nasceva il suono colloso e saturato anche a gain d'ingresso basso. L'ordine di valutazione conta: ogni voce può usare le precedenti.",
+
+  "derived": {
+    "work_peak":  { "expr": "target_peak", "note": "livello di lavoro dei PICCHI dopo l'input trim: è il riferimento in dB di tutte le soglie che seguono." },
+    "work_rms":   { "expr": "target_peak - 6", "note": "livello medio corrispondente (ROOM_MIC_PROFILE: picchi -12 dBFS, medio ~-18 dBFS)." },
+
+    "gr1_target": { "expr": "clamp(1.2 + 3.0 * density + 1.5 * pos(aggression), 0, 5.0)", "note": "riduzione VOLUTA dal primo stadio sui picchi al livello di lavoro. Tetto 5.0: CLAUDE.md dice mai oltre 6 dB per stadio, e questo lascia margine all'arrotondamento di soglia e rapporto." },
+    "c1_ratio":   { "expr": "clamp(2.0 + 1.5 * pos(aggression) + 1.0 * density, 1.2, 6.0)", "note": "rapporto del primo stadio: moderato, il livellamento vero lo fa il secondo." },
+    "c1_makeup":  { "expr": "clamp(0.65 * gr1_target, 0, 6)", "note": "recupero PARZIALE della riduzione reale: la riduzione è misurata sui picchi, il livello medio ne perde meno, quindi restituire tutto vorrebbe dire alzare." },
+
+    "c2_in":      { "expr": "work_peak - gr1_target + c1_makeup", "note": "picco che arriva al secondo stadio: uscita misurata del primo, non una nuova ipotesi." },
+    "gr2_target": { "expr": "clamp(0.8 + 2.4 * density, 0, 3.5) * (density > 0.15)", "note": "riduzione voluta dallo stadio lento. Più bassa del primo: qui si incolla la frase, non si controllano i picchi. Zero se lo stadio è spento." },
+    "c2_ratio":   { "expr": "clamp(1.4 + 1.1 * density, 1.2, 4.0)", "note": "rapporto basso: colla, non controllo." },
+    "c2_makeup":  { "expr": "clamp(0.65 * gr2_target, 0, 6)", "note": "stesso criterio del primo stadio." },
+
+    "sat_in":     { "expr": "c2_in - gr2_target + c2_makeup", "note": "picco stimato che arriva alla saturazione, dopo i due compressori." },
+    "sat_excess": { "expr": "sat_in - work_peak", "note": "di quanto la catena ha alzato (o abbassato) il segnale rispetto al livello di lavoro. Se è positivo la saturazione riceve un segnale più caldo del previsto e il drive va ridotto: è questo il legame che mancava fra saturazione e livello." },
+
+    "chain_out_rms": { "expr": "work_rms + (c1_makeup - gr1_target) + (c2_makeup - gr2_target)", "note": "livello medio stimato in uscita dalla catena, PRIMA dell'output: da qui si calcola quanto manca al target di loudness." }
+  },
+
   "chain": [
     {
       "id": "trim",
@@ -294,39 +315,39 @@
       "id": "comp1",
       "label": "Compressore 1 (veloce)",
       "enabled": "true",
-      "why_on": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.",
+      "why_on": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. La soglia è calcolata all'indietro dalla riduzione voluta ({gr1_target} dB al livello di lavoro), non scelta a occhio: così non supera mai i 6 dB di CLAUDE.md.",
       "params": {
-        "c1Thresh": { "expr": "clamp(-12 - 8 * density - 4 * pos(aggression), -40, 0)", "round": 1, "unit": "dB", "why": "profondità di lavoro secondo densità ({density}) e aggressività richieste" },
-        "c1Ratio":  { "expr": "clamp(2.0 + 2.0 * pos(aggression) + 1.5 * density, 1, 10)", "round": 1, "unit": ":1", "why": "rapporto moderato, il livellamento vero lo fa il secondo stadio" },
+        "c1Thresh": { "expr": "clamp(work_peak - gr1_target / (1 - 1 / c1_ratio), -40, 0)", "round": 1, "unit": "dB", "why": "posta dove, con un picco al livello di lavoro ({work_peak} dBFS) e rapporto {c1_ratio}:1, la riduzione si ferma a {gr1_target} dB" },
+        "c1Ratio":  { "expr": "c1_ratio", "round": 1, "unit": ":1", "why": "rapporto moderato, il livellamento vero lo fa il secondo stadio" },
         "c1Atk":    { "expr": "clamp(8 - 6 * pos(aggression), 0.1, 30)", "round": 2, "unit": "ms", "why": "più aggressivo = attacco più corto = più controllo sui transienti" },
-        "c1Rel":    { "expr": "clamp(80 - 30 * pos(aggression) + 60 * (1 - density), 10, 300)", "round": 0, "unit": "ms", "why": "rilascio legato alla densità richiesta" },
-        "c1Knee":   { "expr": "clamp(6 - 4 * pos(aggression), 0, 12)", "round": 1, "unit": "dB", "why": "ginocchio morbido salvo richiesta aggressiva" },
-        "c1Makeup": { "expr": "clamp(2.0 + 3.0 * density, 0, 18)", "round": 1, "unit": "dB", "why": "recupero del livello perso, stimato sulla riduzione attesa" }
+        "c1Rel":    { "expr": "clamp(90 - 30 * pos(aggression) + 60 * (1 - density), 10, 300)", "round": 0, "unit": "ms", "why": "rilascio abbastanza lungo da non inseguire le sillabe: è il rilascio corto che fa il suono 'colloso'" },
+        "c1Knee":   { "expr": "clamp(8 - 4 * pos(aggression), 0, 12)", "round": 1, "unit": "dB", "why": "ginocchio largo: la riduzione entra gradualmente invece di agganciare di colpo" },
+        "c1Makeup": { "expr": "c1_makeup", "round": 1, "unit": "dB", "why": "recupera il 65% dei {gr1_target} dB tolti qui: la riduzione è sui picchi, il livello medio ne perde meno, restituire tutto vorrebbe dire alzare" }
       }
     },
     {
       "id": "comp2",
       "label": "Compressore 2 (lento, glue)",
       "enabled": "density > 0.15",
-      "why_on": "Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante.",
+      "why_on": "Livella la frase e dà densità. Due stadi leggeri pompano meno di uno pesante: qui la riduzione voluta è {gr2_target} dB, meno del primo stadio, perché i picchi li ha già presi lui.",
       "why_off": "È stata chiesta una voce dinamica: il secondo stadio la schiaccerebbe.",
       "params": {
-        "c2Thresh": { "expr": "clamp(-18 - 6 * density, -40, 0)", "round": 1, "unit": "dB", "why": "aggancia il corpo della frase, non i picchi" },
-        "c2Ratio":  { "expr": "clamp(1.5 + 1.5 * density, 1, 6)", "round": 1, "unit": ":1", "why": "rapporto basso: colla, non controllo" },
+        "c2Thresh": { "expr": "clamp(c2_in - gr2_target / (1 - 1 / c2_ratio), -40, 0)", "round": 1, "unit": "dB", "why": "calcolata sul livello che esce davvero dal primo stadio ({c2_in} dBFS), non su un'ipotesi: la riduzione si ferma a {gr2_target} dB" },
+        "c2Ratio":  { "expr": "c2_ratio", "round": 1, "unit": ":1", "why": "rapporto basso: colla, non controllo" },
         "c2Atk":    { "expr": "clamp(25 + 25 * (1 - density), 5, 100)", "round": 0, "unit": "ms", "why": "attacco lento: lascia passare i transienti" },
-        "c2Rel":    { "expr": "clamp(300 - 120 * density, 50, 1000)", "round": 0, "unit": "ms", "why": "rilascio lungo, segue la frase" },
+        "c2Rel":    { "expr": "clamp(320 - 100 * density, 50, 1000)", "round": 0, "unit": "ms", "why": "rilascio lungo, segue la frase e non la sillaba" },
         "c2Knee":   { "expr": "8", "round": 1, "unit": "dB", "why": "ginocchio morbido: deve essere invisibile" },
-        "c2Makeup": { "expr": "clamp(1.5 + 2.0 * density, 0, 18)", "round": 1, "unit": "dB", "why": "recupero del livello dello stadio lento" }
+        "c2Makeup": { "expr": "c2_makeup", "round": 1, "unit": "dB", "why": "recupera il 65% dei {gr2_target} dB tolti qui, con lo stesso criterio del primo stadio" }
       }
     },
     {
       "id": "sat",
       "label": "Saturazione",
       "enabled": "character > 0.1",
-      "why_on": "Dopo la dinamica il livello che la attacca è stabile, quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.",
+      "why_on": "Dopo la dinamica il livello che la attacca è stabile ({sat_in} dBFS di picco stimato), quindi la quantità di armoniche è prevedibile. Il preamp della Scarlett è pulito: il carattere lo mette qui.",
       "why_off": "È stata chiesta una voce trasparente: nessuna colorazione.",
       "params": {
-        "satDrive": { "expr": "clamp(15 + 55 * character, 0, 100)", "round": 0, "unit": "%", "why": "quantità di carattere richiesta dal testo ({character})" },
+        "satDrive": { "expr": "clamp((12 + 38 * character) * (1 - 0.3 * density) - 2.5 * pos(sat_excess), 0, 55)", "round": 0, "unit": "%", "why": "carattere richiesto ({character}), ridotto perché il segnale arriva già compresso (densità {density}) e riferito al livello che lo attacca: il drive non è più un valore assoluto slegato dal gain" },
         "satType":  { "choices": [ { "when": "vintage > 0.5", "value": "tape" }, { "when": "aggression > 0.3 and character > 0.4", "value": "transistor" }, { "value": "tube" } ], "why": "tipo di armoniche coerente con vintage/aggressività richieste" },
         "satTilt":  { "expr": "clamp(3.0 * brightness, -6, 6)", "round": 1, "unit": "dB", "why": "inclina lo spettro delle armoniche verso il timbro richiesto" }
       }
@@ -379,8 +400,8 @@
       "enabled": "true",
       "why_on": "Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
       "params": {
-        "outGain": { "expr": "clamp(loudness_target + 14, -24, 12)", "round": 1, "unit": "dB", "why": "stima iniziale per il target di {loudness_target} LUFS, poi corretta dal meter" },
-        "mix":     { "expr": "clamp(100 - 45 * pos(density - 0.7), 60, 100)", "round": 0, "unit": "%", "why": "un filo di segnale non compresso quando la densità richiesta è alta" }
+        "outGain": { "expr": "clamp(loudness_target - chain_out_rms, -24, 4)", "round": 1, "unit": "dB", "why": "quanto manca davvero dal livello stimato in uscita dalla catena ({chain_out_rms} dBFS) al target di {loudness_target} LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness" },
+        "mix":     { "expr": "clamp(100 - 45 * pos(density - 0.3), 78, 100)", "round": 0, "unit": "%", "why": "compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%)" }
       }
     }
   ],
@@ -413,8 +434,8 @@
         "width_pct":     { "expr": "clamp(60 + 35 * pos(brightness) - 25 * pos(intimacy), 0, 100)", "round": 0, "unit": "%" },
         "hpf":           { "expr": "clamp(300 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":           { "expr": "clamp(7000 - 2000 * neg(brightness) - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
-        "duck_db":       { "expr": "clamp(2 + 3 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":       { "expr": "clamp(-14 - 6 * neg(density - 0.6), -30, -6)", "round": 1, "unit": "dB" }
+        "duck_db":       { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":       { "expr": "clamp(-19 - 6 * neg(density - 0.6), -30, -6)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -442,8 +463,8 @@
         "hpf":        { "expr": "clamp(400 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(5000 - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
         "width_pct":  { "expr": "60", "round": 0, "unit": "%" },
-        "duck_db":    { "expr": "clamp(3 + 3 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-30 + 4 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-32 + 4 * neg(intimacy), -40, -6)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -461,8 +482,8 @@
         "hpf":        { "expr": "clamp(320 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(4500 - 1500 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
         "width_pct":  { "expr": "clamp(70 + 20 * neg(intimacy), 0, 100)", "round": 0, "unit": "%" },
-        "duck_db":    { "expr": "clamp(3 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-24 + 5 * neg(intimacy) - 4 * pos(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-27 + 5 * neg(intimacy) - 4 * pos(intimacy), -40, -6)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -480,8 +501,8 @@
         "hpf":        { "expr": "clamp(350 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(6500 - 2000 * vintage, 2000, 12000)", "round": 0, "unit": "Hz" },
         "width_pct":  { "expr": "100", "round": 0, "unit": "%" },
-        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-26 + 6 * pos(intimacy), -40, -6)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(5 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-28 + 6 * pos(intimacy), -40, -6)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -499,8 +520,8 @@
         "hpf":        { "expr": "clamp(300 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(7000 - 2000 * vintage + 1500 * pos(brightness), 2000, 12000)", "round": 0, "unit": "Hz" },
         "width_pct":  { "expr": "clamp(85 + 15 * pos(brightness), 0, 100)", "round": 0, "unit": "%" },
-        "duck_db":    { "expr": "clamp(3 + 5 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-24 + 6 * neg(intimacy) - 3 * pos(density - 0.7), -40, -6)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(4 + 5 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-27 + 6 * neg(intimacy) - 3 * pos(density - 0.7), -40, -6)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -517,8 +538,8 @@
         "feedback":   { "expr": "clamp(8 + 7 * pos(aggression), 0, 45)", "round": 0, "unit": "%" },
         "hpf":        { "expr": "clamp(300 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(3500 - 1200 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
-        "duck_db":    { "expr": "clamp(3 + 3 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-26 + 6 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-29 + 6 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -535,8 +556,8 @@
         "feedback":   { "expr": "clamp(15 + 15 * pos(aggression), 0, 45)", "round": 0, "unit": "%" },
         "hpf":        { "expr": "clamp(350 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(4000 - 1500 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
-        "duck_db":    { "expr": "clamp(4 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-26 + 8 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(5 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-29 + 8 * pos(aggression), -40, -8)", "round": 1, "unit": "dB" }
       }
     },
     {
@@ -553,8 +574,8 @@
         "feedback":   { "expr": "clamp(20 + 10 * pos(brightness), 0, 45)", "round": 0, "unit": "%" },
         "hpf":        { "expr": "clamp(400 * pitch_factor, 100, 900)", "round": 0, "unit": "Hz" },
         "lpf":        { "expr": "clamp(5000 - 1500 * vintage, 1500, 8000)", "round": 0, "unit": "Hz" },
-        "duck_db":    { "expr": "clamp(5 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
-        "send_db":    { "expr": "clamp(-28 + 6 * pos(brightness), -40, -8)", "round": 1, "unit": "dB" }
+        "duck_db":    { "expr": "clamp(6 + 4 * density, 0, 9)", "round": 1, "unit": "dB" },
+        "send_db":    { "expr": "clamp(-31 + 6 * pos(brightness), -40, -8)", "round": 1, "unit": "dB" }
       }
     }
   ],

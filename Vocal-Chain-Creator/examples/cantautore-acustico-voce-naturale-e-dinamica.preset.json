@@ -324,11 +324,11 @@
       "id": "comp1",
       "label": "Compressore 1 (veloce)",
       "enabled": true,
-      "why": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.",
+      "why": "Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. La soglia è calcolata all'indietro dalla riduzione voluta (1.2 dB al livello di lavoro), non scelta a occhio: così non supera mai i 6 dB di CLAUDE.md.",
       "params": {
         "c1Thresh": {
-          "value": -12.0,
-          "why": "profondità di lavoro secondo densità (0.0) e aggressività richieste",
+          "value": -14.4,
+          "why": "posta dove, con un picco al livello di lavoro (-12.0 dBFS) e rapporto 2.0:1, la riduzione si ferma a 1.2 dB",
           "unit": "dB"
         },
         "c1Ratio": {
@@ -342,18 +342,18 @@
           "unit": "ms"
         },
         "c1Rel": {
-          "value": 140,
-          "why": "rilascio legato alla densità richiesta",
+          "value": 150,
+          "why": "rilascio abbastanza lungo da non inseguire le sillabe: è il rilascio corto che fa il suono 'colloso'",
           "unit": "ms"
         },
         "c1Knee": {
-          "value": 6.0,
-          "why": "ginocchio morbido salvo richiesta aggressiva",
+          "value": 8.0,
+          "why": "ginocchio largo: la riduzione entra gradualmente invece di agganciare di colpo",
           "unit": "dB"
         },
         "c1Makeup": {
-          "value": 2.0,
-          "why": "recupero del livello perso, stimato sulla riduzione attesa",
+          "value": 0.8,
+          "why": "recupera il 65% dei 1.2 dB tolti qui: la riduzione è sui picchi, il livello medio ne perde meno, restituire tutto vorrebbe dire alzare",
           "unit": "dB"
         }
       }
@@ -466,13 +466,13 @@
       "why": "Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
       "params": {
         "outGain": {
-          "value": 0.0,
-          "why": "stima iniziale per il target di -14.0 LUFS, poi corretta dal meter",
+          "value": 4.0,
+          "why": "quanto manca davvero dal livello stimato in uscita dalla catena (-18.42 dBFS) al target di -14.0 LUFS, con tetto a 4 dB: questo stadio sta DOPO il limiter, quindi oltre non è più gain staging ma solo alzare il fader — e il tetto di true peak non reggerebbe. Il resto lo fa il meter di loudness",
           "unit": "dB"
         },
         "mix": {
           "value": 100,
-          "why": "un filo di segnale non compresso quando la densità richiesta è alta",
+          "why": "compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%)",
           "unit": "%"
         }
       }
@@ -495,8 +495,8 @@
         "hpf": 350,
         "lpf": 6500,
         "width_pct": 100,
-        "duck_db": 4.0,
-        "send_db": -23.6
+        "duck_db": 5.0,
+        "send_db": -25.6
       },
       "why": "Esecuzione intima o poco compressa: una coda lunga e filtrata da' respiro senza dover schiacciare la voce."
     }

@@ -575,6 +575,17 @@ RulesEngine::Context RulesEngine::buildContext (const Intent& intent, const juce
     for (auto* name : { "spoken", "rapped", "sung", "screamed", "whispered" })
         ctx.vars[juce::String ("delivery_is_") + name] = (intent.delivery == name) ? 1.0 : 0.0;
 
+    // grandezze DERIVATE (stesso ordine e stesse espressioni di chain_compiler.py):
+    // livello di lavoro stimato, riduzioni attese, recuperi di makeup. Le espressioni
+    // stanno in rules.json: qui non c'è nessun numero di dominio.
+    if (auto* derived = rules.getProperty ("derived", {}).getDynamicObject())
+        for (auto& prop : derived->getProperties())
+        {
+            const auto name = prop.name.toString();
+            ctx.vars[name] = expr::evaluate (prop.value.getProperty ("expr", {}).toString(), ctx.vars);
+            ctx.floatVars.insert (name);            // in Python passano tutte da float()
+        }
+
     ctx.text["pitch_class"] = intent.pitchClass;
     ctx.text["delivery"]    = intent.delivery;
     ctx.text["genre"]       = intent.genre;
