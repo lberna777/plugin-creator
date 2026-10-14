@@ -2,7 +2,7 @@ name: C-60 macOS (AU + VST3)
 
 on:
   push:
-    branches: [c60-cassette]
+    branches: [main]
     paths: ['Plugin-Creator/C60/**', 'Plugin-Creator/tools/**', '.github/workflows/c60-macos.yml']
   workflow_dispatch:
 
