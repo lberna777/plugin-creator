@@ -64,7 +64,7 @@ public:
         const int64_t numBlocks = (len + blockLen - 1) / blockLen;
         blockToPool.assign ((size_t) numBlocks, -1);
         poolCapacity = (int) std::ceil (undoSeconds * fs / blockLen);
-        pool.assign ((size_t) poolCapacity * blockLen * numCh * 3, 0);
+        pool.assign ((size_t) poolCapacity * (size_t) blockLen * (size_t) numCh * 3, 0);
         dirtyBlocks.assign ((size_t) poolCapacity, 0);
         poolUsed = 0;
         undoAvailable.store (false);
@@ -74,7 +74,7 @@ public:
         {
             numCells = newCells;
             passMap = std::make_unique<std::atomic<uint16_t>[]> ((size_t) numCells);
-            for (int i = 0; i < numCells; ++i) passMap[i].store (0);
+            for (int i = 0; i < numCells; ++i) passMap[(size_t) i].store (0);
             passMapUndo.assign ((size_t) numCells, 0);
         }
     }
@@ -116,7 +116,7 @@ public:
     {
         for (int i = 0; i < poolUsed; ++i) blockToPool[(size_t) dirtyBlocks[(size_t) i]] = -1;
         poolUsed = 0;
-        for (int i = 0; i < numCells; ++i) passMapUndo[(size_t) i] = passMap[i].load (std::memory_order_relaxed);
+        for (int i = 0; i < numCells; ++i) passMapUndo[(size_t) i] = passMap[(size_t) i].load (std::memory_order_relaxed);
         usedBeforePass = usedEnd.load();
         uint16_t next = (uint16_t) (passId.load() + 1);
         if (next == 0) next = 1;
@@ -161,11 +161,11 @@ public:
             const int b = dirtyBlocks[(size_t) i];
             const int64_t start = (int64_t) b * blockLen;
             const int64_t n = std::min ((int64_t) blockLen, len - start);
-            std::memcpy (at (start, 0), &pool[(size_t) i * blockLen * numCh * 3], (size_t) (n * numCh * 3));
+            std::memcpy (at (start, 0), &pool[(size_t) i * (size_t) blockLen * (size_t) numCh * 3], (size_t) (n * numCh * 3));
             blockToPool[(size_t) b] = -1;
         }
         poolUsed = 0;
-        for (int i = 0; i < numCells; ++i) passMap[i].store (passMapUndo[(size_t) i]);
+        for (int i = 0; i < numCells; ++i) passMap[(size_t) i].store (passMapUndo[(size_t) i]);
         usedEnd.store (usedBeforePass);
         undoAvailable.store (false);
         return true;
@@ -174,7 +174,7 @@ public:
     void eraseAll()
     {
         std::fill (data.begin(), data.end(), (uint8_t) 0);
-        for (int i = 0; i < numCells; ++i) passMap[i].store (0);
+        for (int i = 0; i < numCells; ++i) passMap[(size_t) i].store (0);
         for (auto& b : blockToPool) b = -1;
         poolUsed = 0;
         usedEnd.store (0);
@@ -201,7 +201,7 @@ public:
         uint16_t maxId = 0;
         for (int i = 0; i < std::min (cellsCount, numCells); ++i)
         {
-            passMap[i].store (cellsMap[i]);
+            passMap[(size_t) i].store (cellsMap[i]);
             maxId = std::max (maxId, cellsMap[i]);
         }
         passId.store (maxId);
@@ -233,7 +233,7 @@ private:
         if (poolUsed >= poolCapacity) { undoAvailable.store (false, std::memory_order_relaxed); return; }
         const int64_t start = b * blockLen;
         const int64_t n = std::min ((int64_t) blockLen, len - start);
-        std::memcpy (&pool[(size_t) poolUsed * blockLen * numCh * 3], at (start, 0), (size_t) (n * numCh * 3));
+        std::memcpy (&pool[(size_t) poolUsed * (size_t) blockLen * (size_t) numCh * 3], at (start, 0), (size_t) (n * numCh * 3));
         blockToPool[(size_t) b] = poolUsed;
         dirtyBlocks[(size_t) poolUsed] = (int) b;
         ++poolUsed;

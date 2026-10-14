@@ -178,7 +178,7 @@ int main()
     for (auto wfp : { std::pair<float, float> { 20, 20 }, { 50, 50 }, { 100, 0 }, { 0, 100 }, { 100, 100 } })
         for (int speed : { 0, 1 })
         {
-            if (speed == 1 && wfp.first != 100) continue;
+            if (speed == 1 && std::abs (wfp.first - 100.0f) > 0.5f) continue;
             Rig r (fs, 1, 512, { { "wow", wfp.first }, { "flutter", wfp.second }, { "hiss", 0 }, { "age", 0 }, { "speed", (float) speed } });
             const int len = 8 * 48000;
             auto io = sine (1, len, fs, 3150, 0.1);
