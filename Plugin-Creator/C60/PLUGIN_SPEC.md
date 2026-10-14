@@ -28,6 +28,25 @@ Catena (nell'ordine fisico di un registratore):
 | 11 | De-enfasi | esatto reciproco della 2 → a basso livello piatto, ad alto livello acuti compressi | `FirstOrderShelf` |
 | 12 | Output / Mix | con Auto Gain l'uscita compensa il Record Level; dry allineato alla latenza | — |
 
+## 2b. La piastra (decisa il 2026-10-14)
+- **Nastro da 10 minuti agganciato alla timeline del DAW**: posizione del nastro = tempo del progetto.
+- **REC** armato + DAW in play → registra. **AUTO PUNCH** limita la registrazione tra **IN** e **OUT**
+  (fissati coi tasti PUNCH IN / PUNCH OUT alla posizione corrente).
+- **Collage**: ogni registrazione è una passata che sostituisce il nastro solo dove passa;
+  la linea del nastro mostra le passate a colori. **UNDO** annulla l'ultima passata (fino a 120 s).
+- **Segni del montaggio realistici**: testina di cancellazione ~60 ms davanti a quella di registrazione
+  (sovrapposizione dopo il punch-in, buco dopo il punch-out), cancellazione incompleta
+  (-34 / -30 / -24 dB per I / II / IV), **FADE** = rampa ai punti di punch.
+- **MONITOR**: SOURCE = il mix passa dal vivo nel nastro (effetto); TAPE = senti il nastro registrato.
+- **PITCH** ±12 % in riproduzione (varispeed: il nastro scivola rispetto al DAW, come su una piastra vera).
+- **NR** B / C / S / DBX: codifica in registrazione, decodifica in riproduzione. Se la piastra non è
+  calibrata il decoder insegue male (respiro sugli acuti), come nella realtà.
+- **HX Pro**: alleggerisce dinamicamente gli acuti forti in registrazione → più margine sugli acuti.
+- **CAL** (stile Nakamichi ABLE / Revox): calibra livello, bias e azimut per il tipo di nastro corrente;
+  una piastra nuova non è calibrata. **AZIMUTH** trimmer, **AUTO AZ** (stile NAAC del Dragon).
+- **REC MUTE** registra silenzio · **MEMO** azzera il contagiri · **ERASE** cancella tutto · **EXPORT** WAV 24 bit.
+- Il nastro si salva **dentro il progetto** (FLAC 24 bit, solo la parte usata).
+
 ## 3. Parametri (ID congelati)
 | id | nome | tipo | range | default | smussato |
 |----|------|------|-------|---------|----------|
@@ -43,6 +62,16 @@ Catena (nell'ordine fisico di un registratore):
 | autogain | Auto Gain| bool  | on/off | on | sì (via output) |
 | mix      | Mix      | float | 0…100 % | 100 | sì |
 | bypass   | Bypass   | bool  | on/off | off | sì (dissolvenza) |
+| monitor  | Monitor  | choice | Source / Tape | Source | sì (dissolvenza 20 ms) |
+| rec      | Rec      | bool  | on/off | off | rampa = fade |
+| autopunch| Auto Punch | bool | on/off | off | – |
+| recmute  | Rec Mute | bool  | on/off | off | – |
+| fade     | Fade     | float | 0…500 ms | 20 | – |
+| pitch    | Pitch    | float | -12…+12 % | 0 | sì |
+| nr       | NR       | choice | Off / B / C / S / DBX | Off | – |
+| hxpro    | HX Pro   | bool  | on/off | on | – |
+| azimuth  | Azimuth  | float | -30…+30 µs | 0 | per blocco |
+| autoaz   | Auto Azimuth | bool | on/off | off | – |
 
 ## 4. I/O
 - Mono→mono e stereo→stereo. Niente sidechain.
@@ -60,8 +89,9 @@ Catena (nell'ordine fisico di un registratore):
 - **CPU**: ~8 % di un core (stereo 48 kHz).
 
 ## 6. UI
-- Provvisoria: editor generico JUCE. Quella fotorealistica arriva dopo, da foto di riferimento + asset
-  (CLAUDE.md, loop di lavoro). Il processor espone già `outLevelL/R` (atomic) per i VU.
+- Provvisoria: tasti della piastra + contagiri + linea del collage + editor generico JUCE.
+- Definitiva: grafica da Gemini (`ui/GEMINI_PROMPTS.md`), asset via `ui/assets.manifest.json`.
+- Il processor espone già `outLevelL/R` e `getDeckState()` (lock-free) per VU, contagiri e collage.
 
 ## 7. Formati & piattaforme
 - macOS: AU + VST3 + Standalone, universal (build e `auval` sul Mac mini).
