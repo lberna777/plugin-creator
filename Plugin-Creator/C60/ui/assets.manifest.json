@@ -149,54 +149,6 @@
       "_nota": "fori quasi quadrati: si accorcia togliendo fasce uniformi ai lati della spia"
     },
     {
-      "input": "src/key_up.png",
-      "output": "../source/assets/button_sq_up.png",
-      "ops": [
-        "chroma_key",
-        "autocrop",
-        {
-          "op": "hslice",
-          "left": 145,
-          "center": 406,
-          "right": 145
-        },
-        {
-          "op": "resize",
-          "w": 64,
-          "h": 64
-        }
-      ],
-      "expect": [
-        64,
-        64
-      ],
-      "_nota": "provvisorio, ricavato dal tasto normale finché non arriva button_sq da Gemini"
-    },
-    {
-      "input": "src/key_down.png",
-      "output": "../source/assets/button_sq_down.png",
-      "ops": [
-        "chroma_key",
-        "autocrop",
-        {
-          "op": "hslice",
-          "left": 145,
-          "center": 406,
-          "right": 145
-        },
-        {
-          "op": "resize",
-          "w": 64,
-          "h": 64
-        }
-      ],
-      "expect": [
-        64,
-        64
-      ],
-      "_nota": "provvisorio, ricavato dal tasto normale finché non arriva button_sq da Gemini"
-    },
-    {
       "input": "src/key_small_up.png",
       "output": "../source/assets/key_small_up.png",
       "ops": [
@@ -299,6 +251,80 @@
         532,
         340
       ]
+    },
+    {
+      "input": "src/button_sq_up.png",
+      "output": "../source/assets/button_sq_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "w": 64,
+          "h": 64
+        }
+      ],
+      "expect": [
+        64,
+        64
+      ]
+    },
+    {
+      "input": "src/button_sq_down.png",
+      "output": "../source/assets/button_sq_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "w": 64,
+          "h": 64
+        }
+      ],
+      "expect": [
+        64,
+        64
+      ]
+    },
+    {
+      "input": "src/cassette_type4.png",
+      "output": "../source/assets/cassette_type4.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "w": 532,
+          "h": 340
+        }
+      ],
+      "expect": [
+        532,
+        340
+      ]
+    },
+    {
+      "input": "src/reel_hub.png",
+      "output": "../source/assets/reel_hub.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "square",
+        {
+          "op": "circle_crop",
+          "r": 0.29
+        },
+        {
+          "op": "resize",
+          "w": 96,
+          "h": 96
+        }
+      ],
+      "expect": [
+        96,
+        96
+      ],
+      "_nota": "solo il mozzo dentado (senza flangia): ruota sopra il mozzo fermo della cassetta"
     }
   ]
 }

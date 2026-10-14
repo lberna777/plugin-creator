@@ -54,7 +54,7 @@ public:
     juce::Rectangle<float> bodyInWindow;   // dove sta la cassetta, in coordinate locali
 private:
     C60AudioProcessor& proc;
-    juce::Image shells[3];
+    juce::Image shells[3], hubImg;
     double angleL = 0, angleR = 0;
 };
 
