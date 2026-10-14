@@ -1,0 +1,304 @@
+{
+  "_comment": "Manifest degli asset UI del C-60. Sorgenti: immagini Gemini su verde pieno #00FF00 (vedi GEMINI_PROMPTS.md) in src/. Misure finali = @2x della finestra 1291x506, prese dai fori della piastra (layout.json). Eseguire da C60/ui: python3 ../../tools/build_assets.py assets.manifest.json",
+  "assets": [
+    {
+      "input": "src/bg_plate.png",
+      "output": "../source/assets/bg_plate.jpg",
+      "expect_alpha": false,
+      "quality": 92,
+      "ops": [
+        {
+          "op": "crop_box",
+          "box": [
+            85,
+            248,
+            2667,
+            1260
+          ],
+          "_nota": "bordo esterno dei fianchi in legno (sorgente 2752x1536)"
+        },
+        "opaque"
+      ],
+      "expect": [
+        2582,
+        1012
+      ]
+    },
+    {
+      "input": "src/knob_large.png",
+      "output": "../source/assets/knob_large.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "rotate_to_top",
+        "square",
+        {
+          "op": "resize",
+          "w": 140,
+          "h": 140
+        }
+      ],
+      "expect": [
+        140,
+        140
+      ]
+    },
+    {
+      "input": "src/knob_small.png",
+      "output": "../source/assets/knob_small.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "rotate_to_top",
+        "square",
+        {
+          "op": "resize",
+          "w": 88,
+          "h": 88
+        }
+      ],
+      "expect": [
+        88,
+        88
+      ]
+    },
+    {
+      "input": "src/selector.png",
+      "output": "../source/assets/selector.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "rotate_to_top",
+        "square",
+        {
+          "op": "resize",
+          "w": 100,
+          "h": 100
+        }
+      ],
+      "expect": [
+        100,
+        100
+      ]
+    },
+    {
+      "input": "src/trimmer.png",
+      "output": "../source/assets/trimmer.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "square",
+        {
+          "op": "resize",
+          "w": 60,
+          "h": 60
+        }
+      ],
+      "expect": [
+        60,
+        60
+      ],
+      "_nota": "niente rotate_to_top: è tutto oro, il rilevamento dell'indicatore sbaglia; il taglio è già verticale"
+    },
+    {
+      "input": "src/key_up.png",
+      "output": "../source/assets/key_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "hslice",
+          "left": 172,
+          "center": 406,
+          "right": 172
+        },
+        {
+          "op": "resize",
+          "w": 108,
+          "h": 100
+        }
+      ],
+      "expect": [
+        108,
+        100
+      ],
+      "_nota": "fori quasi quadrati: si accorcia togliendo fasce uniformi ai lati della spia"
+    },
+    {
+      "input": "src/key_down.png",
+      "output": "../source/assets/key_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "hslice",
+          "left": 172,
+          "center": 406,
+          "right": 172
+        },
+        {
+          "op": "resize",
+          "w": 108,
+          "h": 100
+        }
+      ],
+      "expect": [
+        108,
+        100
+      ],
+      "_nota": "fori quasi quadrati: si accorcia togliendo fasce uniformi ai lati della spia"
+    },
+    {
+      "input": "src/key_up.png",
+      "output": "../source/assets/button_sq_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "hslice",
+          "left": 145,
+          "center": 406,
+          "right": 145
+        },
+        {
+          "op": "resize",
+          "w": 64,
+          "h": 64
+        }
+      ],
+      "expect": [
+        64,
+        64
+      ],
+      "_nota": "provvisorio, ricavato dal tasto normale finché non arriva button_sq da Gemini"
+    },
+    {
+      "input": "src/key_down.png",
+      "output": "../source/assets/button_sq_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "hslice",
+          "left": 145,
+          "center": 406,
+          "right": 145
+        },
+        {
+          "op": "resize",
+          "w": 64,
+          "h": 64
+        }
+      ],
+      "expect": [
+        64,
+        64
+      ],
+      "_nota": "provvisorio, ricavato dal tasto normale finché non arriva button_sq da Gemini"
+    },
+    {
+      "input": "src/key_small_up.png",
+      "output": "../source/assets/key_small_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "hslice",
+          "left": 517,
+          "center": 406,
+          "right": 517
+        },
+        {
+          "op": "resize",
+          "w": 224,
+          "h": 108
+        }
+      ],
+      "expect": [
+        224,
+        108
+      ]
+    },
+    {
+      "input": "src/key_small_down.png",
+      "output": "../source/assets/key_small_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "hslice",
+          "left": 517,
+          "center": 406,
+          "right": 517
+        },
+        {
+          "op": "resize",
+          "w": 224,
+          "h": 108
+        }
+      ],
+      "expect": [
+        224,
+        108
+      ]
+    },
+    {
+      "input": "src/toggle_up.png",
+      "output": "../source/assets/toggle_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 116
+        }
+      ]
+    },
+    {
+      "input": "src/toggle_down.png",
+      "output": "../source/assets/toggle_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 116
+        }
+      ]
+    },
+    {
+      "input": "src/cassette_type1.png",
+      "output": "../source/assets/cassette_type1.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "w": 532,
+          "h": 340
+        }
+      ],
+      "expect": [
+        532,
+        340
+      ]
+    },
+    {
+      "input": "src/cassette_type2.png",
+      "output": "../source/assets/cassette_type2.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "w": 532,
+          "h": 340
+        }
+      ],
+      "expect": [
+        532,
+        340
+      ]
+    }
+  ]
+}

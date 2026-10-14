@@ -1,0 +1,19 @@
+C-60 — registratore a cassetta per il master bus (AU + VST3, macOS universal)
+
+INSTALLAZIONE (anche offline)
+1. Copia questa cartella sul Mac.
+2. Tasto destro su "Installa C-60.command" > Apri > Apri
+   (serve il tasto destro la prima volta: il file non è firmato da Apple).
+   In alternativa da Terminale:  bash "Installa C-60.command"
+3. Apri Logic Pro: Audio Units > MyPlugins > C-60, sul canale Stereo Out (master).
+
+USO IN BREVE
+- MONITOR su SOURCE: il mix passa dal vivo nel nastro (effetto cassetta).
+- REC + play nel DAW: registra sul nastro (10 minuti, agganciato alla timeline).
+- PUNCH IN / PUNCH OUT fissano i punti alla posizione attuale; AUTO PUNCH registra solo lì.
+- MONITOR su TAPE: senti il nastro registrato (il collage). UNDO annulla l'ultima passata.
+- CAL (nello sportello): calibra la piastra per il nastro inserito. EXPORT salva un WAV.
+- Il nastro si salva dentro il progetto di Logic.
+
+DISINSTALLARE
+Cancella ~/Library/Audio/Plug-Ins/Components/C-60.component e ~/Library/Audio/Plug-Ins/VST3/C-60.vst3

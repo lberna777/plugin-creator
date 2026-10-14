@@ -60,6 +60,21 @@ def key_background(im, lum_thresh=150, sat_thresh=45, **_):
     return Image.fromarray(np.dstack([a, alpha]).astype("uint8"), "RGBA")
 
 
+def chroma_key(im, key=(0, 255, 0), tol=90, soft=40, despill=True, **_):
+    """Rimuove lo sfondo di colore pieno (verde #00FF00 delle sorgenti Gemini).
+    Alpha 0 entro `tol` dal colore chiave, 255 oltre `tol+soft`, rampa lineare in mezzo.
+    Con `despill`, il verde residuo sui bordi viene schiacciato a max(rosso, blu)."""
+    a = np.asarray(im.convert("RGB")).astype(float)
+    d = np.sqrt(((a - np.asarray(key, dtype=float)) ** 2).sum(2))
+    alpha = np.clip((d - tol) / max(soft, 1e-6), 0.0, 1.0) * 255.0
+    if despill:
+        rb = np.maximum(a[..., 0], a[..., 2])
+        fix = (alpha > 0) & (a[..., 1] > rb)
+        a[..., 1] = np.where(fix, rb, a[..., 1])
+    out = np.dstack([a, alpha])
+    return Image.fromarray(np.clip(np.round(out), 0, 255).astype("uint8"))
+
+
 def rotate_to_top(im, **_):
     """Porta l'indicatore chiaro del knob a ore 12 (assume sfondo già trasparente)."""
     import math
@@ -75,8 +90,45 @@ def rotate_to_top(im, **_):
     return im.rotate(ang, resample=Image.BICUBIC, expand=False)
 
 
+def crop_box(im, box, **_):
+    """Ritaglia [x0, y0, x1, y1] in pixel della sorgente (es. piastra con sfondo intorno)."""
+    return im.crop(tuple(box))
+
+
+def hslice(im, left, center, right, **_):
+    """Accorcia in larghezza senza deformare: tiene i bordi (left/right px) e la fascia centrale (center px)."""
+    w, h = im.size
+    cx = w // 2
+    parts = [im.crop((0, 0, left, h)), im.crop((cx - center // 2, 0, cx - center // 2 + center, h)), im.crop((w - right, 0, w, h))]
+    out = Image.new("RGBA", (left + center + right, h), (0, 0, 0, 0))
+    x = 0
+    for p in parts:
+        out.paste(p, (x, 0))
+        x += p.width
+    return out
+
+
+def resize(im, w=None, h=None, **_):
+    """Ridimensiona (Lanczos) alla misura @2x d'uso. Con un solo lato mantiene le proporzioni."""
+    if w is None:
+        w = round(im.width * h / im.height)
+    if h is None:
+        h = round(im.height * w / im.width)
+    return im.resize((int(w), int(h)), Image.LANCZOS)
+
+
+def opaque(im, **_):
+    """Toglie l'alpha (per sfondi da salvare in JPEG)."""
+    return im.convert("RGB")
+
+
 OPS = {
     "key_background": key_background,
+    "chroma_key": chroma_key,
+    "crop_box": crop_box,
+    "hslice": hslice,
+    "resize": resize,
+    "opaque": opaque,
     "autocrop": autocrop,
     "rotate_to_top": rotate_to_top,
     "square": square,
@@ -98,7 +150,7 @@ def run(manifest_path):
             ew, eh = a["expect"]
             if abs(im.width - ew) > 2 or abs(im.height - eh) > 2:
                 raise SystemExit(f"[ERRORE] {a['output']}: dimensioni {im.size} != attese {(ew, eh)}")
-        im.save(a["output"])
+        im.save(a["output"], **({"quality": a["quality"]} if "quality" in a else {}))
         print(f"OK  {a['output']}  {im.size}")
     print("Pipeline asset completata.")
 
