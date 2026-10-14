@@ -40,7 +40,7 @@ juce_add_plugin(C60
 
 juce_generate_juce_header(C60)
 
-target_sources(C60 PRIVATE source/PluginProcessor.cpp)
+target_sources(C60 PRIVATE source/PluginProcessor.cpp source/PluginEditor.cpp)
 
 target_compile_definitions(C60 PUBLIC
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_VST3_CAN_REPLACE_VST2=0

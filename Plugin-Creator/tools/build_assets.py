@@ -60,6 +60,21 @@ def key_background(im, lum_thresh=150, sat_thresh=45, **_):
     return Image.fromarray(np.dstack([a, alpha]).astype("uint8"), "RGBA")
 
 
+def chroma_key(im, key=(0, 255, 0), tol=90, soft=40, despill=True, **_):
+    """Rimuove lo sfondo di colore pieno (verde #00FF00 delle sorgenti Gemini).
+    Alpha 0 entro `tol` dal colore chiave, 255 oltre `tol+soft`, rampa lineare in mezzo.
+    Con `despill`, il verde residuo sui bordi viene schiacciato a max(rosso, blu)."""
+    a = np.asarray(im.convert("RGB")).astype(float)
+    d = np.sqrt(((a - np.asarray(key, dtype=float)) ** 2).sum(2))
+    alpha = np.clip((d - tol) / max(soft, 1e-6), 0.0, 1.0) * 255.0
+    if despill:
+        rb = np.maximum(a[..., 0], a[..., 2])
+        fix = (alpha > 0) & (a[..., 1] > rb)
+        a[..., 1] = np.where(fix, rb, a[..., 1])
+    out = np.dstack([a, alpha])
+    return Image.fromarray(np.clip(np.round(out), 0, 255).astype("uint8"))
+
+
 def rotate_to_top(im, **_):
     """Porta l'indicatore chiaro del knob a ore 12 (assume sfondo già trasparente)."""
     import math
@@ -77,6 +92,7 @@ def rotate_to_top(im, **_):
 
 OPS = {
     "key_background": key_background,
+    "chroma_key": chroma_key,
     "autocrop": autocrop,
     "rotate_to_top": rotate_to_top,
     "square": square,

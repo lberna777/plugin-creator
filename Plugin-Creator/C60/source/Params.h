@@ -16,6 +16,17 @@ inline constexpr const char* output  = "output";   // dB
 inline constexpr const char* autoGain= "autogain"; // compensa l'input sull'output
 inline constexpr const char* mix     = "mix";      // %
 inline constexpr const char* bypass  = "bypass";
+// piastra
+inline constexpr const char* monitor   = "monitor";   // SOURCE (nastro dal vivo) / TAPE (nastro registrato)
+inline constexpr const char* rec       = "rec";       // REC armato
+inline constexpr const char* autoPunch = "autopunch"; // registra solo tra IN e OUT
+inline constexpr const char* recMute   = "recmute";   // registra silenzio
+inline constexpr const char* fade      = "fade";      // rampa ai punti di punch (ms)
+inline constexpr const char* pitch     = "pitch";     // varispeed in riproduzione (%)
+inline constexpr const char* nr        = "nr";        // OFF / B / C / S / DBX
+inline constexpr const char* hxPro     = "hxpro";
+inline constexpr const char* azimuth   = "azimuth";   // trimmer (µs)
+inline constexpr const char* autoAz    = "autoaz";    // correzione automatica dell'azimut
 }
 
 inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
@@ -42,5 +53,16 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     p.push_back (std::make_unique<B> (ParameterID { ParamID::autoGain, 1 },"Auto Gain", true));
     p.push_back (std::make_unique<F> (ParameterID { ParamID::mix, 1 },     "Mix", NormalisableRange<float> (0.f, 100.f, 0.1f), 100.f, pct));
     p.push_back (std::make_unique<B> (ParameterID { ParamID::bypass, 1 },  "Bypass", false));
+
+    p.push_back (std::make_unique<C> (ParameterID { ParamID::monitor, 1 },   "Monitor", StringArray { "Source", "Tape" }, 0));
+    p.push_back (std::make_unique<B> (ParameterID { ParamID::rec, 1 },       "Rec", false));
+    p.push_back (std::make_unique<B> (ParameterID { ParamID::autoPunch, 1 }, "Auto Punch", false));
+    p.push_back (std::make_unique<B> (ParameterID { ParamID::recMute, 1 },   "Rec Mute", false));
+    p.push_back (std::make_unique<F> (ParameterID { ParamID::fade, 1 },      "Fade", NormalisableRange<float> (0.f, 500.f, 1.f, 0.5f), 20.f, A().withLabel ("ms")));
+    p.push_back (std::make_unique<F> (ParameterID { ParamID::pitch, 1 },     "Pitch", NormalisableRange<float> (-12.f, 12.f, 0.1f), 0.f, pct));
+    p.push_back (std::make_unique<C> (ParameterID { ParamID::nr, 1 },        "NR", StringArray { "Off", "B", "C", "S", "DBX" }, 0));
+    p.push_back (std::make_unique<B> (ParameterID { ParamID::hxPro, 1 },     "HX Pro", true));
+    p.push_back (std::make_unique<F> (ParameterID { ParamID::azimuth, 1 },   "Azimuth", NormalisableRange<float> (-30.f, 30.f, 0.1f), 0.f, A().withLabel ("us")));
+    p.push_back (std::make_unique<B> (ParameterID { ParamID::autoAz, 1 },    "Auto Azimuth", false));
     return { p.begin(), p.end() };
 }

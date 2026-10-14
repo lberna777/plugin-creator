@@ -1,0 +1,24 @@
+{
+  "_comment": "Manifest degli asset UI del C-60. Sorgenti: immagini Gemini su verde pieno #00FF00 (vedi GEMINI_PROMPTS.md), salvate in src/. L'op chroma_key rimuove il verde e crea l'alpha; autocrop ritaglia, rotate_to_top e square completano i knob. Eseguire dalla cartella C60/ui: python3 ../../tools/build_assets.py assets.manifest.json",
+  "assets": [
+    {"input": "src/bg_plate.png", "output": "../source/assets/bg_plate.png", "ops": [], "expect_alpha": false},
+    {"input": "src/knob_large.png", "output": "../source/assets/knob_large.png", "ops": ["chroma_key", "autocrop", "rotate_to_top", "square"]},
+    {"input": "src/knob_small.png", "output": "../source/assets/knob_small.png", "ops": ["chroma_key", "autocrop", "rotate_to_top", "square"]},
+    {"input": "src/selector.png", "output": "../source/assets/selector.png", "ops": ["chroma_key", "autocrop", "rotate_to_top", "square"]},
+    {"input": "src/trimmer.png", "output": "../source/assets/trimmer.png", "ops": ["chroma_key", "autocrop", "rotate_to_top", "square"]},
+    {"input": "src/key_up.png", "output": "../source/assets/key_up.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/key_down.png", "output": "../source/assets/key_down.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/key_small_up.png", "output": "../source/assets/key_small_up.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/key_small_down.png", "output": "../source/assets/key_small_down.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/toggle_up.png", "output": "../source/assets/toggle_up.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/toggle_down.png", "output": "../source/assets/toggle_down.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/cal_flap.png", "output": "../source/assets/cal_flap.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/button_sq_up.png", "output": "../source/assets/button_sq_up.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/button_sq_down.png", "output": "../source/assets/button_sq_down.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/cassette_type1.png", "output": "../source/assets/cassette_type1.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/cassette_type2.png", "output": "../source/assets/cassette_type2.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/cassette_type4.png", "output": "../source/assets/cassette_type4.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/door_frame.png", "output": "../source/assets/door_frame.png", "ops": ["chroma_key", "autocrop"]},
+    {"input": "src/reel_hub.png", "output": "../source/assets/reel_hub.png", "ops": ["chroma_key", "autocrop", "square"]}
+  ]
+}
