@@ -81,6 +81,7 @@ void DeckKey::paintButton (juce::Graphics& g, bool, bool isDown)
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (isDown || getToggleState() ? downImg : upImg, b);
 
+    if (ledRel.isEmpty()) return;
     const float lvl = ledLevel ? juce::jlimit (0.f, 1.f, ledLevel()) : 0.f;
     auto r = juce::Rectangle<float> (b.getWidth() * (ledRel.getX() - ledRel.getWidth() * 0.5f),
                                      b.getHeight() * (ledRel.getY() - ledRel.getHeight() * 0.5f),
@@ -114,7 +115,8 @@ CassetteView::CassetteView (C60AudioProcessor& p) : proc (p)
 {
     shells[0] = C60_IMG (cassette_type1_png);
     shells[1] = C60_IMG (cassette_type2_png);
-    shells[2] = C60_IMG (cassette_type2_png);   // provvisorio finché non arriva cassette_type4
+    shells[2] = C60_IMG (cassette_type4_png);
+    hubImg = C60_IMG (reel_hub_png);
     setInterceptsMouseClicks (false, false);
 }
 
@@ -174,6 +176,13 @@ void CassetteView::paint (juce::Graphics& g)
 
     g.setImageResamplingQuality (juce::Graphics::highResamplingQuality);
     g.drawImage (shells[type], body);
+
+    // mozzi della cassetta che girano col nastro
+    const float hd = 0.15f * bw;
+    for (auto [c, a] : { std::pair { hl, angleL }, std::pair { hr, angleR } })
+        g.drawImageTransformed (hubImg, juce::AffineTransform::scale (hd / (float) hubImg.getWidth())
+                                            .translated (c.x - hd * 0.5f, c.y - hd * 0.5f)
+                                            .rotated ((float) a, c.x, c.y));
 
     // vetro fumé dello sportello + riflesso
     g.setColour (juce::Colour (0x40000000));
@@ -414,7 +423,7 @@ C60AudioProcessorEditor::C60AudioProcessorEditor (C60AudioProcessor& p)
     eraseKey     = &addKey (C60_IMG (key_small_up_png), C60_IMG (key_small_down_png), ledRed, wideLed);
     exportKey    = &addKey (C60_IMG (key_small_up_png), C60_IMG (key_small_down_png), ledAmber, wideLed);
     auto sqUp = C60_IMG (button_sq_up_png), sqDown = C60_IMG (button_sq_down_png);
-    const auto sqLed = juce::Rectangle<float> (0.5f, 0.16f, 0.4f, 0.08f);
+    const auto sqLed = juce::Rectangle<float>();   // spie nei fori cal/led* della piastra
     calKey    = &addKey (sqUp, sqDown, ledAmber, sqLed);
     autoAzKey = &addKey (sqUp, sqDown, ledGreen, sqLed);
     memoKey   = &addKey (sqUp, sqDown, ledAmber, sqLed);
@@ -535,6 +544,8 @@ void C60AudioProcessorEditor::timerCallback()
     cassette.repaint();
     display.repaint();
     for (auto* k : keys) k->repaint();
+    for (auto path : { "cal/ledcal", "cal/ledautoaz", "cal/ledmemo" })
+        repaint (layout.rect (path, getLocalBounds()).expanded (8));
 }
 
 void C60AudioProcessorEditor::drawLabel (juce::Graphics& g, const juce::String& text, juce::Rectangle<int> under, float gap, juce::Justification j)
@@ -613,6 +624,21 @@ void C60AudioProcessorEditor::paint (juce::Graphics& g)
         for (auto [path, text] : { std::pair { "cal/bias", "BIAS" }, std::pair { "cal/azimuth", "AZIMUTH" },
                                    std::pair { "cal/calbtn", "CAL" }, std::pair { "cal/autoaz", "AUTO AZ" }, std::pair { "cal/memo", "MEMO" } })
             drawLabel (g, text, R (path), 0.008f);
+    }
+
+    // spie dello sportello di calibrazione
+    for (auto [path, k, col] : { std::tuple { "cal/ledcal", calKey, ledAmber }, std::tuple { "cal/ledautoaz", autoAzKey, ledGreen },
+                                 std::tuple { "cal/ledmemo", memoKey, ledAmber } })
+    {
+        auto r = R (path).toFloat();
+        const float lvl = k->ledLevel ? juce::jlimit (0.f, 1.f, k->ledLevel()) : 0.f;
+        g.setColour (col.withMultipliedBrightness (0.25f).withAlpha (0.7f));
+        g.fillEllipse (r);
+        if (lvl > 0.f)
+        {
+            g.setColour (col.withAlpha (0.3f * lvl)); g.fillEllipse (r.expanded (r.getWidth() * 0.8f));
+            g.setColour (col.withAlpha (lvl));        g.fillEllipse (r);
+        }
     }
 
     // marchio + versione (VERSION di CMake = unica fonte)

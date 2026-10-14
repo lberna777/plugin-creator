@@ -1,19 +1,65 @@
-C-60 — registratore a cassetta per il master bus (AU + VST3, macOS universal)
+C-60 — REGISTRATORE A CASSETTA PER IL MASTER BUS
+Plugin Audio Unit (Logic Pro) + VST3 — macOS, Mac con chip Apple (M1/M2/M3/M4) e Intel
+==========================================================================================
 
-INSTALLAZIONE (anche offline)
-1. Copia questa cartella sul Mac.
-2. Tasto destro su "Installa C-60.command" > Apri > Apri
-   (serve il tasto destro la prima volta: il file non è firmato da Apple).
-   In alternativa da Terminale:  bash "Installa C-60.command"
-3. Apri Logic Pro: Audio Units > MyPlugins > C-60, sul canale Stereo Out (master).
+COSA C'È IN QUESTA CARTELLA
+  C-60.component ......... il plugin per Logic Pro (Audio Unit)
+  C-60.vst3 .............. lo stesso plugin per altri programmi (Ableton, Reaper, ...)
+  Installa C-60.command .. installa tutto con un doppio clic
+  LEGGIMI.txt ............ questo file
 
-USO IN BREVE
-- MONITOR su SOURCE: il mix passa dal vivo nel nastro (effetto cassetta).
-- REC + play nel DAW: registra sul nastro (10 minuti, agganciato alla timeline).
-- PUNCH IN / PUNCH OUT fissano i punti alla posizione attuale; AUTO PUNCH registra solo lì.
-- MONITOR su TAPE: senti il nastro registrato (il collage). UNDO annulla l'ultima passata.
-- CAL (nello sportello): calibra la piastra per il nastro inserito. EXPORT salva un WAV.
+Non serve internet: si installa anche offline.
+
+
+INSTALLAZIONE (5 minuti)
+------------------------
+1. Copia la cartella "C-60" dall'SSD al Mac, per esempio sulla Scrivania.
+
+2. Chiudi Logic Pro se è aperto.
+
+3. Fai TASTO DESTRO (o ctrl+clic) su "Installa C-60.command" > Apri.
+   Comparirà un avviso perché il file non viene dall'App Store:
+   premi di nuovo "Apri".
+   - Se il Mac non mostra il pulsante "Apri": vai in
+     Impostazioni di Sistema > Privacy e sicurezza, scorri in fondo,
+     alla voce su "Installa C-60.command" premi "Apri comunque".
+   Si apre il Terminale, copia i plugin e scrive "C-60 installato.".
+   Puoi chiudere il Terminale.
+
+4. Apri Logic Pro. Al primo avvio Logic controlla i plugin nuovi: aspetta che finisca.
+
+5. Sul canale "Stereo Out" (il master), in uno slot Audio FX:
+   Audio Units > MyPlugins > C-60.
+
+
+SE LOGIC NON LO TROVA
+---------------------
+- Logic Pro > Impostazioni > Gestione plug-in: cerca "C-60",
+  spunta "Usa", oppure premi "Reimposta e riesegui scansione della selezione".
+- Se compare "convalida non riuscita": premi "Riesegui scansione" una volta.
+- Installazione manuale, se lo script non parte:
+  apri il Terminale e incolla (una riga alla volta):
+    cp -R ~/Desktop/C-60/C-60.component ~/Library/Audio/Plug-Ins/Components/
+    cp -R ~/Desktop/C-60/C-60.vst3 ~/Library/Audio/Plug-Ins/VST3/
+    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/C-60.component
+    codesign --force --deep -s - ~/Library/Audio/Plug-Ins/Components/C-60.component
+    killall -9 AudioComponentRegistrar
+  (se la cartella non è sulla Scrivania, cambia "~/Desktop/C-60" col percorso giusto)
+
+
+PRIMO UTILIZZO IN 1 MINUTO
+--------------------------
+- Così com'è, il C-60 è un effetto cassetta in tempo reale (MONITOR su SOURCE):
+  il mix passa dal "nastro" e prende saturazione, wow e flutter, fruscio.
+- Premi CAL nello sportello CALIBRATION: la piastra si calibra sul nastro scelto
+  (la spia lampeggia 2 secondi, poi resta accesa).
+- Per registrare davvero sul nastro: premi REC e fai play in Logic.
+  Per riascoltare il nastro: levetta MONITOR su TAPE.
 - Il nastro si salva dentro il progetto di Logic.
 
+
 DISINSTALLARE
-Cancella ~/Library/Audio/Plug-Ins/Components/C-60.component e ~/Library/Audio/Plug-Ins/VST3/C-60.vst3
+-------------
+Cancella questi due elementi (Finder > Vai > Vai alla cartella...):
+  ~/Library/Audio/Plug-Ins/Components/C-60.component
+  ~/Library/Audio/Plug-Ins/VST3/C-60.vst3

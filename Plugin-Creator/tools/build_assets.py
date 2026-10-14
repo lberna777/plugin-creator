@@ -122,6 +122,19 @@ def opaque(im, **_):
     return im.convert("RGB")
 
 
+def circle_crop(im, r=0.5, **_):
+    """Tiene solo il disco centrale di raggio r (frazione del lato): es. il mozzo senza la flangia."""
+    import math
+    w, h = im.size
+    cx, cy, rad = w / 2, h / 2, r * min(w, h)
+    yy, xx = np.mgrid[0:h, 0:w]
+    m = np.clip(rad - np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2) + 0.5, 0, 1)
+    a = np.asarray(im).astype(float)
+    a[..., 3] *= m
+    out = Image.fromarray(a.astype("uint8"), "RGBA")
+    return out.crop((int(cx - rad), int(cy - rad), int(cx + rad), int(cy + rad)))
+
+
 OPS = {
     "key_background": key_background,
     "chroma_key": chroma_key,
@@ -129,6 +142,7 @@ OPS = {
     "hslice": hslice,
     "resize": resize,
     "opaque": opaque,
+    "circle_crop": circle_crop,
     "autocrop": autocrop,
     "rotate_to_top": rotate_to_top,
     "square": square,
