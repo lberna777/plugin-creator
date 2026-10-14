@@ -90,9 +90,45 @@ def rotate_to_top(im, **_):
     return im.rotate(ang, resample=Image.BICUBIC, expand=False)
 
 
+def crop_box(im, box, **_):
+    """Ritaglia [x0, y0, x1, y1] in pixel della sorgente (es. piastra con sfondo intorno)."""
+    return im.crop(tuple(box))
+
+
+def hslice(im, left, center, right, **_):
+    """Accorcia in larghezza senza deformare: tiene i bordi (left/right px) e la fascia centrale (center px)."""
+    w, h = im.size
+    cx = w // 2
+    parts = [im.crop((0, 0, left, h)), im.crop((cx - center // 2, 0, cx - center // 2 + center, h)), im.crop((w - right, 0, w, h))]
+    out = Image.new("RGBA", (left + center + right, h), (0, 0, 0, 0))
+    x = 0
+    for p in parts:
+        out.paste(p, (x, 0))
+        x += p.width
+    return out
+
+
+def resize(im, w=None, h=None, **_):
+    """Ridimensiona (Lanczos) alla misura @2x d'uso. Con un solo lato mantiene le proporzioni."""
+    if w is None:
+        w = round(im.width * h / im.height)
+    if h is None:
+        h = round(im.height * w / im.width)
+    return im.resize((int(w), int(h)), Image.LANCZOS)
+
+
+def opaque(im, **_):
+    """Toglie l'alpha (per sfondi da salvare in JPEG)."""
+    return im.convert("RGB")
+
+
 OPS = {
     "key_background": key_background,
     "chroma_key": chroma_key,
+    "crop_box": crop_box,
+    "hslice": hslice,
+    "resize": resize,
+    "opaque": opaque,
     "autocrop": autocrop,
     "rotate_to_top": rotate_to_top,
     "square": square,
@@ -114,7 +150,7 @@ def run(manifest_path):
             ew, eh = a["expect"]
             if abs(im.width - ew) > 2 or abs(im.height - eh) > 2:
                 raise SystemExit(f"[ERRORE] {a['output']}: dimensioni {im.size} != attese {(ew, eh)}")
-        im.save(a["output"])
+        im.save(a["output"], **({"quality": a["quality"]} if "quality" in a else {}))
         print(f"OK  {a['output']}  {im.size}")
     print("Pipeline asset completata.")
 

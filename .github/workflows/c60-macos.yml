@@ -1,0 +1,57 @@
+name: C-60 macOS (AU + VST3)
+
+on:
+  push:
+    branches: [c60-cassette]
+    paths: ['Plugin-Creator/C60/**', 'Plugin-Creator/tools/**', '.github/workflows/c60-macos.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura (universal arm64 + x86_64)
+        run: cmake -S Plugin-Creator/C60 -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compila AU, VST3 e banco di misura
+        run: cmake --build build --config Release --target C60_AU C60_VST3 C60Measure -j 4
+
+      - name: Banco di misura (null-test, NaN, CPU)
+        run: ./build/C60Measure_artefacts/Release/C60Measure
+
+      - name: Firma ad-hoc e installa l'AU
+        run: |
+          A=build/C60_artefacts/Release
+          codesign --force --deep -s - "$A/AU/C-60.component"
+          codesign --force --deep -s - "$A/VST3/C-60.vst3"
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "$A/AU/C-60.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          sleep 3
+
+      - name: auval
+        run: auval -v aufx Cs60 Mypl
+
+      - name: pluginval (AU, strictness 10)
+        run: |
+          curl -sSL -o pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q pv.zip
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --skip-gui-tests \
+            ~/Library/Audio/Plug-Ins/Components/C-60.component
+
+      - name: Pacchetto installabile offline
+        run: |
+          A=build/C60_artefacts/Release
+          mkdir -p pkg/C-60
+          cp -R "$A/AU/C-60.component" "$A/VST3/C-60.vst3" pkg/C-60/
+          cp "Plugin-Creator/C60/dist/Installa C-60.command" Plugin-Creator/C60/dist/LEGGIMI.txt pkg/C-60/
+          chmod +x "pkg/C-60/Installa C-60.command"
+          cd pkg && ditto -c -k --keepParent C-60 C-60-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: C-60-macOS
+          path: pkg/C-60-macOS.zip
