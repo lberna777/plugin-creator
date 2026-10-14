@@ -16,9 +16,66 @@ B215, tasti piatti stile Revox, fianchi in noce stile Sony ES.
 
 ## Installazione
 
-Scarica `C-60-macOS.zip` dall'ultima build in **Actions → C-60 macOS (AU + VST3)**, scompattalo e
-segui `LEGGIMI.txt` (in breve: tasto destro su `Installa C-60.command` → Apri). Funziona offline,
-su Mac con chip Apple e Intel. In Logic: **Audio Units → MyPlugins → C-60**.
+Funziona su Mac con chip Apple (M1/M2/M3/M4) e Intel, macOS 11 o successivo.
+In Logic lo trovi in **Audio Units → MyPlugins → C-60**: va sul canale **Stereo Out** (il master).
+
+### Metodo A — con l'installer già pronto (offline, consigliato)
+
+Non serve internet né alcuno strumento di sviluppo. Il plugin compilato e validato
+(auval + pluginval strictness 10) è nella repo: [`release/C-60-macOS.zip`](release/C-60-macOS.zip).
+
+1. Copia `release/C-60-macOS.zip` sul Mac (anche da una chiavetta o un SSD).
+2. Doppio clic sullo zip: compare la cartella `C-60`. Trascinala sulla Scrivania.
+3. Chiudi Logic Pro se è aperto.
+4. **Tasto destro** su `Installa C-60.command` → **Apri** → **Apri**.
+   Si apre il Terminale e alla fine scrive «C-60 installato.».
+   - Se macOS non mostra «Apri»: Impostazioni di Sistema → Privacy e sicurezza → in fondo
+     «Apri comunque», poi ripeti.
+5. Apri Logic, aspetta la scansione dei plugin, inserisci C-60 sullo Stereo Out.
+6. Premi **CAL** nello sportello CALIBRATION.
+
+Lo script copia `C-60.component` (AU) in `~/Library/Audio/Plug-Ins/Components` e `C-60.vst3` in
+`~/Library/Audio/Plug-Ins/VST3`, toglie la quarantena, firma localmente (ad-hoc) e fa rileggere i
+plugin al sistema.
+
+### Metodo B — compilando dal codice (serve internet)
+
+1. Strumenti, una volta sola:
+   ```bash
+   xcode-select --install          # compilatore Apple
+   brew install cmake              # oppure scarica CMake da cmake.org
+   ```
+2. Scarica la repo e compila (5–10 minuti; JUCE viene scaricato in automatico):
+   ```bash
+   git clone https://github.com/lberna777/plugin-creator.git
+   cd plugin-creator/Plugin-Creator/C60
+   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+   cmake --build build --config Release --target C60_AU C60_VST3 -j 8
+   ```
+3. Installa con lo stesso script del metodo A:
+   ```bash
+   mkdir -p ~/Desktop/C-60
+   cp -R build/C60_artefacts/Release/AU/C-60.component build/C60_artefacts/Release/VST3/C-60.vst3 ~/Desktop/C-60/
+   cp "dist/Installa C-60.command" dist/LEGGIMI.txt ~/Desktop/C-60/
+   bash ~/Desktop/C-60/"Installa C-60.command"
+   ```
+4. (Facoltativo) verifica come fa Logic: `auval -v aufx Cs60 Mypl` deve finire con «AU VALIDATION SUCCEEDED».
+
+### Se Logic non lo vede
+
+- Logic Pro → Impostazioni → **Gestione plug-in**: cerca «C-60», spunta «Usa» o premi
+  «Reimposta e riesegui scansione».
+- Riavvia Logic dopo l'installazione.
+
+### Disinstallare
+
+Cancella `~/Library/Audio/Plug-Ins/Components/C-60.component` e `~/Library/Audio/Plug-Ins/VST3/C-60.vst3`.
+
+### Da dove viene lo zip
+
+Ogni push su `main` che tocca il C-60 avvia la build **C-60 macOS (AU + VST3)** su GitHub Actions:
+compila universal, esegue il banco di misura, `auval` e pluginval, e pubblica `C-60-macOS.zip`
+come artifact. La copia in `release/` è l'ultima build validata.
 
 ---
 
