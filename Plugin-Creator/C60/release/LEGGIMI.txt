@@ -1,0 +1,9 @@
+C-60 — PLUGIN PRONTO DA INSTALLARE (anche offline)
+
+1. Doppio clic su C-60-macOS.zip: compare la cartella "C-60".
+2. Trascina la cartella "C-60" sulla Scrivania.
+3. Dentro, tasto destro su "Installa C-60.command" > Apri > Apri.
+4. Apri Logic Pro: canale Stereo Out > Audio FX > Audio Units > MyPlugins > C-60.
+
+Istruzioni complete e cosa fare se qualcosa non va: LEGGIMI.txt dentro la cartella C-60.
+Mac con chip Apple (M1/M2/M3/M4) e Intel, macOS 11 o successivo.
