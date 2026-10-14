@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+  <style>
+    body { margin: 0; background: #0c0e11; font-family: 'Barlow', system-ui, sans-serif; }
+    a { color: #e0a04a; } a:hover { color: #f0b96a; }
+    .lab { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; text-transform: uppercase; letter-spacing: .12em; }
+    .num { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+
+<div style="width: 820px; height: 560px; box-sizing: border-box; padding: 20px 22px; background: linear-gradient(180deg, #1a1d22 0%, #0f1114 100%); color: #d8dde5; display: flex; flex-direction: column; gap: 16px;">
+
+  <div style="display: flex; align-items: center; gap: 12px;">
+    <span style="width: 9px; height: 9px; border-radius: 50%; background: #6fdc8c; box-shadow: 0 0 7px rgba(111,220,140,.6);"></span>
+    <span class="lab" style="font-size: 18px; font-weight: 700; color: #e8edf4; letter-spacing: .2em;">COMP 1</span>
+    <span class="lab" style="font-size: 11px; color: #6f7885;">compressore veloce · stadio 7 di 13</span>
+    <div style="flex-grow: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="lab" style="font-size: 9.5px; color: #4aa3e0;">GAIN REDUCTION</span>
+      <div style="width: 120px; height: 8px; border-radius: 4px; background: #0a0c0e; box-shadow: inset 0 1px 2px rgba(0,0,0,.7);">
+        <div style="width: 53%; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #4aa3e0 0%, #6fc4f2 100%);"></div>
+      </div>
+      <span class="num" style="font-size: 11px; color: #d8dde5; width: 52px;">−3.2 dB</span>
+      <span class="num" style="font-size: 9.5px; color: #545c67;">max 6.0</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px;">
+    <sc-for list="{{knobs}}" as="k" hint-placeholder-count="6">
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+        <div style="position: relative; width: 92px; height: 92px;">
+          <svg viewBox="0 0 92 92" style="position: absolute; inset: 0; width: 92px; height: 92px;">
+            <circle cx="46" cy="46" r="39" fill="none" stroke="#0a0c0e" stroke-width="6" stroke-linecap="round" stroke-dasharray="183.8 245" transform="rotate(135 46 46)"></circle>
+            <circle cx="46" cy="46" r="39" fill="none" stroke="{{accent}}" stroke-width="6" stroke-linecap="round" stroke-dasharray="{{k.dash}}" transform="rotate(135 46 46)"></circle>
+          </svg>
+          <div style="position: absolute; left: 15px; top: 15px; width: 62px; height: 62px; border-radius: 50%; background: radial-gradient(circle at 36% 26%, #40474f 0%, #262b32 52%, #14171b 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.16), 0 4px 9px rgba(0,0,0,.6);"></div>
+          <div style="position: absolute; left: 21px; top: 21px; width: 50px; height: 50px; border-radius: 50%; border: 1px solid rgba(0,0,0,.55);"></div>
+          <div style="{{k.pointerStyle}}"></div>
+        </div>
+        <span class="num" style="font-size: 13px; color: #f2f6fb;">{{k.value}}</span>
+        <span class="lab" style="font-size: 9.5px; color: #6f7885;">{{k.name}}</span>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="height: 1px; background: #22262c;"></div>
+
+  <div style="display: flex; gap: 16px; flex-grow: 1; min-height: 0;">
+    <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 9px;">
+      <div class="lab" style="font-size: 10.5px; font-weight: 700; color: {{accent}};">PERCHÉ</div>
+      <div style="font-size: 12.5px; line-height: 1.55; color: #b6bec9;">
+        Nessuno canta fermo davanti al microfono: questo stadio prende i picchi e i cambi di distanza. Mai oltre 6 dB.
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 7px; margin-top: 2px;">
+        <sc-for list="{{reasons}}" as="r" hint-placeholder-count="4">
+          <div style="display: flex; gap: 10px; align-items: baseline;">
+            <span class="num" style="font-size: 10.5px; color: #e8edf4; width: 118px; flex-shrink: 0;">{{r.param}}</span>
+            <span style="font-size: 11px; line-height: 1.45; color: #8b94a3;">{{r.text}}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="width: 214px; background: #14171b; border: 1px solid #0a0b0d; border-radius: 7px; padding: 11px 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div class="lab" style="font-size: 10px; color: #6f7885;">POSIZIONE NELLA CATENA</div>
+      <sc-for list="{{chain}}" as="c" hint-placeholder-count="5">
+        <div style="display: flex; align-items: center; gap: 7px;">
+          <span style="{{c.dotStyle}}"></span>
+          <span class="lab" style="font-size: 10.5px; color: {{c.color}};">{{c.name}}</span>
+        </div>
+      </sc-for>
+      <div style="height: 1px; background: #262b33; margin-top: 2px;"></div>
+      <div style="font-size: 10.5px; line-height: 1.5; color: #6f7885;">
+        Il de-esser sta prima apposta: senza, ogni «s» innescherebbe una riduzione che abbassa la parola intera.
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+
+<script data-dc-script data-props='{"accent":{"editor":"color","default":"#e0a04a","options":["#e0a04a","#4aa3e0","#6fdc8c","#c9552f"]}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#e0a04a';
+    const specs = [
+      ['THRESHOLD', '−20.8 dB', 0.48], ['RATIO', '3.9 :1', 0.32], ['ATTACK', '6.8 ms', 0.23],
+      ['RELEASE', '74 ms', 0.22], ['KNEE', '5.2 dB', 0.43], ['MAKEUP', '5.0 dB', 0.28]
+    ];
+    const knobs = specs.map(([name, value, norm]) => ({
+      name, value,
+      dash: (183.8 * norm).toFixed(1) + ' 400',
+      pointerStyle: 'position: absolute; left: 44.5px; top: 18px; width: 3px; height: 20px; border-radius: 1.5px; background: '
+        + accent + '; box-shadow: 0 0 6px ' + accent + '66; transform-origin: 1.5px 28px; transform: rotate('
+        + (-135 + norm * 270).toFixed(1) + 'deg);'
+    }));
+
+    const chainNames = ['DE-ESS 1', 'COMP 1', 'COMP 2', 'SAT', 'EQ TONE'];
+    const chain = chainNames.map((name) => {
+      const here = name === 'COMP 1';
+      return {
+        name,
+        color: here ? '#f2f6fb' : '#6f7885',
+        dotStyle: 'width: 6px; height: 6px; border-radius: 50%; background: ' + (here ? accent : '#2f353d') + ';'
+      };
+    });
+
+    return {
+      accent, knobs, chain,
+      reasons: [
+        { param: 'c1Thresh −20.8 dB', text: 'profondità di lavoro secondo densità (1) e aggressività richieste' },
+        { param: 'c1Ratio 3.9 :1', text: 'rapporto moderato, il livellamento vero lo fa il secondo stadio' },
+        { param: 'c1Atk 6.8 ms', text: 'più aggressivo = attacco più corto = più controllo sui transienti' },
+        { param: 'c1Makeup 5.0 dB', text: 'recupero del livello perso, stimato sulla riduzione attesa' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

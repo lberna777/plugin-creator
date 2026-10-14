@@ -31,6 +31,12 @@ Plugin-Creator/
     └── source/assets/src/    ← qui i PNG-alpha sorgente degli elementi mobili
 ```
 
+## Sottoprogetti
+
+- [`../Vocal-Chain-Creator/`](../Vocal-Chain-Creator/) — **VOCAL FORGE**: plugin che compila una vocal chain
+  da una richiesta testuale, tarata su stanza non trattata + microfono Focusrite + Scarlett a due ingressi,
+  destinazione Logic Pro. Segue questo scaffold e ne estende `CLAUDE.md` con i vincoli di dominio.
+
 ## Le tre regole che evitano i cicli di NEMO
 
 1. **Sfondo inerte**: niente testo/indicatori/scale/parti mobili "cotti" nello sfondo. Se può cambiare o muoversi → è codice o asset separato.

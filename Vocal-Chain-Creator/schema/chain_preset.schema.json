@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://myplugins.com/vocal-forge/chain_preset.schema.json",
+  "title": "VOCAL FORGE — Chain Preset",
+  "description": "Il contratto tra il compilatore di regole (Python, riferimento) e il motore C++ del plugin.",
+  "type": "object",
+  "required": ["schema_version", "rules_version", "prompt", "intent", "source_profile", "io", "modules", "output"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "rules_version":  { "type": "string", "description": "Versione di tools/data/rules.json usata." },
+    "generated_by":   { "type": "string" },
+    "artist":         { "type": ["string", "null"], "description": "Profilo artista riconosciuto nel prompt (chiave di lexicon.artists)." },
+    "artist_sound":   { "type": "string", "description": "Descrizione in una riga del suono da ricostruire." },
+    "production_notes": {
+      "type": "array",
+      "description": "Quello che il plugin NON fa e che va fatto in Logic (intonazione, doppiaggi, ad-lib). Parte del mock-up quanto la catena.",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": { "id": { "type": "string" }, "text": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "prompt":         { "type": "string" },
+    "intent":         { "$ref": "https://myplugins.com/vocal-forge/intent.schema.json" },
+    "source_profile": {
+      "type": "object",
+      "required": ["id", "room", "mic", "interface"],
+      "properties": {
+        "id":        { "type": "string" },
+        "room":      { "type": "object" },
+        "mic":       { "type": "object" },
+        "interface": { "type": "object" }
+      }
+    },
+    "io": {
+      "type": "object",
+      "required": ["stereo_is_dual_mono"],
+      "properties": {
+        "stereo_is_dual_mono": { "type": "boolean" },
+        "declared_latency_ms": { "type": "number", "minimum": 0, "maximum": 5 }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "description": "Ordine FISSO, come da knowledge/CHAIN_ARCHITECTURE.md. I moduli si accendono, non si riordinano.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "enabled", "why", "params"],
+        "additionalProperties": false,
+        "properties": {
+          "id":      { "type": "string" },
+          "label":   { "type": "string" },
+          "enabled": { "type": "boolean" },
+          "why":     { "type": "string", "minLength": 1, "description": "Perché questo modulo è acceso o spento. Vuoto = preset non valido." },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["value", "why"],
+              "additionalProperties": false,
+              "properties": {
+                "value": { "type": ["number", "string", "boolean"] },
+                "unit":  { "type": "string" },
+                "why":   { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": ["loudness_target_lufs", "true_peak_ceiling_dbfs"],
+      "properties": {
+        "loudness_target_lufs":   { "type": "number" },
+        "true_peak_ceiling_dbfs": { "type": "number" }
+      }
+    },
+    "sends": {
+      "type": "array",
+      "description": "Mandate: bus PARALLELI, mai in serie sulla voce. Una sola variante per gruppo (reverb, delay, fx), scelta per priorità o imposta dal profilo artista.",
+      "items": {
+        "type": "object",
+        "required": ["id", "group", "label", "plugin_logic", "settings", "why"],
+        "additionalProperties": false,
+        "properties": {
+          "id":           { "type": "string" },
+          "group":        { "type": "string", "enum": ["reverb", "delay", "fx"] },
+          "label":        { "type": "string" },
+          "plugin_logic": { "type": "string", "description": "Plugin stock di Logic equivalente per il bus aux." },
+          "settings":     { "type": "object", "additionalProperties": { "type": ["number", "string", "boolean"] } },
+          "why":          { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } }
+  }
+}
