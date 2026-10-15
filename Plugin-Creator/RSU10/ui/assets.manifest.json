@@ -25,7 +25,6 @@
       "ops": [
         "chroma_key",
         "autocrop",
-        "rotate_to_top",
         "square",
         {
           "op": "resize",
@@ -36,7 +35,8 @@
       "expect": [
         160,
         160
-      ]
+      ],
+      "_nota": "indicatore già a ore 12 da Gemini; rotate_to_top cercava un indicatore chiaro e sbaglia sul metallo spazzolato"
     },
     {
       "input": "src/pad_up.png",

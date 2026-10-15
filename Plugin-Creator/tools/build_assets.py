@@ -151,7 +151,11 @@ OPS = {
 
 def run(manifest_path):
     man = json.load(open(manifest_path))
+    import os
     for a in man["assets"]:
+        if not os.path.exists(a["input"]):
+            print(f"--  {a['input']} manca: saltato (il plugin lo disegna da codice)")
+            continue
         im = Image.open(a["input"])
         if a.get("expect_alpha", True) and im.mode == "RGBA":
             require_alpha(im, a["input"])
