@@ -18,6 +18,7 @@ FetchContent_Declare(hidapi
     GIT_REPOSITORY https://github.com/libusb/hidapi.git
     GIT_TAG hidapi-0.14.0 GIT_SHALLOW TRUE)
 
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)              # hidapi 0.14 dichiara cmake 3.1.3: CMake 4 lo rifiuta
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(HIDAPI_WITH_LIBUSB OFF CACHE BOOL "" FORCE)    # Linux: solo hidraw
 set(HIDAPI_INSTALL_TARGETS OFF CACHE BOOL "" FORCE)
