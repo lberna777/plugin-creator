@@ -251,11 +251,12 @@ void RSU10Editor::renderBackground()
 
     // Targhetta in alluminio (anima nuova)
     auto badge = rect ("badge").reduced (H * 0.012f, H * 0.006f);
+    g.setFont (juce::Font (juce::FontOptions (H * 0.040f, juce::Font::bold)).withExtraKerningFactor (0.06f));
+    auto logo = badge.removeFromLeft (badge.getWidth() * 0.56f);
     g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.setFont (juce::Font (juce::FontOptions (H * 0.042f, juce::Font::bold)).withExtraKerningFactor (0.12f));
-    g.drawText ("RSU-10", badge.translated (0.0f, 1.0f).removeFromLeft (badge.getWidth() * 0.55f), juce::Justification::centredLeft);
+    g.drawFittedText ("RSU-10", logo.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
     g.setColour (juce::Colours::white.withAlpha (0.85f));
-    g.drawText ("RSU-10", badge.removeFromLeft (badge.getWidth() * 0.55f), juce::Justification::centredLeft);
+    g.drawFittedText ("RSU-10", logo.toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
     skin::drawSilk (g, juce::String ("RESTOMOD\nSAMPLING UNIT  v") + JucePlugin_VersionString, badge, juce::Justification::centredRight,
                     H * 0.014f, juce::Colours::black.withAlpha (0.6f));
 
@@ -293,9 +294,13 @@ void RSU10Editor::paintOverChildren (juce::Graphics& g)
             const float rad = juce::jmax (2.0f, getHeight() * 0.0035f);
             const auto c = l.key->style == skin::KeyStyle::Rec ? skin::col::recRed : skin::col::amber;
             if (l.key->style == skin::KeyStyle::Rec)
+            {
                 skin::drawLed (g, { kb.getRight() + rad * 2.5f, kb.getY() + rad }, rad, l.key->led(), c);
-            else
-                skin::drawLed (g, { kb.getX() + rad, kb.getY() - getHeight() * 0.0105f }, rad, l.key->led(), c);
+                continue;
+            }
+            const float lh = getHeight() * 0.017f;
+            const float textW = juce::GlyphArrangement::getStringWidth (skin::silkFont (lh), l.key->getButtonText());
+            skin::drawLed (g, { kb.getCentreX() - textW * 0.5f - rad * 3.0f, kb.getY() - lh * 0.75f }, rad, l.key->led(), c);
         }
 }
 

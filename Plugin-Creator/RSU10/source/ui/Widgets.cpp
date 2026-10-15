@@ -338,13 +338,13 @@ void Ribbon::paint (juce::Graphics& g)
     {
         const auto c = chipArea (i);
         g.setColour (i == mode ? skin::col::cyan : skin::col::dim.withAlpha (0.7f));
-        g.setFont (skin::screenFont (c.getHeight() * 0.62f, i == mode));
-        g.drawText (kRibbonModes[i], c, juce::Justification::centred);
+        g.setFont (skin::screenFont (c.getHeight() * 0.5f, i == mode));
+        g.drawFittedText (kRibbonModes[i], c.toNearestInt(), juce::Justification::centred, 1, 0.6f);
     }
     const auto hc = chipArea (5);
     g.setColour (hold ? skin::col::amber : skin::col::dim.withAlpha (0.5f));
-    g.setFont (skin::screenFont (hc.getHeight() * 0.62f, hold));
-    g.drawText ("HOLD", hc, juce::Justification::centred);
+    g.setFont (skin::screenFont (hc.getHeight() * 0.5f, hold));
+    g.drawFittedText ("HOLD", hc.toNearestInt(), juce::Justification::centred, 1, 0.6f);
 
     // luce LED sotto il vetro (moderna) che segue il dito
     const auto strip = stripArea();
@@ -630,12 +630,12 @@ juce::Rectangle<float> MainScreen::waveArea() const
 juce::Rectangle<float> MainScreen::chip (int i) const
 {
     auto bar = topBar();
-    const float w = bar.getHeight() * 1.6f;
+    const float w = bar.getHeight() * 1.15f;
     // da destra: sorgente REC, SCALE, poi gli strati 4..1
-    if (i == 5) return bar.removeFromRight (w * 1.9f).reduced (2.0f);
-    bar.removeFromRight (w * 1.9f);
-    if (i == 4) return bar.removeFromRight (w * 1.5f).reduced (2.0f);
-    bar.removeFromRight (w * 1.5f);
+    if (i == 5) return bar.removeFromRight (w * 2.2f).reduced (2.0f);
+    bar.removeFromRight (w * 2.2f);
+    if (i == 4) return bar.removeFromRight (w * 1.7f).reduced (2.0f);
+    bar.removeFromRight (w * 1.7f);
     bar.removeFromRight (6.0f);
     for (int l = 3; l > i; --l)
         bar.removeFromRight (w);
@@ -711,7 +711,7 @@ void MainScreen::paint (juce::Graphics& g)
         g.setColour (sel ? skin::col::amber.withAlpha (0.25f) : juce::Colours::white.withAlpha (0.04f));
         g.fillRoundedRectangle (c, 3.0f);
         g.setColour (lit ? skin::col::warmWhite : sel ? skin::col::amber : has ? skin::col::warmWhite.withAlpha (0.6f) : skin::col::dim.withAlpha (0.5f));
-        g.setFont (skin::screenFont (c.getHeight() * 0.62f, sel));
+        g.setFont (skin::screenFont (c.getHeight() * 0.55f, sel));
         g.drawText ("V" + juce::String (l + 1), c, juce::Justification::centred);
     }
     {
@@ -720,14 +720,14 @@ void MainScreen::paint (juce::Graphics& g)
         g.setColour (scaleOn ? skin::col::cyan.withAlpha (0.25f) : juce::Colours::white.withAlpha (0.04f));
         g.fillRoundedRectangle (c, 3.0f);
         g.setColour (scaleOn ? skin::col::cyan : skin::col::dim);
-        g.setFont (skin::screenFont (c.getHeight() * 0.62f, scaleOn));
-        g.drawText ("SCALE", c, juce::Justification::centred);
+        g.setFont (skin::screenFont (c.getHeight() * 0.55f, scaleOn));
+        g.drawFittedText ("SCALE", c.toNearestInt(), juce::Justification::centred, 1, 0.6f);
 
         const auto r = chip (5);
         g.setColour (juce::Colours::white.withAlpha (0.04f));
         g.fillRoundedRectangle (r, 3.0f);
         g.setColour (skin::col::dim);
-        g.drawText (proc.recSource.load() == 0 ? "REC: INGR." : "REC: USCITA", r, juce::Justification::centred);
+        g.drawFittedText (proc.recSource.load() == 0 ? "REC IN" : "REC OUT", r.toNearestInt(), juce::Justification::centred, 1, 0.6f);
     }
 
     // ---- forma d'onda
@@ -816,12 +816,12 @@ void MainScreen::paint (juce::Graphics& g)
         if (idx >= kNumPP)
             continue;
         g.setColour (skin::col::dim);
-        g.setFont (skin::screenFont (c.getHeight() * 0.36f));
+        g.setFont (skin::screenFont (c.getHeight() * 0.34f));
         g.drawFittedText (ppDefs()[size_t (idx)].name, c.removeFromTop (c.getHeight() * 0.48f).toNearestInt(), juce::Justification::centred, 1, 0.6f);
         const float v = proc.pads.get (pad, PP (idx));
         const bool changed = ! juce::exactlyEqual (v, ppDefs()[size_t (idx)].def);
         g.setColour (changed ? skin::col::amber : skin::col::warmWhite);
-        g.setFont (skin::screenFont (c.getHeight() * 0.44f, true));
+        g.setFont (skin::screenFont (c.getHeight() * 0.62f, true));
         g.drawFittedText (formatValue (PP (idx), v), c.toNearestInt(), juce::Justification::centred, 1, 0.6f);
     }
 }
