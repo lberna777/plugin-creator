@@ -1,0 +1,53 @@
+name: Mikro Bridge macOS
+
+on:
+  push:
+    branches: [main]
+    paths: ['Plugin-Creator/MikroBridge/**', '.github/workflows/mikro-macos.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura (universal arm64 + x86_64)
+        run: cmake -S Plugin-Creator/MikroBridge -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compila app e test
+        run: cmake --build build --config Release --target MikroBridge MikroCoreTests -j 4
+
+      - name: Test del protocollo (pad, pulsanti, LED, display)
+        run: ./build/MikroCoreTests
+
+      - name: Controlla universal e firma ad-hoc
+        run: |
+          APP="build/MikroBridge_artefacts/Release/Mikro Bridge.app"
+          lipo -info "$APP/Contents/MacOS/Mikro Bridge"
+          lipo -info "$APP/Contents/MacOS/Mikro Bridge" | grep -q arm64
+          lipo -info "$APP/Contents/MacOS/Mikro Bridge" | grep -q x86_64
+          codesign --force --deep -s - "$APP"
+          codesign --verify --deep "$APP"
+
+      - name: Avvio di prova (5 s, senza Mikro collegata)
+        run: |
+          "build/MikroBridge_artefacts/Release/Mikro Bridge.app/Contents/MacOS/Mikro Bridge" &
+          PID=$!
+          sleep 5
+          kill -0 $PID      # ancora vivo = non è crashato all'avvio
+          kill $PID
+
+      - name: Pacchetto
+        run: |
+          mkdir -p pkg/Mikro-Bridge
+          cp -R "build/MikroBridge_artefacts/Release/Mikro Bridge.app" pkg/Mikro-Bridge/
+          cp "Plugin-Creator/MikroBridge/dist/Installa Mikro Bridge.command" Plugin-Creator/MikroBridge/dist/LEGGIMI.txt pkg/Mikro-Bridge/
+          chmod +x "pkg/Mikro-Bridge/Installa Mikro Bridge.command"
+          cd pkg && ditto -c -k --keepParent Mikro-Bridge Mikro-Bridge-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mikro-Bridge-macOS
+          path: pkg/Mikro-Bridge-macOS.zip

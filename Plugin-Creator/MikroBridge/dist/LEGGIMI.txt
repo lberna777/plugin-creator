@@ -1,0 +1,62 @@
+MIKRO BRIDGE — la Maschine Mikro MK2 senza il software Maschine
+macOS 11 o successivo, Mac con chip Apple e Intel
+=================================================================
+
+Mikro Bridge legge la Mikro MK2 via USB e la fa vedere a Logic, Ableton o
+qualunque DAW come una normale tastiera MIDI chiamata "Mikro MK2 Bridge".
+I pad suonano note (con velocity), i tasti mandano CC che assegni nel DAW,
+display e luci funzionano. Non serve Maschine né il Controller Editor.
+
+
+INSTALLAZIONE
+-------------
+1. Tasto destro su "Installa Mikro Bridge.command" > Apri > Apri.
+   (Se il Mac non mostra "Apri": Impostazioni di Sistema > Privacy e
+   sicurezza, in fondo, "Apri comunque".)
+2. L'app si apre da sola. Collega la Mikro: in alto compare
+   "Mikro MK2 collegata" e il display della Mikro mostra MIKRO BRIDGE.
+
+Se compare "Mikro trovata ma occupata": un programma Native Instruments la
+sta tenendo. Apri Monitoraggio Attività, cerca "NIHardwareAgent" (e
+Maschine, se aperto) ed esci. Se torna a ogni avvio, togli gli elementi
+Native Instruments da Impostazioni di Sistema > Generali > Elementi login.
+
+Mikro Bridge deve restare aperto mentre suoni (anche ridotto a icona).
+
+
+LOGIC PRO
+---------
+- Logic ascolta tutti gli ingressi MIDI: crea una traccia con Drum Machine
+  Designer (o qualunque strumento), arma la registrazione e suona.
+- Pad 1 = C1 ... pad 16 = D#2: è la mappa di Drum Machine Designer.
+- Per i tasti: Logic Pro > Controlli > Assegnazioni controller (Learn),
+  premi la funzione in Logic e poi il tasto sulla Mikro.
+
+ABLETON LIVE
+------------
+- Impostazioni > Link, Tempo e MIDI: alla porta d'ingresso
+  "Mikro MK2 Bridge" attiva Traccia e Remote.
+- Drum Rack: la prima cella è C1, coincide con il pad 1.
+- Per i tasti: modalità MIDI Map (Cmd+M), clic sul comando, premi il tasto.
+
+
+USO
+---
+PAD MODE ............... batteria (16 note) / tastiera cromatica
+SHIFT + pad 13 / 14 .... un semitono giù / su
+SHIFT + pad 15 / 16 .... banco di 16 giù / su (in tastiera: ottava)
+SHIFT + pad 1-12 ....... CC 102-113 (per Undo, Redo, Quantize... nel DAW)
+Tasti .................. CC 20-46 sul canale controlli (16)
+SHIFT + tasti .......... CC 70-96
+Encoder ................ CC 14 relativo (SHIFT: CC 15), formato "binary offset"
+
+Luci dal DAW (facoltativo): se mandi MIDI alla porta d'uscita
+"Mikro MK2 Bridge", le note sul canale pad accendono i pad e i CC sul
+canale controlli accendono i tasti corrispondenti.
+
+Nella finestra: modo, nota del pad 1, canali, curva di velocity, soglia del
+colpo (più bassa = più sensibile), aftertouch polifonico. Le impostazioni
+restano salvate.
+
+Se i pad suonano "capovolti" (il pad in basso a sinistra non è il pad 1),
+spunta "Pad numerati al contrario".
