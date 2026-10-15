@@ -1,4 +1,5 @@
 # name=Mikro Bridge
+# supportedDevices=Mikro MK2 Bridge
 # Script controller di FL Studio per Mikro Bridge (Maschine Mikro MK2 senza software NI).
 # I tasti arrivano come CC sul canale controlli (16): CC 20-46, con SHIFT CC 70-96, SHIFT + pad 1-12 CC 102-113,
 # encoder CC 14 (SHIFT: CC 15) relativo, 64 = fermo. Le note dei pad passano allo strumento selezionato.
