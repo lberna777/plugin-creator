@@ -34,6 +34,7 @@ juce_add_gui_app(MikroBridge
     COMPANY_NAME   "MyPlugins"
     BUNDLE_ID      "com.myplugins.mikrobridge"
     VERSION        ${PROJECT_VERSION}
+    ICON_BIG       "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon_1024.png"   # da tools/make_icon.py
     MICROPHONE_PERMISSION_ENABLED FALSE
     HARDENED_RUNTIME_ENABLED FALSE)
 
