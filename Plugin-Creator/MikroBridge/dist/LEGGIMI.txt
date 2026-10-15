@@ -14,7 +14,8 @@ INSTALLAZIONE
    (Se il Mac non mostra "Apri": Impostazioni di Sistema > Privacy e
    sicurezza, in fondo, "Apri comunque".)
 2. L'app si apre da sola. Collega la Mikro: in alto compare
-   "Mikro MK2 collegata" e il display della Mikro mostra MIKRO BRIDGE.
+   "Mikro MK2 collegata" e sul display della Mikro passa la barca di
+   BARCA MASCHINE, poi la schermata del modo (DRUMS, KEYS o CHORDS).
 
 Se compare "Mikro trovata ma occupata": un programma Native Instruments la
 sta tenendo. Apri Monitoraggio Attività, cerca "NIHardwareAgent" (e

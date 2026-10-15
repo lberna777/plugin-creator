@@ -3,7 +3,7 @@
 // con lo stesso nome riceve dal DAW le note e i CC che accendono pad e pulsanti.
 #pragma once
 
-#include "Display.h"
+#include "DisplayRenderer.h"
 #include "PadEngine.h"
 #include "Scales.h"
 
@@ -67,6 +67,9 @@ public:
     static constexpr int kEncoderCc = 14, kShiftEncoderCc = 15;
     static int ccForButton (int buttonIndex, bool shift) noexcept;   // -1 = tasto locale
 
+    // Ultimo frame del display (anche senza Mikro collegata): per lo specchio nella finestra
+    void copyDisplay (mikro::Display& out) const;
+
 private:
     void run() override;
     void handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage&) override;
@@ -81,7 +84,8 @@ private:
     void send (const juce::MidiMessage& m);
     void refreshOutputs (bool force);
     mikro::LedState computeLeds();
-    void drawDisplay (mikro::Display& d) const;
+    mikro::DisplayState displayState() const noexcept;
+    void updateDisplay();
     int octaveStep() const noexcept;
 
     std::unique_ptr<juce::MidiOutput> midiOut;
@@ -101,9 +105,13 @@ private:
     std::atomic<bool> buttonFeedback[128] {};    // dal DAW, canale controlli, indice = CC
 
     mikro::LedState lastLeds {};
-    mikro::Display lastDisplay;
-    double lastLedWrite = 0, lastDisplayWrite = 0, lastOpenAttempt = -1.0e9;
-    bool displayValid = false;
+    mikro::DisplayRenderer renderer;
+    mikro::DisplayState shownState;
+    mikro::Display frame, lastDisplay, preview;   // frame = disegnato, lastDisplay = inviato alla Mikro
+    mutable juce::SpinLock previewLock;
+    double lastLedWrite = 0, lastDisplayRender = 0, lastOpenAttempt = -1.0e9;
+    double splashStart = 0;                       // animazione della barca all'avvio e a ogni collegamento
+    bool displayValid = false, frameValid = false, frameIsSplash = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Bridge)
 };

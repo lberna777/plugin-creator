@@ -36,6 +36,7 @@ Bridge::Bridge() : juce::Thread ("Mikro USB")
         midiIn->start();
    #endif
 
+    splashStart = juce::Time::getMillisecondCounterHiRes();
     hid_init();
    #if JUCE_MAC
     // Non esclusivo: se l'agente NI tiene aperta la Mikro, la lettura funziona lo stesso
@@ -104,6 +105,7 @@ bool Bridge::openDevice()
     }
     haveButtons = false;
     displayValid = false;
+    splashStart = juce::Time::getMillisecondCounterHiRes();
     for (auto& p : pads)
         p.reset();
     mirror.status = int (Status::Connected);
@@ -135,7 +137,8 @@ void Bridge::run()
                 if (openDevice())
                     continue;
             }
-            wait (50);
+            updateDisplay();   // lo specchio nella finestra vive anche senza Mikro
+            wait (20);
             continue;
         }
 
@@ -154,7 +157,10 @@ void Bridge::run()
         }
 
         if (dev != nullptr)
+        {
+            updateDisplay();
             refreshOutputs (false);
+        }
     }
 
     if (dev != nullptr)
@@ -365,22 +371,50 @@ void Bridge::refreshOutputs (bool force)
         lastLedWrite = now;
     }
 
-    if (force || now - lastDisplayWrite >= kDisplayMs)
+    if (frameValid && (force || ! displayValid || frame != lastDisplay))
     {
-        Display d;
-        drawDisplay (d);
-        if (force || ! displayValid || d != lastDisplay)
+        for (int c = 0; c < 4; ++c)
         {
-            for (int c = 0; c < 4; ++c)
-            {
-                const auto r = displayReport (d.data(), c);
-                hid_write (dev, r.data(), r.size());
-            }
-            lastDisplay = d;
-            displayValid = true;
+            const auto r = displayReport (frame.data(), c);
+            hid_write (dev, r.data(), r.size());
         }
-        lastDisplayWrite = now;
+        lastDisplay = frame;
+        displayValid = true;
     }
+}
+
+// Ridisegna solo se lo stato è cambiato (o durante l'animazione d'avvio), al massimo ogni kDisplayMs
+void Bridge::updateDisplay()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (frameValid && now - lastDisplayRender < kDisplayMs)
+        return;
+    lastDisplayRender = now;
+
+    const double splash = now - splashStart;
+    if (splash < DisplayRenderer::kSplashMs)
+    {
+        renderer.renderSplash (splash, frame);
+        frameIsSplash = true;
+    }
+    else if (const auto st = displayState(); ! frameValid || frameIsSplash || st != shownState)
+    {
+        renderer.render (st, frame);
+        shownState = st;
+        frameIsSplash = false;
+    }
+    else
+        return;
+
+    frameValid = true;
+    const juce::SpinLock::ScopedLockType sl (previewLock);
+    preview = frame;
+}
+
+void Bridge::copyDisplay (Display& out) const
+{
+    const juce::SpinLock::ScopedLockType sl (previewLock);
+    out = preview;
 }
 
 LedState Bridge::computeLeds()
@@ -455,52 +489,24 @@ LedState Bridge::computeLeds()
     return l;
 }
 
-void Bridge::drawDisplay (Display& d) const
+DisplayState Bridge::displayState() const noexcept
 {
-    const bool keys = usesKeyBase();
-    const bool chords = chordMode();
-    const int ch = settings.padChannel.load();
-
-    // Barra del titolo in negativo
-    d.fillRect (0, 0, kDisplayW, 9, true);
-    d.text (2, 2, "MIKRO BRIDGE", 1, false);
-    const char* mode = chords ? "CHORDS" : keys ? "KEYS" : "DRUMS";
-    d.text (kDisplayW - 2 - Display::textWidth (mode), 2, mode, 1, false);
-
-    // Ultima nota (in Accordi: ultimo accordo e il suo grado), grande
-    const int last = mirror.lastNote.load();
-    juce::String big = noteName (last);
-    if (chords && mirror.lastPad.load() >= 0)
-    {
-        const int lp = mirror.lastPad.load();
-        big = scales::chordName (settings.scale.load(), settings.root.load(), lp);
-        const juce::String deg ("PAD " + juce::String (lp + 1));
-        d.text (kDisplayW - 2 - Display::textWidth (deg.toRawUTF8()), 25, deg.toRawUTF8());
-    }
-    d.text (2, 14, big.toRawUTF8(), 3);
-    if (last >= 0)
-    {
-        const juce::String v ("VEL " + juce::String (mirror.lastVelocity.load()));
-        d.text (kDisplayW - 2 - Display::textWidth (v.toRawUTF8()), 16, v.toRawUTF8());
-    }
-    const juce::String chs ("CH " + juce::String (ch));
-    if (! chords)
-        d.text (kDisplayW - 2 - Display::textWidth (chs.toRawUTF8()), 25, chs.toRawUTF8());
-
-    // Estensione dei pad
-    const juce::String range = chords ? juce::String ("1-7 TRIADI  9-15 SETTIME")
-                                      : "PAD 1-16  " + noteName (noteForPad (0)) + " - " + noteName (noteForPad (15));
-    d.text (2, 36, range.toRawUTF8());
-
-    const char* curves[] { "SOFT", "LIN", "HARD", "FIXED" };
-    const juce::String info = keys ? juce::String ("SCALA ") + scales::kRootNames[scales::mod (settings.root.load(), 12)] + " "
-                                         + scales::get (settings.scale.load()).shortName
-                                   : juce::String ("VEL ") + curves[juce::jlimit (0, 3, settings.curve.load())]
-                                         + (settings.aftertouch.load() ? "   AT ON" : "   AT OFF");
-    d.text (2, 45, info.toRawUTF8());
-
-    d.fillRect (0, 54, kDisplayW, 1, true);
-    d.text (2, 57, "SHIFT + 13-16: TRASPONI");
+    DisplayState s;
+    s.mode = settings.mode.load();
+    s.lastNote = mirror.lastNote.load();
+    s.lastVelocity = mirror.lastVelocity.load();
+    s.lastPad = mirror.lastPad.load();
+    s.root = settings.root.load();
+    s.scale = settings.scale.load();
+    s.channel = settings.padChannel.load();
+    s.curve = settings.curve.load();
+    s.aftertouch = settings.aftertouch.load();
+    s.lowNote = noteForPad (0);
+    s.highNote = noteForPad (kNumPads - 1);
+    for (int p = 0; p < kNumPads; ++p)
+        if (mirror.velocity[p].load() > 0)
+            s.held = uint16_t (s.held | (1u << p));
+    return s;
 }
 
 // ---------------------------------------------------------------- feedback dal DAW

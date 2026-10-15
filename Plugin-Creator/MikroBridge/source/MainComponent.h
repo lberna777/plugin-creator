@@ -16,6 +16,7 @@ public:
 
 private:
     class PadGrid;
+    class DisplayMirror;
 
     void timerCallback() override;
     void load();
@@ -27,6 +28,7 @@ private:
     juce::PropertiesFile& props;
 
     std::unique_ptr<PadGrid> grid;
+    std::unique_ptr<DisplayMirror> display;
     juce::Label status, legend;
     juce::Label modeL, baseL, rootL, scaleL, padChL, ctrlChL, curveL, threshL;
     juce::ComboBox mode, base, root, scale, padCh, ctrlCh, curve;

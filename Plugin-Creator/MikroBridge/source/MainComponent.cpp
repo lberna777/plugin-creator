@@ -84,12 +84,42 @@ private:
     Bridge& bridge;
 };
 
+// ---------------------------------------------------------------- specchio del display
+
+class MainComponent::DisplayMirror final : public juce::Component
+{
+public:
+    explicit DisplayMirror (Bridge& b) : bridge (b) {}
+
+    // true se il frame è cambiato
+    bool update()
+    {
+        mikro::Display d;
+        bridge.copyDisplay (d);
+        if (! (d != shown))
+            return false;
+        shown = d;
+        return true;
+    }
+
+    void paint (juce::Graphics& g) override
+    {
+        mikro::DisplayRenderer::paintPreview (g, getLocalBounds().toFloat(), shown);
+    }
+
+private:
+    Bridge& bridge;
+    mikro::Display shown;
+};
+
 // ---------------------------------------------------------------- finestra
 
 MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), props (p)
 {
     grid = std::make_unique<PadGrid> (bridge);
     addAndMakeVisible (*grid);
+    display = std::make_unique<DisplayMirror> (bridge);
+    addAndMakeVisible (*display);
 
     status.setFont (juce::FontOptions (15.0f, juce::Font::bold));
     addAndMakeVisible (status);
@@ -153,7 +183,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     aftertouch.onClick = [this] { bridge.settings.aftertouch = aftertouch.getToggleState(); save(); };
     flipped.onClick    = [this] { bridge.settings.flippedPads = flipped.getToggleState(); save(); };
 
-    setSize (760, 560);
+    setSize (760, 720);
     startTimerHz (30);
 }
 
@@ -264,6 +294,8 @@ void MainComponent::timerCallback()
     }
 
     grid->repaint();
+    if (display->update())
+        display->repaint();
 }
 
 void MainComponent::paint (juce::Graphics& g)
@@ -280,8 +312,13 @@ void MainComponent::resized()
     legend.setBounds (area.removeFromBottom (80));
     area.removeFromBottom (kGap);
 
-    const int side = juce::jmin (area.getHeight(), area.getWidth() / 2);
-    grid->setBounds (area.removeFromLeft (side).withHeight (side));
+    // Colonna sinistra: specchio del display (2:1, come il 128x64) sopra la griglia dei pad
+    const int side = area.getWidth() / 2;
+    auto left = area.removeFromLeft (side);
+    display->setBounds (left.removeFromTop (side / 2));
+    left.removeFromTop (kGap * 2);
+    const int gridSide = juce::jmin (side, left.getHeight());
+    grid->setBounds (left.removeFromTop (gridSide).withSizeKeepingCentre (gridSide, gridSide));
     area.removeFromLeft (kMargin + kGap);
 
     auto row = [&area] { auto r = area.removeFromTop (kRowH); area.removeFromTop (kGap); return r; };
