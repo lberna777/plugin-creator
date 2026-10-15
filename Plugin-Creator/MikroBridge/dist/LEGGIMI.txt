@@ -25,6 +25,17 @@ Native Instruments da Impostazioni di Sistema > Generali > Elementi login.
 Mikro Bridge deve restare aperto mentre suoni (anche ridotto a icona).
 
 
+FL STUDIO (tasti gia' mappati)
+------------------------------
+L'installer copia anche lo script "Mikro Bridge" per FL Studio. In FL:
+Options > MIDI settings > Input: "Mikro MK2 Bridge", Controller type
+"Mikro Bridge". Per le luci: Output "Mikro MK2 Bridge" con lo stesso Port.
+PLAY/REC/RESTART = trasporto, F1/F2/F3 = playlist/piano roll/channel rack,
+MAIN = mixer, BROWSE = browser, NAV < > = canale, MUTE/SOLO = canale,
+SHIFT + pad 1/2 = undo/redo, 5 = quantize. Tabella completa nel manuale.
+Il canale controlli deve restare 16.
+
+
 LOGIC PRO
 ---------
 - Logic ascolta tutti gli ingressi MIDI: crea una traccia con Drum Machine
