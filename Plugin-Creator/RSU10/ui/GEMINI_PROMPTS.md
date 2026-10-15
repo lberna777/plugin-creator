@@ -114,7 +114,43 @@ and positions as the previous image, but as an EMPTY CHASSIS:
 - no text, no labels, no printed lines, no LEDs lit.
 ```
 
-## Prompt 3 — asset (uno per immagine, sempre nella stessa chat)
+## Prompt 3 — FOGLIO UNICO (consigliato: tutti i pezzi in una sola immagine)
+
+Un'immagine sola con i 9 pezzi a riposo; lo script li ritaglia e crea da sé gli stati premuti.
+
+```
+Now generate ONE single image, a parts sheet: the 9 separate components below, each shown ALONE,
+laid out in a neat 3x3 grid (3 rows, 3 columns), in exactly this order, read row by row:
+
+Row 1: (1) one aluminium knob, engraved indicator line pointing straight up (12 o'clock), without
+       its LED ring | (2) one big rubber pad from the 4x4 grid, at rest, without its RGB ring |
+       (3) the round glossy red record button.
+Row 2: (4) one small light-grey function key | (5) the pale violet function key |
+       (6) the wide light-grey ENTER-style key.
+Row 3: (7) one dark charcoal rectangular rubber transport key | (8) one wide dark charcoal rubber
+       key from the row of 4 under the knobs | (9) one tiny light-grey key (for -1 / +1 and arrows).
+
+All parts at rest (not pressed), same straight-on top-down orthographic view, same lighting and
+materials as the panel, keep their real relative sizes. Every part fully separated from the others
+by a wide empty gap (at least 1/10 of the image), nothing touching, nothing overlapping, nothing
+cut off by the image border.
+Perfectly flat pure green background (#00FF00), no shadows on the background, no gradient, no
+reflections of green on the parts. No text, no numbers, no labels, no logo. Square 1:1 image.
+```
+
+Salva l'immagine come `ui/src/foglio.png`, poi da `RSU10/ui`:
+
+```bash
+python3 ../../tools/slice_sheet.py src/foglio.png --out src --pressed --preview src/foglio_check.png --names knob pad_up key_rec_up key_grey_up key_violet_up key_enter_up key_rubber_up key_wide_up key_tiny_up
+```
+
+Escono i 17 file della tabella sotto (i `_down` generati dallo script); quelli che hai già fatto
+a mano non vengono toccati (`--force` per rifarli). Se lo script dice che ha trovato un numero
+sbagliato di pezzi, guarda `src/foglio_check.png` e rigenera chiedendo più spazio tra i pezzi.
+Se gli stati premuti generati non ti piacciono, stesso prompt con "all parts PRESSED DOWN" e
+`--names knob pad_down key_rec_down …` (senza `--pressed`, il knob poi lo cancelli).
+
+## Prompt 3 (vecchio metodo) — asset uno per immagine, sempre nella stessa chat
 
 Regola comune: aggiungi in fondo a ogni prompt 3.x questo blocco.
 
