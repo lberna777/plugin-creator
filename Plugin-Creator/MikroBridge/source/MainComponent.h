@@ -28,11 +28,11 @@ private:
 
     std::unique_ptr<PadGrid> grid;
     juce::Label status, legend;
-    juce::Label modeL, baseL, padChL, ctrlChL, curveL, threshL;
-    juce::ComboBox mode, base, padCh, ctrlCh, curve;
+    juce::Label modeL, baseL, rootL, scaleL, padChL, ctrlChL, curveL, threshL;
+    juce::ComboBox mode, base, root, scale, padCh, ctrlCh, curve;
     juce::Slider threshold;
     juce::ToggleButton aftertouch { "Aftertouch polifonico" }, flipped { "Pad numerati al contrario" };
-    int shownMode = -1;
+    int shownMode = -1, shownRoot = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)
 };

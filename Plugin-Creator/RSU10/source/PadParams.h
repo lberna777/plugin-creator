@@ -101,6 +101,22 @@ inline const std::array<PPDef, kNumPP>& ppDefs()
     return defs;
 }
 
+// Pagine delle 7 manopole (una pagina per tasto in gomma della piastra); -1 = manopola libera
+inline constexpr int kKnobs = 7;
+inline constexpr int kPages = 5;
+inline constexpr const char* kPageNames[kPages] { "SUONO", "INVIL.", "TAGLIO", "COLORE", "USCITA" };
+inline constexpr int kPageParams[kPages][kKnobs] {
+    { int (PP::Volume), int (PP::Pan), int (PP::Tune), int (PP::Fine), int (PP::VelToVolume), -1, -1 },
+    { int (PP::Attack), int (PP::Decay), int (PP::Sustain), int (PP::Release), int (PP::FadeIn), int (PP::FadeOut), -1 },
+    { int (PP::Start), int (PP::End), int (PP::LoopStart), int (PP::PlayMode), int (PP::Reverse), int (PP::Stretch), -1 },
+    { int (PP::FilterType), int (PP::Cutoff), int (PP::Resonance), int (PP::VelToFilter), int (PP::Grade), int (PP::Drive), int (PP::Comp) },
+    { int (PP::Output), int (PP::Choke), int (PP::Mono), int (PP::Split2), int (PP::Split3), int (PP::Split4), -1 },
+};
+inline int pageParam (int page, int knob) noexcept
+{
+    return (page >= 0 && page < kPages && knob >= 0 && knob < kKnobs) ? kPageParams[page][knob] : -1;
+}
+
 inline const PPDef& def (PP p) { return ppDefs()[size_t (p)]; }
 inline bool isChoice (PP p)   { return def (p).choices != nullptr; }
 inline bool isInteger (PP p)  { return isChoice (p) || p == PP::Tune || p == PP::Fine || p == PP::Split2 || p == PP::Split3 || p == PP::Split4; }

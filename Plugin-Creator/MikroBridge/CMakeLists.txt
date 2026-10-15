@@ -26,7 +26,7 @@ FetchContent_MakeAvailable(JUCE hidapi)
 
 # --- Cuore senza JUCE: protocollo, pad, display. Testato da MikroCoreTests ---
 add_executable(MikroCoreTests tests/core_tests.cpp)
-target_include_directories(MikroCoreTests PRIVATE source)
+target_include_directories(MikroCoreTests PRIVATE source ../shared)
 
 # --- App ponte ---
 juce_add_gui_app(MikroBridge
@@ -38,7 +38,7 @@ juce_add_gui_app(MikroBridge
     HARDENED_RUNTIME_ENABLED FALSE)
 
 target_sources(MikroBridge PRIVATE source/Main.cpp source/MainComponent.cpp source/Bridge.cpp)
-target_include_directories(MikroBridge PRIVATE source)
+target_include_directories(MikroBridge PRIVATE source ../shared)
 
 target_compile_definitions(MikroBridge PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_DISPLAY_SPLASH_SCREEN=0

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Engine.h"
+#include "Scales.h"
 
 namespace ParamID
 {
@@ -13,7 +14,21 @@ inline constexpr const char* ribbonHold  = "ribbonHold";
 inline constexpr const char* ribbonRange = "ribbonRange";
 inline constexpr const char* scale       = "scale";
 inline constexpr const char* scaleRoot   = "scaleRoot";
+inline constexpr const char* keyRoot     = "keyRoot";     // tonalità della tastiera (C..B)
+inline constexpr const char* keyScale    = "keyScale";    // scala della tastiera (scales::kScales)
 }
+
+// Funzioni della Maschine: i tasti che cambiano cosa fa un colpo sul pad
+enum class PadAction { None = 0, Mute, Solo, Select, Duplicate, Erase };
+enum class PadMode { Normal = 0, Velocity16, Keyboard };   // KEYBOARD = modo scala dell'SU10
+
+// Comandi dei tasti (dalla UI o dai tasti della Mikro via Mikro Bridge), eseguiti sul thread dei messaggi
+enum class Cmd
+{
+    Play, Rec, Top, Stop, Bwd, Fwd, Enter, Exit, Bank, PrevPad, NextPad, NextPage,
+    Scratch, Rev, NextRibbonMode, Hold, NextPadMode, FixedVel, RepeatRate,
+    Undo, Redo, SampleMinus, SamplePlus, ClearSelected, CopyPad, PastePad, ActionEnd
+};
 
 class RSU10AudioProcessor final : public juce::AudioProcessor, private juce::Timer
 {
@@ -61,7 +76,8 @@ public:
     void loadSample (int pad, int layer, const juce::File& f);
     void loadSamplesFrom (int firstPad, const juce::Array<juce::File>& files);   // un file per pad
     void stepSampleInFolder (int pad, int delta);    // -1/+1: campione precedente/successivo della cartella
-    void clearPad (int pad);
+    void clearPad (int pad);                         // campioni e parametri
+    void clearSamples (int pad);                     // solo i campioni
     void copyPad (int from, int to);
     void loadDemoKit();
 
@@ -80,6 +96,42 @@ public:
 
     static juce::File userFolder();   // ~/Music/RSU-10
 
+    // ---------------------------------------------------------------- funzioni Maschine
+    // Il tasto d'azione vale finché è agganciato col mouse (uiAction) o tenuto sulla Mikro (heldAction)
+    PadAction action() const noexcept
+    {
+        const int h = heldAction.load();
+        return PadAction (h != 0 ? h : uiAction.load());
+    }
+    void toggleUiAction (PadAction a);
+    void padAction (int pad, PadAction a);            // MUTE/SOLO/SELECT/DUPLICATE/ERASE sul pad
+    PadMode padMode() const noexcept;
+    int keyboardSemitones (int slot) const noexcept;   // KEYBOARD: semitoni dall'originale del grado `slot`
+    juce::String keyboardNoteName (int slot) const;
+    juce::String scaleName() const;                    // es. "D MINORE NATURALE"
+    void setPadMode (PadMode m);
+    void runCommand (Cmd c);
+    std::function<bool (Cmd)> editorCommand;          // l'editor gestisce i comandi del browser
+
+    std::atomic<int> uiAction { 0 };
+    std::atomic<bool> fixedVelocity { false };
+    std::atomic<bool> repeatUi { false }, repeatHeld { false };
+    std::atomic<int> repeatRate { 3 };                 // indice in kRepeatRateNames
+    std::atomic<int> uiHeldPad { -1 }, uiHeldVelocity { 0 };   // pad tenuto col mouse, per il NOTE REPEAT
+    int duplicateSource = -1;
+
+    static constexpr int kRepeatRates = 6;
+    static constexpr const char* kRepeatRateNames[kRepeatRates] { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
+    static constexpr double kRepeatBeats[kRepeatRates] { 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125 };
+
+    // UNDO / REDO delle modifiche ai pad (cancella, copia, carica, registra)
+    void pushUndo (int pad);
+    void undo();
+    void redo();
+
+    void drainPosted();                                         // esegue azioni e comandi arrivati dal MIDI
+    const juce::MidiBuffer& lastMidi() const noexcept { return midiWork; }   // MIDI dato al motore (test)
+
 protected:
     static BusesProperties buses();
 
@@ -89,9 +141,37 @@ private:
     void kitFromTree (const juce::ValueTree& kit, const juce::File& relativeTo);
     void finishRecording();
 
+    // MIDI in arrivo -> MIDI per il motore: tasti della Mikro, azioni, modi dei pad, note repeat
+    void transformMidi (const juce::MidiBuffer& in, int numSamples, double bpm, const juce::Optional<double>& ppq, bool playing);
+    bool controllerButton (int cc, int value);
+    void post (int code);   // >= 0: azione su pad (pad | azione << 8); < 0: comando -(cmd + 1)
+    void postCommand (Cmd c) { post (-(int (c) + 1)); }
+
+    struct PadSnapshot
+    {
+        int pad = 0;
+        std::array<float, rsu::kNumPP> values {};
+        std::array<rsu::Sample::Ptr, rsu::kMaxLayers> layers;
+    };
+    PadSnapshot snapshot (int pad) const;
+    void restore (const PadSnapshot&);
+    std::vector<PadSnapshot> undoStack, redoStack;
+    int clipboardPad = -1;
+
+    std::atomic<int> heldAction { 0 };
+    std::atomic<int> padModeStored { 0 };   // Normal o Velocity16 (Keyboard = parametro scale)
+    juce::MidiBuffer midiWork;
+    juce::AbstractFifo postFifo { 256 };
+    std::array<int, 256> postCodes {};
+    std::array<bool, 128> swallowed {};
+    std::array<int, 128> mappedNote {}, heldVelocity {};
+    double repeatPhase = 0.0, preparedRate = 44100.0;
+    bool repeatWasOn = false;
+
     std::atomic<float>* pMaster; std::atomic<float>* pRibbon; std::atomic<float>* pTouch;
     std::atomic<float>* pMode;   std::atomic<float>* pHold;   std::atomic<float>* pRange;
     std::atomic<float>* pScale;  std::atomic<float>* pRoot;
+    std::atomic<float>* pKeyRoot; std::atomic<float>* pKeyScale;
 
     juce::AudioBuffer<float> inputCopy;
     juce::SmoothedValue<float> master;

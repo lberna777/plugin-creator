@@ -5,6 +5,7 @@
 
 #include "Display.h"
 #include "PadEngine.h"
+#include "Scales.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
@@ -26,6 +27,8 @@ public:
         std::atomic<int> mode { int (Mode::Drums) };
         std::atomic<int> drumBase { 36 };   // C1: pad 1 = C1 ... pad 16 = D#2 (Drum Machine Designer, Battery, GM)
         std::atomic<int> keyBase { 48 };    // C2
+        std::atomic<int> scale { 0 };       // modo Keys: indice in scales::kScales (0 = cromatica)
+        std::atomic<int> root { 0 };        // tonica 0..11 (C..B): i pad suonano solo note della scala
         std::atomic<int> padChannel { 1 };
         std::atomic<int> ctrlChannel { 16 };
         std::atomic<int> curve { int (mikro::VelocityCurve::Linear) };

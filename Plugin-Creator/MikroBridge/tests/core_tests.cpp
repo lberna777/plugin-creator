@@ -1,6 +1,7 @@
 // Test del cuore senza hardware: report sintetici come quelli della Mikro MK2.
 #include "Display.h"
 #include "MikroProtocol.h"
+#include "Scales.h"
 #include "PadEngine.h"
 
 #include <cstdio>
@@ -161,8 +162,32 @@ static void testDisplay()
     CHECK (any);
 }
 
+// Scale: ogni grado è nella scala, i gradi salgono, lo snap trova la nota intonata più vicina
+static void testScales()
+{
+    using namespace scales;
+    for (int sc = 0; sc < kNumScales; ++sc)
+        for (int r = 0; r < 12; ++r)
+        {
+            for (int d = -16; d < 32; ++d)
+            {
+                CHECK (inScale (sc, r, r + degreeToSemitones (sc, d)));
+                CHECK (degreeToSemitones (sc, d + 1) > degreeToSemitones (sc, d));
+            }
+            for (int n = 0; n < 128; ++n)
+            {
+                const int m = snap (sc, r, n);
+                CHECK (inScale (sc, r, m) && m - n <= 2 && n - m <= 2);
+            }
+        }
+    CHECK (degreeToSemitones (1, 7) == 12);             // maggiore: pad 8 = ottava
+    CHECK (degreeToSemitones (11, 5) == 12);            // pentatonica minore: pad 6 = ottava
+    CHECK (snap (1, 0, 61) == 60 && snap (1, 0, 66) == 65);
+}
+
 int main()
 {
+    testScales();
     testParsers();
     testPadEngine();
     testDisplay();

@@ -147,6 +147,13 @@ void PadView::paint (juce::Graphics& g)
     else if (hasSample)
         skin::drawPadRing (g, area, skin::col::amber, 0.06f);
 
+    // MUTE: anello rosso; SOLO: anello verde
+    const bool muted = proc.engine.muted[pad].load(), soloed = proc.engine.soloed[pad].load();
+    if (muted)
+        skin::drawPadRing (g, area, skin::col::recRed, 0.55f);
+    else if (soloed)
+        skin::drawPadRing (g, area, juce::Colour (0xff5be37a), 0.55f);
+
     skin::drawPad (g, area, pressed);
 
     // Serigrafia sul pad come l'SU10: nome in alto a sinistra, numero in basso a destra
@@ -159,6 +166,13 @@ void PadView::paint (juce::Graphics& g)
                     juce::jmax (8.0f, area.getHeight() * 0.11f), hasSample ? skin::col::silk : skin::col::dim);
     skin::drawSilk (g, juce::String (pad % kPadsPerBank + 1), inner.withTrimmedTop (inner.getHeight() * 0.5f),
                     juce::Justification::bottomRight, area.getHeight() * 0.26f, skin::col::silk);
+    if (muted || soloed)
+        skin::drawSilk (g, muted ? "M" : "S", inner.withTrimmedTop (inner.getHeight() * 0.5f), juce::Justification::bottomLeft,
+                        area.getHeight() * 0.22f, muted ? skin::col::recRed : juce::Colour (0xff5be37a));
+    // KEYBOARD: ogni pad mostra la sua nota della scala
+    if (proc.padMode() == PadMode::Keyboard)
+        skin::drawSilk (g, proc.keyboardNoteName (slot), inner.withTrimmedBottom (inner.getHeight() * 0.5f).withTrimmedTop (inner.getHeight() * 0.22f),
+                        juce::Justification::topLeft, area.getHeight() * 0.18f, skin::col::cyan);
 }
 
 void PadView::mouseDown (const juce::MouseEvent& e)
@@ -170,17 +184,50 @@ void PadView::mouseDown (const juce::MouseEvent& e)
         showMenu();
         return;
     }
-    proc.selectedPad = pad;
     dragging = false;
+
+    // MUTE / SOLO / SELECT / DUPLICATE / ERASE agganciato: il clic fa l'azione, non suona
+    if (const auto a = proc.action(); a != PadAction::None)
+    {
+        proc.padAction (pad, a);
+        if (auto* p = getParentComponent())
+            p->repaint();
+        return;
+    }
+
     if (! (ui.shift || e.mods.isShiftDown()))
     {
         // velocity dal punto del clic: in alto forte, in basso piano
         const auto area = padArea();
         const float y = juce::jlimit (0.0f, 1.0f, (float (e.y) - area.getY()) / area.getHeight());
-        const int vel = juce::jlimit (1, 127, juce::roundToInt (127.0f - y * 90.0f));
-        proc.engine.triggerFromUi (pad, vel, true);
+        int vel = juce::jlimit (1, 127, juce::roundToInt (127.0f - y * 90.0f));
+        if (proc.fixedVelocity.load())
+            vel = 127;
+
+        switch (proc.padMode())
+        {
+            case PadMode::Velocity16:   // il pad scelto, con la velocity del pad toccato
+                playing = proc.selectedPad.load();
+                vel = (slot + 1) * 8 - 1;
+                proc.engine.triggerFromUi (playing, vel, true);
+                proc.uiHeldPad = playing;
+                break;
+            case PadMode::Keyboard:     // il pad della scala, alla nota del grado toccato
+                playing = proc.scalePad.load();
+                proc.engine.triggerFromUi (playing, vel, true, float (proc.keyboardSemitones (slot)), 200 + slot);
+                break;
+            case PadMode::Normal:
+                playing = pad;
+                proc.selectedPad = pad;
+                proc.engine.triggerFromUi (pad, vel, true);
+                proc.uiHeldPad = pad;
+                break;
+        }
+        proc.uiHeldVelocity = vel;
         pressed = true;
     }
+    else
+        proc.selectedPad = pad;
     if (auto* p = getParentComponent())
         p->repaint();
 }
@@ -198,7 +245,13 @@ void PadView::mouseDrag (const juce::MouseEvent& e)
 void PadView::mouseUp (const juce::MouseEvent&)
 {
     if (pressed)
-        proc.engine.triggerFromUi (padIndex(), 0, false);
+    {
+        if (proc.padMode() == PadMode::Keyboard)
+            proc.engine.triggerFromUi (playing, 0, false, 0.0f, 200 + slot);
+        else
+            proc.engine.triggerFromUi (playing, 0, false);
+        proc.uiHeldPad = -1;
+    }
     pressed = false;
     repaint();
 }
@@ -296,7 +349,7 @@ void PadView::showMenu()
                                           proc.loadSample (pad, layer, fc.getResult());
                                   });
         }
-        else if (r == 3) proc.samples.clearPad (pad);
+        else if (r == 3) proc.clearSamples (pad);
         else if (r == 4) proc.pads.resetPad (pad);
         else if (r == 5) proc.samples.get (pad, 0)->file().revealToUser();
         else if (r >= 100) proc.copyPad (pad, r - 100);
@@ -721,7 +774,11 @@ void MainScreen::paint (juce::Graphics& g)
         g.fillRoundedRectangle (c, 3.0f);
         g.setColour (scaleOn ? skin::col::cyan : skin::col::dim);
         g.setFont (skin::screenFont (c.getHeight() * 0.55f, scaleOn));
-        g.drawFittedText ("SCALE", c.toNearestInt(), juce::Justification::centred, 1, 0.6f);
+        const int sc = juce::roundToInt (proc.apvts.getRawParameterValue (ParamID::keyScale)->load());
+        const int rt = juce::roundToInt (proc.apvts.getRawParameterValue (ParamID::keyRoot)->load());
+        const juce::String chipText = scaleOn && sc > 0 ? juce::String (scales::kRootNames[rt % 12]) + " " + scales::get (sc).shortName
+                                                        : juce::String ("SCALE");
+        g.drawFittedText (chipText, c.toNearestInt(), juce::Justification::centred, 1, 0.6f);
 
         const auto r = chip (5);
         g.setColour (juce::Colours::white.withAlpha (0.04f));
@@ -803,17 +860,17 @@ void MainScreen::paint (juce::Graphics& g)
         }
     }
 
-    // ---- valori delle 8 manopole, allineati alle colonne
+    // ---- valori delle 7 manopole della pagina, allineati alle colonne
     const auto vb = valueBar();
     g.setColour (juce::Colours::white.withAlpha (0.08f));
     g.drawHorizontalLine (int (vb.getY()), 6.0f, float (getWidth() - 6));
-    const float colW = vb.getWidth() / 8.0f;
-    const int pg = juce::jlimit (0, 3, proc.page.load());
-    for (int k = 0; k < 8; ++k)
+    const float colW = vb.getWidth() / float (kKnobs);
+    const int pg = juce::jlimit (0, kPages - 1, proc.page.load());
+    for (int k = 0; k < kKnobs; ++k)
     {
-        const int idx = pg * 8 + k;
+        const int idx = pageParam (pg, k);
         auto c = juce::Rectangle<float> (vb.getX() + colW * float (k), vb.getY() + 2.0f, colW, vb.getHeight() - 2.0f).reduced (3.0f, 0.0f);
-        if (idx >= kNumPP)
+        if (idx < 0)
             continue;
         g.setColour (skin::col::dim);
         g.setFont (skin::screenFont (c.getHeight() * 0.34f));
@@ -838,13 +895,39 @@ void MainScreen::mouseDown (const juce::MouseEvent& e)
         }
     if (chip (4).contains (e.position))
     {
-        auto* p = proc.apvts.getParameter (ParamID::scale);
-        const bool on = p->getValue() < 0.5f;
-        if (on)
-            proc.scalePad = pad;   // il pad selezionato diventa la tastiera
-        p->setValueNotifyingHost (on ? 1.0f : 0.0f);
-        proc.postMessage (on ? "SCALE: " + padLabel (pad) + " su tutte le note (C3 = originale)" : "SCALE spento");
-        repaint();
+        // Tastiera dell'SU10 + scala musicale: ogni pad e ogni nota restano intonati
+        const bool on = proc.apvts.getRawParameterValue (ParamID::scale)->load() > 0.5f;
+        const int rt = juce::roundToInt (proc.apvts.getRawParameterValue (ParamID::keyRoot)->load());
+        const int sc = juce::roundToInt (proc.apvts.getRawParameterValue (ParamID::keyScale)->load());
+        juce::PopupMenu m, roots, scaleMenu;
+        for (int r = 0; r < 12; ++r)
+            roots.addItem (100 + r, scales::kRootNames[r], true, r == rt);
+        for (int i = 0; i < scales::kNumScales; ++i)
+            scaleMenu.addItem (200 + i, scales::kScales[i].name, true, i == sc);
+        m.addItem (1, on ? "Spegni la tastiera" : "Tastiera: " + padLabel (pad) + " su tutte le note");
+        m.addSeparator();
+        m.addSubMenu ("Tonalita'", roots);
+        m.addSubMenu ("Scala", scaleMenu);
+        m.showMenuAsync (juce::PopupMenu::Options().withTargetScreenArea (localAreaToGlobal (chip (4).toNearestInt())),
+                         [this, pad, on] (int r)
+                         {
+                             auto setChoice = [this] (const char* id, int index)
+                             {
+                                 auto* p = proc.apvts.getParameter (id);
+                                 p->setValueNotifyingHost (p->convertTo0to1 (float (index)));
+                             };
+                             if (r == 1)
+                             {
+                                 proc.selectedPad = pad;
+                                 proc.setPadMode (on ? PadMode::Normal : PadMode::Keyboard);
+                             }
+                             else if (r >= 100 && r < 112) setChoice (ParamID::keyRoot, r - 100);
+                             else if (r >= 200 && r < 200 + scales::kNumScales) setChoice (ParamID::keyScale, r - 200);
+                             if (r >= 100)
+                                 proc.postMessage ("SCALA: " + proc.scaleName());
+                             if (auto* parent = getParentComponent())
+                                 parent->repaint();
+                         });
         return;
     }
     if (chip (5).contains (e.position))

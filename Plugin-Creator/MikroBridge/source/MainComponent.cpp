@@ -85,13 +85,17 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     legend.setColour (juce::Label::textColourId, Col::dim);
     legend.setJustificationType (juce::Justification::topLeft);
     legend.setText (juce::String ("Nel DAW scegli \"") + Bridge::kPortName + "\" come ingresso MIDI (e come uscita, se vuoi le luci).\n"
-                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera.  SHIFT + pad 13/14: semitono, 15/16: banco o ottava.\n"
+                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala.  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
                     "Tasti: CC 20-46 sul canale controlli (con SHIFT: CC 70-96).  SHIFT + pad 1-12: CC 102-113.  Encoder: CC 14 relativo (SHIFT: CC 15).",
                     juce::dontSendNotification);
     addAndMakeVisible (legend);
 
     mode.addItem ("Batteria (16 pad)", 1);
-    mode.addItem ("Tastiera (cromatica)", 2);
+    mode.addItem ("Tastiera (in scala)", 2);
+    for (int r = 0; r < 12; ++r)
+        root.addItem (scales::kRootNames[r], r + 1);
+    for (int i = 0; i < scales::kNumScales; ++i)
+        scale.addItem (scales::kScales[i].name, i + 1);
     for (int ch = 1; ch <= 16; ++ch)
     {
         padCh.addItem (juce::String (ch), ch);
@@ -108,6 +112,8 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
 
     addRow (modeL, mode, "Modo");
     addRow (baseL, base, "Pad 1 suona");
+    addRow (rootL, root, juce::String (juce::CharPointer_UTF8 ("Tonalit\xc3\xa0")));
+    addRow (scaleL, scale, "Scala (tastiera)");
     addRow (padChL, padCh, "Canale pad");
     addRow (ctrlChL, ctrlCh, "Canale controlli");
     addRow (curveL, curve, "Velocity");
@@ -124,6 +130,8 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
         target = base.getSelectedId() - 1;
         save();
     };
+    root.onChange   = [this] { bridge.settings.root = root.getSelectedId() - 1; save(); };
+    scale.onChange  = [this] { bridge.settings.scale = scale.getSelectedId() - 1; save(); };
     padCh.onChange  = [this] { bridge.settings.padChannel = padCh.getSelectedId(); save(); };
     ctrlCh.onChange = [this] { bridge.settings.ctrlChannel = ctrlCh.getSelectedId(); save(); };
     curve.onChange  = [this] { bridge.settings.curve = curve.getSelectedId() - 1; save(); };
@@ -131,7 +139,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     aftertouch.onClick = [this] { bridge.settings.aftertouch = aftertouch.getToggleState(); save(); };
     flipped.onClick    = [this] { bridge.settings.flippedPads = flipped.getToggleState(); save(); };
 
-    setSize (720, 470);
+    setSize (720, 540);
     startTimerHz (30);
 }
 
@@ -161,6 +169,8 @@ void MainComponent::load()
     s.mode        = props.getIntValue ("mode", s.mode);
     s.drumBase    = props.getIntValue ("drumBase", s.drumBase);
     s.keyBase     = props.getIntValue ("keyBase", s.keyBase);
+    s.scale       = juce::jlimit (0, scales::kNumScales - 1, props.getIntValue ("scale", s.scale));
+    s.root        = juce::jlimit (0, 11, props.getIntValue ("root", s.root));
     s.padChannel  = props.getIntValue ("padChannel", s.padChannel);
     s.ctrlChannel = props.getIntValue ("ctrlChannel", s.ctrlChannel);
     s.curve       = props.getIntValue ("curve", s.curve);
@@ -170,6 +180,8 @@ void MainComponent::load()
 
     fillBaseNotes();
     mode.setSelectedId (s.mode + 1, juce::dontSendNotification);
+    root.setSelectedId (s.root + 1, juce::dontSendNotification);
+    scale.setSelectedId (s.scale + 1, juce::dontSendNotification);
     padCh.setSelectedId (s.padChannel, juce::dontSendNotification);
     ctrlCh.setSelectedId (s.ctrlChannel, juce::dontSendNotification);
     curve.setSelectedId (s.curve + 1, juce::dontSendNotification);
@@ -184,6 +196,8 @@ void MainComponent::save()
     props.setValue ("mode", s.mode.load());
     props.setValue ("drumBase", s.drumBase.load());
     props.setValue ("keyBase", s.keyBase.load());
+    props.setValue ("scale", s.scale.load());
+    props.setValue ("root", s.root.load());
     props.setValue ("padChannel", s.padChannel.load());
     props.setValue ("ctrlChannel", s.ctrlChannel.load());
     props.setValue ("curve", s.curve.load());
@@ -205,6 +219,13 @@ void MainComponent::timerCallback()
         shownMode = m;
         mode.setSelectedId (m + 1, juce::dontSendNotification);
         base.setSelectedId (b + 1, juce::dontSendNotification);
+    }
+    if (const int r = bridge.settings.root.load(); r != shownRoot && ! root.isPopupActive())
+    {
+        if (shownRoot >= 0)
+            save();
+        shownRoot = r;
+        root.setSelectedId (r + 1, juce::dontSendNotification);
     }
 
     if (! bridge.hasVirtualPorts())
@@ -250,8 +271,8 @@ void MainComponent::resized()
     area.removeFromLeft (kMargin + kGap);
 
     auto row = [&area] { auto r = area.removeFromTop (kRowH); area.removeFromTop (kGap); return r; };
-    juce::Label* labels[] { &modeL, &baseL, &padChL, &ctrlChL, &curveL, &threshL };
-    juce::Component* comps[] { &mode, &base, &padCh, &ctrlCh, &curve, &threshold };
+    juce::Label* labels[] { &modeL, &baseL, &rootL, &scaleL, &padChL, &ctrlChL, &curveL, &threshL };
+    juce::Component* comps[] { &mode, &base, &root, &scale, &padCh, &ctrlCh, &curve, &threshold };
     for (size_t i = 0; i < std::size (labels); ++i)
     {
         auto r = row();

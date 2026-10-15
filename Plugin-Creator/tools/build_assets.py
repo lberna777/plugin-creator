@@ -117,6 +117,19 @@ def resize(im, w=None, h=None, **_):
     return im.resize((int(w), int(h)), Image.LANCZOS)
 
 
+def border_fill(im, color=(22, 24, 28), lum=200, **_):
+    """Lo sfondo chiaro attorno a un corpo arrotondato (angoli della piastra Gemini) diventa `color`:
+    riempie solo i pixel chiari collegati al bordo dell'immagine, non tocca l'interno."""
+    a = np.asarray(im.convert("RGBA")).copy()
+    light = a[..., :3].astype(float).mean(2) > lum
+    lab, _ = ndimage.label(light)
+    edge = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
+    mask = np.isin(lab, list(edge))
+    mask = ndimage.binary_dilation(mask, iterations=2)   # anche l'alone antialias del bordo
+    a[mask, :3] = color
+    return Image.fromarray(a)
+
+
 def opaque(im, **_):
     """Toglie l'alpha (per sfondi da salvare in JPEG)."""
     return im.convert("RGB")
@@ -142,6 +155,7 @@ OPS = {
     "hslice": hslice,
     "resize": resize,
     "opaque": opaque,
+    "border_fill": border_fill,
     "circle_crop": circle_crop,
     "autocrop": autocrop,
     "rotate_to_top": rotate_to_top,

@@ -49,7 +49,8 @@ public:
                   int numSamples, const juce::MidiBuffer& midi, const EngineGlobals& g);
 
     // ---- dalla UI (thread dei messaggi), lock-free verso l'audio
-    void triggerFromUi (int pad, int velocity, bool on);
+    // semitones/note: modo tastiera (un pad su più note); note < 0 = il pad suona sé stesso
+    void triggerFromUi (int pad, int velocity, bool on, float semitones = 0.0f, int note = -1);
     void panic();
     void startPreview (Sample::Ptr s);
     void stopPreview();
@@ -75,12 +76,15 @@ public:
     std::atomic<float> ribbonShown { 0.5f };      // valore effettivo (anche da MIDI)
     std::atomic<bool> ribbonTouchedShown { false };
 
+    // MUTE / SOLO della Maschine: il pad suona ma la sua uscita sfuma a zero
+    std::atomic<bool> muted[kNumPads] {}, soloed[kNumPads] {};
+
     static constexpr int kMaxVoices = 48;
 
 private:
     struct Voice;
     struct PadStage;
-    struct UiEvent { int pad, velocity; bool on; };
+    struct UiEvent { int pad, velocity; bool on; float semitones; int note; };
 
     void handleMidi (const juce::MidiMessage& m, const EngineGlobals& g);
     void noteOn (int pad, int velocity, float semitoneOffset, int note);

@@ -52,6 +52,29 @@ void drawImageIn (juce::Graphics& g, const juce::Image& img, juce::Rectangle<flo
 {
     g.drawImage (img, r, juce::RectanglePlacement::stretchToFit);
 }
+
+// Tasto in 9 fette: gli angoli arrotondati restano proporzionati, si allunga solo il centro.
+// Così lo stesso PNG va su fori di proporzioni diverse (quadrati, larghi) senza deformarsi.
+void drawSliced (juce::Graphics& g, const juce::Image& img, juce::Rectangle<float> r)
+{
+    const float iw = (float) img.getWidth(), ih = (float) img.getHeight();
+    const float cs = juce::jmin (iw, ih) * 0.32f;                       // angolo nel PNG
+    const float cd = juce::jmin (r.getWidth(), r.getHeight()) * 0.32f;  // angolo sullo schermo
+    const float sx[] { 0.0f, cs, iw - cs, iw }, sy[] { 0.0f, cs, ih - cs, ih };
+    const float dx[] { r.getX(), r.getX() + cd, r.getRight() - cd, r.getRight() };
+    const float dy[] { r.getY(), r.getY() + cd, r.getBottom() - cd, r.getBottom() };
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col)
+        {
+            const auto src = juce::Rectangle<float>::leftTopRightBottom (sx[col], sy[row], sx[col + 1], sy[row + 1]).toNearestInt();
+            const auto dst = juce::Rectangle<float>::leftTopRightBottom (dx[col], dy[row], dx[col + 1], dy[row + 1]);
+            if (src.isEmpty() || dst.isEmpty())
+                continue;
+            // un pixel di sovrapposizione evita le cuciture tra le fette
+            g.drawImage (img.getClippedImage (src), dst.expanded (col == 1 ? 0.5f : 0.0f, row == 1 ? 0.5f : 0.0f),
+                         juce::RectanglePlacement::stretchToFit);
+        }
+}
 } // namespace
 
 juce::Font silkFont (float h)
@@ -66,7 +89,7 @@ juce::Font screenFont (float h, bool bold)
 
 void drawBody (juce::Graphics& g, juce::Rectangle<float> r)
 {
-    if (auto img = asset ("bg_plate.png"); img.isValid())
+    if (auto img = asset ("bg_plate.jpg"); img.isValid())
     {
         drawImageIn (g, img, r);
         return;
@@ -128,7 +151,10 @@ void drawKey (juce::Graphics& g, juce::Rectangle<float> r, KeyStyle style, bool 
     const juce::String file = juce::String (names[int (style)]) + (down ? "_down.png" : "_up.png");
     if (auto img = asset (file.toRawUTF8()); img.isValid())
     {
-        drawImageIn (g, img, r);
+        if (style == KeyStyle::Rec)
+            drawImageIn (g, img, r);
+        else
+            drawSliced (g, img, r);
         return;
     }
 

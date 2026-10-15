@@ -22,6 +22,9 @@ private:
     void renderBackground();
     void setupKey (Key& k, std::function<void()> onClick, std::function<bool()> led = nullptr, bool labelAbove = true);
     void selectPad (int pad);
+    bool editorCommand (Cmd c);
+    void enterKey();
+    juce::Rectangle<int> gridCell (const char* group, int col, int row) const;
     void kitMenu();
     void saveKitAs();
     void openKit();
@@ -37,14 +40,19 @@ private:
     BrowserScreen browser { proc, ui };
     MainScreen mainScreen { proc, ui };
     Ribbon ribbon { proc };
-    std::array<std::unique_ptr<Knob>, 8> knobs;
+    std::array<std::unique_ptr<Knob>, rsu::kKnobs> knobs;
     std::array<std::unique_ptr<PadView>, rsu::kPadsPerBank> padViews;
 
     Key keySave { "SAVE", skin::KeyStyle::Grey }, keyLoad { "LOAD", skin::KeyStyle::Grey };
     Key keyHold { "HOLD", skin::KeyStyle::Grey }, keyExit { "EXIT", skin::KeyStyle::Violet };
     Key keyRev { "REV", skin::KeyStyle::Grey }, keyScratch { "SCRATCH", skin::KeyStyle::Grey };
     Key keyShift { "SHIFT", skin::KeyStyle::Grey }, keyBank { "BANK", skin::KeyStyle::Grey };
-    std::array<std::unique_ptr<Key>, 4> pageKeys;
+    std::array<std::unique_ptr<Key>, rsu::kPages> pageKeys;
+
+    // Funzioni della Maschine (blocco 3x3 a sinistra)
+    Key keyMute { "MUTE", skin::KeyStyle::Grey }, keySolo { "SOLO", skin::KeyStyle::Grey }, keySelect { "SELECT", skin::KeyStyle::Grey };
+    Key keyDup { "DUPLIC.", skin::KeyStyle::Grey }, keyErase { "ERASE", skin::KeyStyle::Grey }, keyUndo { "UNDO", skin::KeyStyle::Grey };
+    Key keyRepeat { "REPEAT", skin::KeyStyle::Grey }, keyPadMode { "PAD MODE", skin::KeyStyle::Grey }, keyFixVel { "FIX VEL", skin::KeyStyle::Grey };
     Key keyEnter { "ENTER", skin::KeyStyle::Enter }, keyMinus { "-1", skin::KeyStyle::Tiny }, keyPlus { "+1", skin::KeyStyle::Tiny };
     Key keyLeft { "<", skin::KeyStyle::Tiny }, keyRight { ">", skin::KeyStyle::Tiny };
     Key keyRec { "REC", skin::KeyStyle::Rec }, keyTop { "TOP", skin::KeyStyle::Rubber }, keyBwd { "BWD", skin::KeyStyle::Rubber };

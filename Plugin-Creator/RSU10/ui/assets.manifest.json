@@ -2,10 +2,20 @@
   "_comment": "Asset dell'RSU-10. Sorgenti: immagini Gemini (ui/GEMINI_PROMPTS.md) in src/, verde pieno #00FF00 tranne la piastra. Eseguire da RSU10/ui: python3 ../../tools/build_assets.py assets.manifest.json. Poi ricompilare: ogni PNG in source/assets sostituisce il disegno da codice.",
   "assets": [
     {
-      "input": "src/bg_plate.png",
-      "output": "../source/assets/bg_plate.png",
+      "input": "src/bg_plate.jpg",
+      "output": "../source/assets/bg_plate.jpg",
       "expect_alpha": false,
       "ops": [
+        {
+          "op": "crop_box",
+          "box": [
+            59,
+            45,
+            2566,
+            1590
+          ]
+        },
+        "border_fill",
         {
           "op": "resize",
           "w": 2560,
@@ -17,7 +27,8 @@
         2560,
         1600
       ],
-      "_nota": "16:10 come la finestra; se Gemini aggiunge bordi, prima un crop_box misurato"
+      "_nota": "crop_box = corpo della piastra misurato (bbox dei pixel non bianchi di bg_plate.jpg 2624x1632); le coordinate di layout.json sono relative a questo ritaglio",
+      "quality": 90
     },
     {
       "input": "src/knob.png",

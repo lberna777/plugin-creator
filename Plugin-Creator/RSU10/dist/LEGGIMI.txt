@@ -26,9 +26,41 @@ Apri Mikro Bridge. In FL: Opzioni > Impostazioni MIDI, attiva l'ingresso
 "Mikro MK2 Bridge". Seleziona il canale RSU-10 nel Channel Rack e suona.
 - Pad 1-16 = banco A (C1 ... D#2).
 - SHIFT + pad 15/16 sulla Mikro: banco B, C, D (sono le note più alte).
-- Encoder della Mikro = ribbon (scratch, pitch, filtro...).
+- Encoder della Mikro = ribbon (scratch, pitch, filtro...); premuto = HOLD.
 - Registri come al solito in FL: la batteria va nel piano roll.
 
+TASTI DELLA MIKRO DENTRO L'RSU-10 (come sulla Maschine)
+- MUTE / SOLO / SELECT / DUPLICATE / ERASE: tienilo premuto e tocca i pad
+  (DUPLICATE: primo pad = da copiare, secondo = dove).
+- NOTE REPEAT tenuto + pad = ripete a tempo con FL; GRID o SHIFT+NOTE REPEAT
+  cambia la griglia (1/4 ... 1/32).
+- VIEW = PAD MODE dell'RSU-10 (normale / 16 VELOCITY / KEYBOARD);
+  SHIFT + VIEW = FIXED VEL.
+- GROUP = banco, MAIN = EXIT, BROWSE = ENTER, NAV < > = pad precedente/successivo,
+  CONTROL = pagina successiva, F1 = SCRATCH, F2 = REV, F3 = modo del ribbon,
+  SCENE / PATTERN = -1 / +1, STEP < > = BWD / FWD, RESTART = TOP, PLAY, REC.
+- SHIFT + pad 1 = UNDO, pad 2 = REDO, pad 9 = cancella il pad,
+  pad 11 = COPY, pad 12 = PASTE.
+
+
+FUNZIONI MASCHINE (i 9 tasti grigi in basso a sinistra)
+MUTE, SOLO, SELECT, DUPLIC., ERASE .. clic = si aggancia (LED), poi clicca i pad;
+                    di nuovo clic per sganciare. Pad in mute: anello rosso,
+                    in solo: anello verde.
+UNDO .............. annulla l'ultima modifica a un pad (SHIFT + UNDO = REDO)
+REPEAT ............ acceso: tieni premuto un pad e si ripete a tempo
+                    (SHIFT + REPEAT = griglia)
+PAD MODE .......... normale > 16 VELOCITY (i 16 pad suonano il pad scelto, dal
+                    piano al forte) > KEYBOARD (il pad scelto su tutte le note)
+FIX VEL ........... tutti i colpi a velocity 127
+
+SUONARE IN SCALA (KEYBOARD)
+Clic sul riquadro SCALE dello schermo: Tonalità e Scala. In KEYBOARD i 16 pad
+suonano i gradi della scala (il nome della nota è sul pad) e ogni nota che
+arriva da FL o da una tastiera si aggancia alla nota della scala più vicina.
+Con la Mikro: imposta la stessa scala anche in Mikro Bridge e premi PAD MODE.
+
+PAGINE (i 5 tasti neri): SUONO, INVIL., TAGLIO, COLORE, USCITA, 7 manopole ciascuna.
 
 COME SI USA
 -----------
@@ -44,11 +76,13 @@ Browser (sinistra)  clic = ascolto, doppio clic = carica nel pad scelto
 Schermo ........... forma d'onda del pad: trascina S, E e LOOP
                     V1-V4 = strati, SCALE = il pad su tutte le note (C3 = originale)
                     REC: INGR./USCITA = da dove campiona REC
-Manopole .......... 8 per pagina, i valori sono sullo schermo sopra
+Manopole .......... 7 per pagina, i valori sono sullo schermo sopra
                     doppio clic = valore iniziale, SHIFT = regolazione fine
-Pagine ............ SUONO   volume, pan, intonazione, inviluppo
-                    TAGLIO  inizio, fine, loop, fade, modo, reverse, stretch
-                    COLORE  filtro, velocity, grade lo-fi, saturazione, compressore
+Pagine ............ SUONO   volume, pan, intonazione, fine, velocity > volume
+                    INVIL.  attacco, decay, sustain, rilascio, fade in/out
+                    TAGLIO  inizio, fine, loop, modo, reverse, stretch
+                    COLORE  filtro, risonanza, velocity > filtro, grade lo-fi,
+                            saturazione, compressore
                     USCITA  uscita nel mixer, choke, mono, soglie degli strati
 -1 / +1 ........... cambia il campione del pad con il precedente/successivo
                     della sua cartella (per provare i suoni al volo)

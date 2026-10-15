@@ -60,8 +60,9 @@ int Bridge::ccForButton (int buttonIndex, bool shift) noexcept
 
 int Bridge::noteForPad (int physicalPad) const noexcept
 {
-    const int base = settings.mode.load() == int (Mode::Keys) ? settings.keyBase.load() : settings.drumBase.load();
-    return base + physicalPad;
+    if (settings.mode.load() == int (Mode::Keys))   // gradi consecutivi della scala: ogni pad è intonato
+        return settings.keyBase.load() + settings.root.load() + scales::degreeToSemitones (settings.scale.load(), physicalPad);
+    return settings.drumBase.load() + physicalPad;
 }
 
 int Bridge::octaveStep() const noexcept
@@ -276,10 +277,14 @@ void Bridge::localPadFunction (int pad)
         base = juce::jlimit (0, 127 - (kNumPads - 1), base.load() + delta);
     };
 
+    // In Keys con una scala, il semitono sposta la tonalità (C -> C# ...) e la scala resta giusta
+    auto shiftRoot = [this] (int delta) { settings.root = scales::mod (settings.root.load() + delta, 12); };
+    const bool scaled = settings.mode.load() == int (Mode::Keys) && settings.scale.load() != 0;
+
     switch (pad)
     {
-        case kShiftPadSemiDown: shiftBase (-1); break;
-        case kShiftPadSemiUp:   shiftBase (+1); break;
+        case kShiftPadSemiDown: if (scaled) shiftRoot (-1); else shiftBase (-1); break;
+        case kShiftPadSemiUp:   if (scaled) shiftRoot (+1); else shiftBase (+1); break;
         case kShiftPadOctDown:  shiftBase (-octaveStep()); break;
         case kShiftPadOctUp:    shiftBase (+octaveStep()); break;
         default:   // SHIFT + pad 1..12 (UNDO, REDO, QUANTIZE...): CC da assegnare nel DAW
@@ -441,8 +446,10 @@ void Bridge::drawDisplay (Display& d) const
     d.text (2, 36, range.toRawUTF8());
 
     const char* curves[] { "SOFT", "LIN", "HARD", "FIXED" };
-    const juce::String info (juce::String ("VEL ") + curves[juce::jlimit (0, 3, settings.curve.load())]
-                             + (settings.aftertouch.load() ? "   AT ON" : "   AT OFF"));
+    const juce::String info = keys ? juce::String ("SCALA ") + scales::kRootNames[scales::mod (settings.root.load(), 12)] + " "
+                                         + scales::get (settings.scale.load()).shortName
+                                   : juce::String ("VEL ") + curves[juce::jlimit (0, 3, settings.curve.load())]
+                                         + (settings.aftertouch.load() ? "   AT ON" : "   AT OFF");
     d.text (2, 45, info.toRawUTF8());
 
     d.fillRect (0, 54, kDisplayW, 1, true);

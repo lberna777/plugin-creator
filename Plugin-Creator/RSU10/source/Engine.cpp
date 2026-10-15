@@ -136,6 +136,7 @@ struct Engine::PadStage
     juce::AudioBuffer<float> buffer;
     bool used = false;
     juce::SmoothedValue<float> gainL, gainR;
+    bool wasUsed = false;   // nel blocco prima: se no il guadagno salta subito al valore giusto (MUTE senza code)
     float compEnv = 0.0f;
 };
 
@@ -176,13 +177,13 @@ void Engine::prepare (double sampleRate, int block)
 
 // ---- dalla UI
 
-void Engine::triggerFromUi (int pad, int velocity, bool on)
+void Engine::triggerFromUi (int pad, int velocity, bool on, float semitones, int note)
 {
     const auto scope = uiFifo.write (1);
     if (scope.blockSize1 > 0)
-        uiEvents[size_t (scope.startIndex1)] = { pad, velocity, on };
+        uiEvents[size_t (scope.startIndex1)] = { pad, velocity, on, semitones, note };
     else if (scope.blockSize2 > 0)
-        uiEvents[size_t (scope.startIndex2)] = { pad, velocity, on };
+        uiEvents[size_t (scope.startIndex2)] = { pad, velocity, on, semitones, note };
 }
 
 void Engine::panic()
@@ -695,9 +696,9 @@ void Engine::process (const OutputPointers& out, const float* const* input, int 
                         v->kill (sr);
                 return;
             }
-            const int note = kFirstNote + e.pad;   // dalla UI il pad suona sé stesso, anche in modo scala
+            const int note = e.note >= 0 ? e.note : kFirstNote + e.pad;   // dalla UI il pad suona sé stesso, anche in modo scala
             if (e.on)
-                noteOn (e.pad, e.velocity, 0.0f, note);
+                noteOn (e.pad, e.velocity, e.semitones, note);
             else
                 noteOff (e.pad, note);
         };
@@ -730,19 +731,28 @@ void Engine::process (const OutputPointers& out, const float* const* input, int 
     }
 
     // ---- stadio di ogni pad: saturazione, compressore, volume, pan, uscita
+    bool anySolo = false;
+    for (int p = 0; p < kNumPads && ! anySolo; ++p)
+        anySolo = soloed[p].load (std::memory_order_relaxed);
+
     for (int p = 0; p < kNumPads; ++p)
     {
         auto& st = *stages[size_t (p)];
-        const float volume = dbToGain (params.get (p, PP::Volume));
+        const bool audible = ! muted[p].load (std::memory_order_relaxed) && (! anySolo || soloed[p].load (std::memory_order_relaxed));
+        const float volume = audible ? dbToGain (params.get (p, PP::Volume)) : 0.0f;
         const float pan = params.get (p, PP::Pan);
         const float angle = (pan + 1.0f) * juce::MathConstants<float>::pi * 0.25f;
         st.gainL.setTargetValue (volume * std::cos (angle) * juce::MathConstants<float>::sqrt2);
         st.gainR.setTargetValue (volume * std::sin (angle) * juce::MathConstants<float>::sqrt2);
 
-        if (! st.used)
+        if (! st.used || ! st.wasUsed)
         {
             st.gainL.setCurrentAndTargetValue (st.gainL.getTargetValue());
             st.gainR.setCurrentAndTargetValue (st.gainR.getTargetValue());
+        }
+        st.wasUsed = st.used;
+        if (! st.used)
+        {
             st.compEnv *= 0.5f;
             continue;
         }

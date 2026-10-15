@@ -29,8 +29,14 @@ public:
         if (style == skin::KeyStyle::Enter || style == skin::KeyStyle::Tiny)
             skin::drawSilk (g, getButtonText(), r.translated (0.0f, down ? 1.0f : 0.0f), juce::Justification::centred,
                             r.getHeight() * 0.42f, juce::Colour (0xff2a2a2a));
+        // tasti in gomma delle pagine: scritta sul tasto, ambra quando la pagina è attiva
+        else if (labelOnKey)
+            skin::drawSilk (g, getButtonText(), r.reduced (r.getWidth() * 0.08f, 0.0f).translated (0.0f, down ? 1.0f : 0.0f),
+                            juce::Justification::centred, r.getHeight() * 0.2f,
+                            led != nullptr && led() ? skin::col::amber : skin::col::silk.withAlpha (0.75f));
     }
     skin::KeyStyle style;
+    bool labelOnKey = false;
     std::function<bool()> led;   // LED moderno accanto all'etichetta (nullptr = nessuno)
 };
 
@@ -100,6 +106,7 @@ private:
     UiState& ui;
     int slot;
     bool pressed = false, hover = false, dragging = false;
+    int playing = 0;   // pad che sta suonando per questo clic (in 16 VELOCITY / KEYBOARD non è questo)
 };
 
 // ---------------------------------------------------------------- ribbon

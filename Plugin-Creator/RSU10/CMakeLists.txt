@@ -5,7 +5,7 @@ if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0" CACHE STRING "" FORCE)
 endif()
 
-project(RSU10 VERSION 0.1.0)             # VERSION = unica fonte di verità (mostrata sulla targhetta)
+project(RSU10 VERSION 0.2.0)             # VERSION = unica fonte di verità (mostrata sulla targhetta)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -44,10 +44,11 @@ juce_add_plugin(RSU10
 juce_generate_juce_header(RSU10)
 
 # Asset FINALI (generati da ui/assets.manifest.json; i sorgenti di Gemini in ui/src NON vanno qui) + layout
-file(GLOB RSU10_ASSETS CONFIGURE_DEPENDS source/assets/*.png)
+file(GLOB RSU10_ASSETS CONFIGURE_DEPENDS source/assets/*.png source/assets/*.jpg)
 juce_add_binary_data(RSU10Assets SOURCES ${RSU10_ASSETS} source/assets/layout.json)
 
 set(RSU10_CORE source/PadParams.cpp source/Sample.cpp source/Engine.cpp)
+target_include_directories(RSU10 PRIVATE ../shared)   # Scales.h, condiviso con Mikro Bridge
 target_sources(RSU10 PRIVATE ${RSU10_CORE} source/PluginProcessor.cpp source/PluginEditor.cpp
     source/ui/Skin.cpp source/ui/Widgets.cpp)
 
@@ -63,7 +64,7 @@ target_link_libraries(RSU10 PRIVATE RSU10Assets juce::juce_audio_utils juce::juc
 juce_add_console_app(RSU10Measure PRODUCT_NAME "RSU10Measure")
 juce_generate_juce_header(RSU10Measure)
 target_sources(RSU10Measure PRIVATE tests/measure.cpp)
-target_include_directories(RSU10Measure PRIVATE source)
+target_include_directories(RSU10Measure PRIVATE source ../shared)
 target_link_libraries(RSU10Measure PRIVATE RSU10 RSU10Assets juce::juce_audio_utils
     juce::juce_recommended_config_flags)
 
@@ -71,7 +72,7 @@ target_link_libraries(RSU10Measure PRIVATE RSU10 RSU10Assets juce::juce_audio_ut
 juce_add_console_app(RSU10Shoot PRODUCT_NAME "RSU10Shoot")
 juce_generate_juce_header(RSU10Shoot)
 target_sources(RSU10Shoot PRIVATE ../tools/shoot/main.cpp)
-target_include_directories(RSU10Shoot PRIVATE source)
+target_include_directories(RSU10Shoot PRIVATE source ../shared)
 target_compile_definitions(RSU10Shoot PRIVATE PLUGIN_PROCESSOR_CLASS=RSU10AudioProcessor)
 target_link_libraries(RSU10Shoot PRIVATE RSU10 RSU10Assets juce::juce_audio_utils juce::juce_gui_extra
     juce::juce_recommended_config_flags)

@@ -97,6 +97,9 @@ int main()
         check (r.engine.padVoices[0].load() == 0, "la cassa finisce da sola (one-shot)");
         check (r.run (0.1) < 1.0e-6f, "silenzio dopo la fine");
         check (! r.nanFound, "niente NaN");
+        r.engine.muted[0] = true;
+        check (r.run (0.3, Rig::note (kFirstNote)) < 1.0e-6f, "MUTE nel motore: nemmeno l'attacco passa");
+        r.engine.muted[0] = false;
     }
 
     // ---- 2. choke: il charleston chiuso zittisce l'aperto
@@ -264,6 +267,102 @@ int main()
         check (loaded && c.samples.get (4, 0) != nullptr && c.pads.getInt (2, PP::Tune) == 7, "kit ricaricato dai WAV copiati");
         check (dir.getChildFile ("Prova - campioni").findChildFiles (juce::File::findFiles, false).size() == 16, "16 campioni copiati accanto al kit");
         dir.deleteRecursively();
+    }
+
+    // ---- 13. funzioni Maschine e scale, attraverso il processor intero (come in FL)
+    {
+        RSU10AudioProcessor p;
+        p.prepareToPlay (kRate, kBlock);
+        juce::AudioBuffer<float> buf (2, kBlock);
+        auto block = [&] (juce::MidiBuffer m) { buf.clear(); p.processBlock (buf, m); return buf.getMagnitude (0, 0, kBlock); };
+        auto cc = [] (int n, int v) { juce::MidiBuffer m; m.addEvent (juce::MidiMessage::controllerEvent (16, n, v), 0); return m; };
+        auto playPeak = [&] (int note)
+        {
+            float peak = block (Rig::note (note));
+            for (int i = 0; i < 20; ++i) peak = juce::jmax (peak, block ({}));
+            block (Rig::off (note));
+            for (int i = 0; i < 100; ++i) block ({});
+            return peak;
+        };
+
+        check (playPeak (kFirstNote) > 0.1f, "processor: A1 suona");
+        block (cc (45, 127));                         // MUTE tenuto sulla Mikro
+        const float duringMute = block (Rig::note (kFirstNote));
+        block (Rig::off (kFirstNote));
+        block (cc (45, 0));
+        p.drainPosted();
+        check (duringMute < 1.0e-4f && p.engine.muted[0].load(), "MUTE + pad: il colpo non suona e A1 va in mute");
+        const float mutedPeak = playPeak (kFirstNote);
+        check (mutedPeak < 1.0e-3f, "A1 in mute resta muto (picco " + juce::String (mutedPeak, 5) + ")");
+        p.padAction (0, PadAction::Mute);
+        check (playPeak (kFirstNote) > 0.1f, "di nuovo MUTE: A1 suona");
+
+        p.padAction (1, PadAction::Solo);
+        const float pa1 = playPeak (kFirstNote), pa2 = playPeak (kFirstNote + 1);
+        check (pa1 < 1.0e-3f && pa2 > 0.05f, "SOLO su A2: A1 tace (" + juce::String (pa1, 5) + "), A2 suona (" + juce::String (pa2, 3) + ")");
+        p.padAction (1, PadAction::Solo);
+
+        p.fixedVelocity = true;
+        block (Rig::note (kFirstNote, 20));
+        int vel = 0;
+        for (const auto m : p.lastMidi()) if (m.getMessage().isNoteOn()) vel = m.getMessage().getVelocity();
+        block (Rig::off (kFirstNote));
+        check (vel == 127, "FIXED VEL: velocity 20 diventa 127");
+        p.fixedVelocity = false;
+
+        p.selectedPad = 2;
+        p.setPadMode (PadMode::Velocity16);
+        block (Rig::note (kFirstNote + 3, 100));
+        int n16 = -1; vel = 0;
+        for (const auto m : p.lastMidi()) if (m.getMessage().isNoteOn()) { n16 = m.getMessage().getNoteNumber(); vel = m.getMessage().getVelocity(); }
+        block (Rig::off (kFirstNote + 3));
+        check (n16 == kFirstNote + 2 && vel == 31, "16 VELOCITY: pad 4 suona A3 a velocity 31");
+
+        // KEYBOARD in Re minore naturale: ogni nota in arrivo si aggancia alla scala
+        p.setPadMode (PadMode::Keyboard);
+        auto setChoice = [&] (const char* id, int i) { auto* prm = p.apvts.getParameter (id); prm->setValueNotifyingHost (prm->convertTo0to1 (float (i))); };
+        setChoice (ParamID::keyRoot, 2);
+        setChoice (ParamID::keyScale, 2);
+        bool allIn = true;
+        for (int n = 40; n < 90; ++n)
+        {
+            block (Rig::note (n));
+            for (const auto m : p.lastMidi())
+                if (m.getMessage().isNoteOn())
+                    allIn &= scales::inScale (2, 60 + 2, m.getMessage().getNoteNumber());
+            block (Rig::off (n));
+        }
+        check (allIn, "KEYBOARD in D minore: 50 note cromatiche escono tutte in scala");
+        check (p.keyboardSemitones (0) == 2 && p.keyboardSemitones (7) == 14 && p.keyboardNoteName (2) == "F3", "pad della tastiera: D3 E3 F3 ... ottava al pad 8");
+        p.setPadMode (PadMode::Normal);
+
+        // NOTE REPEAT tenuto: a 120 BPM in 1/16, un secondo = 8 colpi
+        block (cc (27, 127));
+        int hits = 0;
+        block (Rig::note (kFirstNote));
+        for (const auto m : p.lastMidi()) hits += m.getMessage().isNoteOn() ? 1 : 0;
+        for (int i = 1; i < int (kRate / kBlock); ++i)
+        {
+            block ({});
+            for (const auto m : p.lastMidi()) hits += m.getMessage().isNoteOn() ? 1 : 0;
+        }
+        block (Rig::off (kFirstNote));
+        block (cc (27, 0));
+        check (hits >= 8 && hits <= 9, "NOTE REPEAT 1/16 a 120 BPM: " + juce::String (hits) + " colpi in 1 s");
+
+        // ERASE + pad, poi UNDO
+        block (cc (23, 127));
+        block (Rig::note (kFirstNote + 4));
+        block (Rig::off (kFirstNote + 4));
+        block (cc (23, 0));
+        p.drainPosted();
+        const bool erased = p.samples.get (4, 0) == nullptr;
+        p.runCommand (Cmd::Undo);
+        check (erased && p.samples.get (4, 0) != nullptr, "ERASE + pad cancella A5, UNDO lo riporta");
+        // DUPLICATE: A1 su A9
+        p.padAction (0, PadAction::Duplicate);
+        p.padAction (8, PadAction::Duplicate);
+        check (p.samples.get (8, 0) == p.samples.get (0, 0), "DUPLICATE: A1 copiato su A9");
     }
 
     std::cout << (failures == 0 ? "TUTTO OK\n" : juce::String (failures) + " test falliti\n");

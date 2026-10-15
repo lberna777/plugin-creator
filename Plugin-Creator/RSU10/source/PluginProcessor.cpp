@@ -20,6 +20,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout()
                                                   NormalisableRange<float> (1.0f, 24.0f, 1.0f), 12.0f, AudioParameterFloatAttributes().withLabel ("st")));
     l.add (std::make_unique<AudioParameterBool> (ParameterID { ParamID::scale, 1 }, "Scala", false));
     l.add (std::make_unique<AudioParameterInt> (ParameterID { ParamID::scaleRoot, 1 }, "Scala radice", 0, 127, 60));
+    StringArray roots, scaleNames;
+    for (auto* r : scales::kRootNames)
+        roots.add (r);
+    for (const auto& sc : scales::kScales)
+        scaleNames.add (sc.name);
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::keyRoot, 2 }, "Tonalita", roots, 0));
+    l.add (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::keyScale, 2 }, "Scala tastiera", scaleNames, 0));
     return l;
 }
 
@@ -53,10 +60,13 @@ RSU10AudioProcessor::RSU10AudioProcessor()
     pRange  = apvts.getRawParameterValue (ParamID::ribbonRange);
     pScale  = apvts.getRawParameterValue (ParamID::scale);
     pRoot   = apvts.getRawParameterValue (ParamID::scaleRoot);
+    pKeyRoot  = apvts.getRawParameterValue (ParamID::keyRoot);
+    pKeyScale = apvts.getRawParameterValue (ParamID::keyScale);
 
     browserFolder = juce::File::getSpecialLocation (juce::File::userMusicDirectory);
+    mappedNote.fill (-1);
     loadDemoKit();
-    startTimerHz (10);
+    startTimerHz (30);
 }
 
 RSU10AudioProcessor::~RSU10AudioProcessor()
@@ -87,7 +97,9 @@ bool RSU10AudioProcessor::isBusesLayoutSupported (const BusesLayout& layout) con
 void RSU10AudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     engine.prepare (sampleRate, samplesPerBlock);
+    preparedRate = sampleRate > 0.0 ? sampleRate : 44100.0;
     inputCopy.setSize (2, samplesPerBlock);
+    midiWork.ensureSize (16384);   // il MIDI trasformato non alloca durante l'audio
     master.reset (sampleRate, 0.03);
     master.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (pMaster->load(), -60.0f));
 }
@@ -144,12 +156,19 @@ void RSU10AudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
     g.masterGain = master.getNextValue();
     master.skip (n - 1);
 
+    juce::Optional<double> ppq;
+    bool playing = false;
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
+        {
             if (auto bpm = pos->getBpm())
                 g.hostBpm = *bpm;
+            ppq = pos->getPpqPosition();
+            playing = pos->getIsPlaying();
+        }
 
-    engine.process (out, inChannels > 0 ? inputs : nullptr, inChannels, n, midi, g);
+    transformMidi (midi, n, g.hostBpm, ppq, playing);
+    engine.process (out, inChannels > 0 ? inputs : nullptr, inChannels, n, midiWork, g);
 }
 
 // ---------------------------------------------------------------- campioni
@@ -161,6 +180,7 @@ juce::File RSU10AudioProcessor::userFolder()
 
 void RSU10AudioProcessor::loadSample (int pad, int layer, const juce::File& f)
 {
+    pushUndo (pad);
     loader.addJob ([this, pad, layer, f]
     {
         juce::String err;
@@ -209,14 +229,22 @@ void RSU10AudioProcessor::stepSampleInFolder (int pad, int delta)
 
 void RSU10AudioProcessor::clearPad (int pad)
 {
+    pushUndo (pad);
     samples.clearPad (pad);
     pads.resetPad (pad);
 }
 
+void RSU10AudioProcessor::clearSamples (int pad)
+{
+    pushUndo (pad);
+    samples.clearPad (pad);
+}
+
 void RSU10AudioProcessor::copyPad (int from, int to)
 {
-    if (from == to)
+    if (from == to || from < 0 || to < 0 || from >= kNumPads || to >= kNumPads)
         return;
+    pushUndo (to);
     for (int l = 0; l < kMaxLayers; ++l)
         samples.set (to, l, samples.get (from, l));
     for (int i = 0; i < kNumPP; ++i)
@@ -429,6 +457,7 @@ void RSU10AudioProcessor::finishRecording()
 
     if (auto s = Sample::loadFromFile (file))
     {
+        pushUndo (pad);
         samples.set (pad, 0, s);
         pads.resetPad (pad);
         postMessage (padLabel (pad) + ": registrati " + juce::String (s->seconds(), 1) + " s");
@@ -441,6 +470,23 @@ void RSU10AudioProcessor::timerCallback()
     engine.purgePreviews();
     if (engine.recState() == Engine::RecState::Done)
         finishRecording();
+
+    drainPosted();
+}
+
+void RSU10AudioProcessor::drainPosted()
+{
+    // Azioni e comandi arrivati dal MIDI (tasti e pad della Mikro)
+    const auto scope = postFifo.read (postFifo.getNumReady());
+    auto run = [this] (int code)
+    {
+        if (code >= 0)
+            padAction (code & 0xFF, PadAction (code >> 8));
+        else
+            runCommand (Cmd (-code - 1));
+    };
+    for (int i = 0; i < scope.blockSize1; ++i) run (postCodes[size_t (scope.startIndex1 + i)]);
+    for (int i = 0; i < scope.blockSize2; ++i) run (postCodes[size_t (scope.startIndex2 + i)]);
 }
 
 // ---------------------------------------------------------------- messaggi
@@ -470,6 +516,17 @@ void RSU10AudioProcessor::getStateInformation (juce::MemoryBlock& dest)
     state.setProperty ("page", page.load(), nullptr);
     state.setProperty ("scalePad", scalePad.load(), nullptr);
     state.setProperty ("recSource", recSource.load(), nullptr);
+    juce::String mutes, solos;
+    for (int p = 0; p < kNumPads; ++p)
+    {
+        mutes << (engine.muted[p].load() ? '1' : '0');
+        solos << (engine.soloed[p].load() ? '1' : '0');
+    }
+    state.setProperty ("muted", mutes, nullptr);
+    state.setProperty ("soloed", solos, nullptr);
+    state.setProperty ("padMode", padModeStored.load(), nullptr);
+    state.setProperty ("fixedVel", fixedVelocity.load(), nullptr);
+    state.setProperty ("repeatRate", repeatRate.load(), nullptr);
     state.setProperty ("browser", browserFolder.getFullPathName(), nullptr);
     state.setProperty ("kitFile", kitFile.getFullPathName(), nullptr);
     if (auto xml = state.createXml())
@@ -493,7 +550,16 @@ void RSU10AudioProcessor::setStateInformation (const void* data, int size)
         kitFromTree (kit, {});
 
     selectedPad = juce::jlimit (0, kNumPads - 1, (int) state.getProperty ("selectedPad", 0));
-    page = juce::jlimit (0, 3, (int) state.getProperty ("page", 0));
+    page = juce::jlimit (0, kPages - 1, (int) state.getProperty ("page", 0));
+    const auto mutes = state.getProperty ("muted").toString(), solos = state.getProperty ("soloed").toString();
+    for (int p = 0; p < kNumPads; ++p)
+    {
+        engine.muted[p] = mutes[p] == '1';
+        engine.soloed[p] = solos[p] == '1';
+    }
+    padModeStored = juce::jlimit (0, 1, (int) state.getProperty ("padMode", 0));
+    fixedVelocity = (bool) state.getProperty ("fixedVel", false);
+    repeatRate = juce::jlimit (0, kRepeatRates - 1, (int) state.getProperty ("repeatRate", 3));
     scalePad = juce::jlimit (0, kNumPads - 1, (int) state.getProperty ("scalePad", 0));
     recSource = juce::jlimit (0, 1, (int) state.getProperty ("recSource", 0));
     const juce::File folder (state.getProperty ("browser").toString());
@@ -501,6 +567,426 @@ void RSU10AudioProcessor::setStateInformation (const void* data, int size)
         browserFolder = folder;
     const auto kf = state.getProperty ("kitFile").toString();
     kitFile = kf.isNotEmpty() ? juce::File (kf) : juce::File();
+}
+
+// ---------------------------------------------------------------- funzioni Maschine
+
+namespace
+{
+const char* actionName (PadAction a)
+{
+    switch (a)
+    {
+        case PadAction::Mute:      return "MUTE";
+        case PadAction::Solo:      return "SOLO";
+        case PadAction::Select:    return "SELECT";
+        case PadAction::Duplicate: return "DUPLICATE";
+        case PadAction::Erase:     return "ERASE";
+        case PadAction::None:      break;
+    }
+    return "";
+}
+} // namespace
+
+void RSU10AudioProcessor::post (int code)
+{
+    const auto scope = postFifo.write (1);
+    if (scope.blockSize1 > 0)
+        postCodes[size_t (scope.startIndex1)] = code;
+    else if (scope.blockSize2 > 0)
+        postCodes[size_t (scope.startIndex2)] = code;
+}
+
+// Tasti della Mikro come li manda Mikro Bridge: CC 20 + posizione nella tabella dei pulsanti
+// (70 + posizione con SHIFT), SHIFT + pad 1..12 = CC 102..113. Valori 127 premuto / 0 rilasciato:
+// gli altri valori (manopole di altri controller) passano al motore come prima.
+bool RSU10AudioProcessor::controllerButton (int cc, int value)
+{
+    if (value != 0 && value != 127)
+        return false;
+    const bool down = value == 127;
+
+    auto hold = [this, down] (PadAction a)
+    {
+        if (down)
+            heldAction = int (a);
+        else if (heldAction.load() == int (a))
+        {
+            heldAction = 0;
+            postCommand (Cmd::ActionEnd);
+        }
+        return true;
+    };
+
+    if ((cc >= 20 && cc <= 46) || (cc >= 70 && cc <= 96))
+    {
+        const bool shift = cc >= 70;
+        switch (cc - (shift ? 70 : 20))
+        {
+            case 3:  return hold (PadAction::Erase);
+            case 22: return hold (PadAction::Duplicate);
+            case 23: return hold (PadAction::Select);
+            case 24: return hold (PadAction::Solo);
+            case 25: return hold (PadAction::Mute);
+            case 7:  // NOTE REPEAT: tenuto ripete; SHIFT + NOTE REPEAT cambia la griglia
+                if (shift) { if (down) postCommand (Cmd::RepeatRate); }
+                else repeatHeld = down;
+                return true;
+            default: break;
+        }
+        if (! down)
+            return true;
+        static constexpr Cmd map[] {
+            Cmd::Play, Cmd::Rec, Cmd::Top, Cmd::Stop /*ERASE*/, Cmd::RepeatRate /*GRID*/, Cmd::Bwd, Cmd::Fwd,
+            Cmd::Stop /*NOTE REPEAT*/, Cmd::Rec /*SAMPLING*/, Cmd::Enter /*BROWSE*/, Cmd::Bank /*GROUP*/,
+            Cmd::Exit /*MAIN*/, Cmd::PrevPad, Cmd::NextPad, Cmd::Stop /*NAV*/, Cmd::NextPage /*CONTROL*/,
+            Cmd::Scratch /*F1*/, Cmd::Rev /*F2*/, Cmd::NextRibbonMode /*F3*/, Cmd::SampleMinus /*SCENE*/,
+            Cmd::SamplePlus /*PATTERN*/, Cmd::NextPadMode /*VIEW*/, Cmd::Stop, Cmd::Stop, Cmd::Stop, Cmd::Stop,
+            Cmd::Hold /*ENCODER premuto*/ };
+        const int idx = cc - (shift ? 70 : 20);
+        postCommand (shift && idx == 21 ? Cmd::FixedVel : map[idx]);   // SHIFT + VIEW = FIXED VEL
+        return true;
+    }
+    if (cc >= 102 && cc <= 113)   // SHIFT + pad, come stampato sotto i pad della Mikro
+    {
+        if (down)
+            switch (cc - 102)
+            {
+                case 0:  postCommand (Cmd::Undo); break;
+                case 1:  postCommand (Cmd::Redo); break;
+                case 8:  postCommand (Cmd::ClearSelected); break;
+                case 10: postCommand (Cmd::CopyPad); break;
+                case 11: postCommand (Cmd::PastePad); break;
+                default: break;
+            }
+        return true;
+    }
+    return false;
+}
+
+void RSU10AudioProcessor::transformMidi (const juce::MidiBuffer& in, int numSamples, double bpm,
+                                         const juce::Optional<double>& ppq, bool playing)
+{
+    midiWork.clear();
+    const auto act = action();
+    const bool vel16 = padModeStored.load() == int (PadMode::Velocity16) && pScale->load() < 0.5f;
+    const bool fixed = fixedVelocity.load();
+    const int sel = selectedPad.load();
+    // KEYBOARD con una scala: ogni nota in arrivo si aggancia alla nota intonata più vicina
+    const int keyScaleIdx = pScale->load() > 0.5f ? juce::roundToInt (pKeyScale->load()) : 0;
+    const int tonic = juce::roundToInt (pRoot->load()) + juce::roundToInt (pKeyRoot->load());
+
+    for (const auto meta : in)
+    {
+        const auto m = meta.getMessage();
+        const int pos = meta.samplePosition;
+
+        if (m.isController())
+        {
+            if (! controllerButton (m.getControllerNumber(), m.getControllerValue()))
+                midiWork.addEvent (m, pos);
+            continue;
+        }
+        if (m.isNoteOn())
+        {
+            const int n0 = m.getNoteNumber();
+            const bool isPad = n0 >= kFirstNote && n0 < kFirstNote + kNumPads;
+            if (act != PadAction::None && isPad)
+            {
+                swallowed[size_t (n0)] = true;   // il colpo fa l'azione, non suona
+                post ((n0 - kFirstNote) | (int (act) << 8));
+                continue;
+            }
+            int note = n0, vel = m.getVelocity();
+            if (vel16 && isPad)
+            {
+                vel = ((n0 - kFirstNote) % kPadsPerBank + 1) * 8 - 1;   // 16 VELOCITY: pad 1 piano ... pad 16 forte
+                note = kFirstNote + sel;
+            }
+            else if (fixed)
+                vel = 127;
+            if (keyScaleIdx > 0)
+                note = juce::jlimit (0, 127, scales::snap (keyScaleIdx, tonic, n0));
+            mappedNote[size_t (n0)] = note;
+            heldVelocity[size_t (n0)] = vel;
+            midiWork.addEvent (juce::MidiMessage::noteOn (m.getChannel(), note, (juce::uint8) vel), pos);
+            continue;
+        }
+        if (m.isNoteOff())
+        {
+            const int n0 = m.getNoteNumber();
+            heldVelocity[size_t (n0)] = 0;
+            if (std::exchange (swallowed[size_t (n0)], false))
+                continue;
+            const int note = mappedNote[size_t (n0)] >= 0 ? mappedNote[size_t (n0)] : n0;
+            mappedNote[size_t (n0)] = -1;
+            midiWork.addEvent (juce::MidiMessage::noteOff (m.getChannel(), note), pos);
+            continue;
+        }
+        midiWork.addEvent (m, pos);
+    }
+
+    // NOTE REPEAT: i pad tenuti si ripetono sulla griglia, a tempo con l'host
+    const bool repeatOn = repeatUi.load() || repeatHeld.load();
+    if (repeatOn)
+    {
+        const double beats = kRepeatBeats[juce::jlimit (0, kRepeatRates - 1, repeatRate.load())];
+        const double step = juce::jmax (16.0, beats * 60.0 / juce::jlimit (20.0, 999.0, bpm > 0.0 ? bpm : 120.0) * preparedRate);
+        const bool synced = playing && ppq.hasValue();
+        if (synced)
+            repeatPhase = std::fmod (*ppq, beats) / beats * step;
+        else if (! repeatWasOn)
+            repeatPhase = 0.0;
+
+        const int uiPad = uiHeldPad.load();
+        for (double t = repeatPhase > 0.0 ? step - repeatPhase : (synced ? 0.0 : step); t < numSamples; t += step)
+        {
+            const int at = int (t);
+            for (int k = 0; k < 128; ++k)
+                if (heldVelocity[size_t (k)] > 0 && mappedNote[size_t (k)] >= 0)
+                {
+                    midiWork.addEvent (juce::MidiMessage::noteOff (1, mappedNote[size_t (k)]), at);
+                    midiWork.addEvent (juce::MidiMessage::noteOn (1, mappedNote[size_t (k)], (juce::uint8) heldVelocity[size_t (k)]), at);
+                }
+            if (uiPad >= 0)
+            {
+                midiWork.addEvent (juce::MidiMessage::noteOff (1, kFirstNote + uiPad), at);
+                midiWork.addEvent (juce::MidiMessage::noteOn (1, kFirstNote + uiPad, (juce::uint8) juce::jlimit (1, 127, uiHeldVelocity.load())), at);
+            }
+        }
+        if (! synced)
+            repeatPhase = std::fmod (repeatPhase + numSamples, step);
+    }
+    repeatWasOn = repeatOn;
+}
+
+void RSU10AudioProcessor::toggleUiAction (PadAction a)
+{
+    const bool off = uiAction.load() == int (a);
+    uiAction = off ? 0 : int (a);
+    duplicateSource = -1;
+    if (! off)
+        postMessage (juce::String (actionName (a)) + (a == PadAction::Duplicate ? ": tocca il pad da copiare" : ": tocca i pad"));
+}
+
+void RSU10AudioProcessor::padAction (int pad, PadAction a)
+{
+    if (pad < 0 || pad >= kNumPads)
+        return;
+    switch (a)
+    {
+        case PadAction::Mute:
+            engine.muted[pad] = ! engine.muted[pad].load();
+            postMessage (padLabel (pad) + (engine.muted[pad].load() ? " MUTE" : " suona"));
+            break;
+        case PadAction::Solo:
+            engine.soloed[pad] = ! engine.soloed[pad].load();
+            postMessage (padLabel (pad) + (engine.soloed[pad].load() ? " SOLO" : " fuori dal solo"));
+            break;
+        case PadAction::Select:
+            selectedPad = pad;
+            break;
+        case PadAction::Duplicate:
+            if (duplicateSource < 0)
+            {
+                duplicateSource = pad;
+                postMessage ("DUPLICATE: " + padLabel (pad) + " su quale pad?");
+            }
+            else if (pad != duplicateSource)
+            {
+                copyPad (duplicateSource, pad);
+                selectedPad = pad;
+                postMessage (padLabel (duplicateSource) + " copiato su " + padLabel (pad));
+            }
+            break;
+        case PadAction::Erase:
+            engine.panic();
+            clearPad (pad);
+            postMessage (padLabel (pad) + " cancellato (UNDO per riaverlo)");
+            break;
+        case PadAction::None:
+            break;
+    }
+}
+
+int RSU10AudioProcessor::keyboardSemitones (int slot) const noexcept
+{
+    return juce::roundToInt (pKeyRoot->load()) + scales::degreeToSemitones (juce::roundToInt (pKeyScale->load()), slot);
+}
+
+juce::String RSU10AudioProcessor::keyboardNoteName (int slot) const
+{
+    const int semis = keyboardSemitones (slot);
+    return juce::String (scales::kRootNames[scales::mod (semis, 12)]) + juce::String (3 + scales::floorDiv (semis, 12));
+}
+
+juce::String RSU10AudioProcessor::scaleName() const
+{
+    return (juce::String (scales::kRootNames[juce::roundToInt (pKeyRoot->load()) % 12]) + " "
+            + scales::get (juce::roundToInt (pKeyScale->load())).name).toUpperCase();
+}
+
+PadMode RSU10AudioProcessor::padMode() const noexcept
+{
+    if (pScale->load() > 0.5f)
+        return PadMode::Keyboard;
+    return PadMode (padModeStored.load());
+}
+
+void RSU10AudioProcessor::setPadMode (PadMode m)
+{
+    padModeStored = m == PadMode::Velocity16 ? int (PadMode::Velocity16) : int (PadMode::Normal);
+    if (m == PadMode::Keyboard)
+        scalePad = selectedPad.load();
+    if (auto* p = apvts.getParameter (ParamID::scale))
+        p->setValueNotifyingHost (m == PadMode::Keyboard ? 1.0f : 0.0f);
+    static const char* names[] { "PAD MODE: normale", "PAD MODE: 16 VELOCITY di ", "PAD MODE: KEYBOARD di " };
+    postMessage (names[int (m)] + (m == PadMode::Normal ? juce::String() : padLabel (selectedPad))
+                 + (m == PadMode::Keyboard ? " in " + scaleName() : juce::String()));
+}
+
+void RSU10AudioProcessor::runCommand (Cmd c)
+{
+    if (editorCommand != nullptr && editorCommand (c))
+        return;
+
+    auto setParam = [this] (const char* id, float value)
+    {
+        if (auto* p = apvts.getParameter (id))
+        {
+            p->beginChangeGesture();
+            p->setValueNotifyingHost (p->convertTo0to1 (value));
+            p->endChangeGesture();
+        }
+    };
+    const int sel = selectedPad.load();
+
+    switch (c)
+    {
+        case Cmd::Play:
+            engine.triggerFromUi (sel, 110, true);
+            engine.triggerFromUi (sel, 0, false);
+            break;
+        case Cmd::Rec:
+            if (engine.recState() == Engine::RecState::Idle) startRecording(); else stopRecording();
+            break;
+        case Cmd::Top:
+            setParam (ParamID::ribbon, 0.5f);
+            setParam (ParamID::ribbonHold, 0.0f);
+            engine.stopPreview();
+            break;
+        case Cmd::Stop:
+            engine.stopPreview();
+            engine.panic();
+            break;
+        case Cmd::Exit:
+            if (engine.recState() != Engine::RecState::Idle)
+                stopRecording();
+            break;
+        case Cmd::Bank:
+            selectedPad = ((sel / kPadsPerBank + 1) % kBanks) * kPadsPerBank + sel % kPadsPerBank;
+            postMessage (juce::String ("BANCO ") + juce::String::charToString (juce::juce_wchar ('A' + selectedPad / kPadsPerBank)));
+            break;
+        case Cmd::PrevPad:     selectedPad = (sel + kNumPads - 1) % kNumPads; break;
+        case Cmd::NextPad:     selectedPad = (sel + 1) % kNumPads; break;
+        case Cmd::NextPage:    page = (page.load() + 1) % kPages; break;
+        case Cmd::Scratch:     setParam (ParamID::ribbonMode, float (RibbonMode::Scratch)); break;
+        case Cmd::Rev:         setParam (ParamID::ribbonMode, float (RibbonMode::Reverse)); break;
+        case Cmd::NextRibbonMode:
+            setParam (ParamID::ribbonMode, float ((juce::roundToInt (pMode->load()) + 1) % 5));
+            break;
+        case Cmd::Hold:        setParam (ParamID::ribbonHold, pHold->load() > 0.5f ? 0.0f : 1.0f); break;
+        case Cmd::NextPadMode: setPadMode (PadMode ((int (padMode()) + 1) % 3)); break;
+        case Cmd::FixedVel:
+            fixedVelocity = ! fixedVelocity.load();
+            postMessage (fixedVelocity.load() ? "FIXED VEL: tutti i colpi a 127" : "FIXED VEL spento");
+            break;
+        case Cmd::RepeatRate:
+            repeatRate = (repeatRate.load() + 1) % kRepeatRates;
+            postMessage (juce::String ("NOTE REPEAT: ") + kRepeatRateNames[repeatRate.load()]);
+            break;
+        case Cmd::Undo:        undo(); break;
+        case Cmd::Redo:        redo(); break;
+        case Cmd::SampleMinus: stepSampleInFolder (sel, -1); break;
+        case Cmd::SamplePlus:  stepSampleInFolder (sel, +1); break;
+        case Cmd::ClearSelected:
+            padAction (sel, PadAction::Erase);
+            break;
+        case Cmd::CopyPad:
+            clipboardPad = sel;
+            postMessage ("COPY: " + padLabel (sel));
+            break;
+        case Cmd::PastePad:
+            if (clipboardPad >= 0 && clipboardPad != sel)
+            {
+                copyPad (clipboardPad, sel);
+                postMessage ("PASTE: " + padLabel (clipboardPad) + " su " + padLabel (sel));
+            }
+            break;
+        case Cmd::ActionEnd:   duplicateSource = -1; break;
+        case Cmd::Bwd: case Cmd::Fwd: case Cmd::Enter:
+            break;   // servono il browser dell'editor
+    }
+}
+
+RSU10AudioProcessor::PadSnapshot RSU10AudioProcessor::snapshot (int pad) const
+{
+    PadSnapshot s;
+    s.pad = pad;
+    for (int i = 0; i < kNumPP; ++i)
+        s.values[size_t (i)] = pads.get (pad, PP (i));
+    for (int l = 0; l < kMaxLayers; ++l)
+        s.layers[size_t (l)] = samples.get (pad, l);
+    return s;
+}
+
+void RSU10AudioProcessor::restore (const PadSnapshot& s)
+{
+    for (int l = 0; l < kMaxLayers; ++l)
+        samples.set (s.pad, l, s.layers[size_t (l)]);
+    for (int i = 0; i < kNumPP; ++i)
+        pads.set (s.pad, PP (i), s.values[size_t (i)]);
+    selectedPad = s.pad;
+}
+
+void RSU10AudioProcessor::pushUndo (int pad)
+{
+    if (pad < 0 || pad >= kNumPads)
+        return;
+    undoStack.push_back (snapshot (pad));
+    if (undoStack.size() > 32)
+        undoStack.erase (undoStack.begin());
+    redoStack.clear();
+}
+
+void RSU10AudioProcessor::undo()
+{
+    if (undoStack.empty())
+    {
+        postMessage ("Niente da annullare");
+        return;
+    }
+    const auto s = undoStack.back();
+    undoStack.pop_back();
+    redoStack.push_back (snapshot (s.pad));
+    engine.panic();
+    restore (s);
+    postMessage ("UNDO: " + padLabel (s.pad));
+}
+
+void RSU10AudioProcessor::redo()
+{
+    if (redoStack.empty())
+    {
+        postMessage ("Niente da ripetere");
+        return;
+    }
+    const auto s = redoStack.back();
+    redoStack.pop_back();
+    undoStack.push_back (snapshot (s.pad));
+    engine.panic();
+    restore (s);
+    postMessage ("REDO: " + padLabel (s.pad));
 }
 
 juce::AudioProcessorEditor* RSU10AudioProcessor::createEditor()
