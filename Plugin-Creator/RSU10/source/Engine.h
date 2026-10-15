@@ -108,7 +108,7 @@ private:
     float midiRibbon = 0.5f;
     int midiRibbonHold = 0;            // campioni rimasti di "tocco" dopo un CC
     bool midiRibbonOn = false;
-    float scratchRate = 1.0f, pitchSemis = 0.0f, ribbonCutoff = 20000.0f, crossfade = 0.0f;
+    float scratchRate = 1.0f, handVelocity = 0.0f, pitchSemis = 0.0f, ribbonCutoff = 20000.0f, crossfade = 0.0f;
     bool reverseNow = false, scratchActive = false;
     RibbonMode lastMode = RibbonMode::Scratch;
     std::vector<float> scratchBuf;     // velocità dello scratch per campione

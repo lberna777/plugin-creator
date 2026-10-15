@@ -25,6 +25,8 @@ void setRgb (LedState& l, int led, int r, int g, int b)
 Bridge::Bridge() : juce::Thread ("Mikro USB")
 {
     std::fill (std::begin (sentNote), std::end (sentNote), -1);
+    for (auto& c : sentChord)
+        std::fill (std::begin (c), std::end (c), -1);
     std::fill (std::begin (sentChannel), std::end (sentChannel), 1);
 
    #if ! JUCE_WINDOWS
@@ -62,12 +64,21 @@ int Bridge::noteForPad (int physicalPad) const noexcept
 {
     if (settings.mode.load() == int (Mode::Keys))   // gradi consecutivi della scala: ogni pad è intonato
         return settings.keyBase.load() + settings.root.load() + scales::degreeToSemitones (settings.scale.load(), physicalPad);
+    if (chordMode())                                 // fondamentale dell'accordo del pad
+        return settings.keyBase.load() + settings.root.load() + scales::chordForPad (settings.scale.load(), physicalPad).notes[0];
     return settings.drumBase.load() + physicalPad;
+}
+
+juce::String Bridge::chordLabel (int physicalPad) const
+{
+    const int sc = settings.scale.load(), root = settings.root.load();
+    return juce::String (scales::chordName (sc, root, physicalPad)) + " "
+         + juce::String (juce::CharPointer_UTF8 (scales::chordRoman (sc, physicalPad).c_str()));
 }
 
 int Bridge::octaveStep() const noexcept
 {
-    return settings.mode.load() == int (Mode::Keys) ? 12 : 16;
+    return usesKeyBase() ? 12 : 16;
 }
 
 juce::String Bridge::noteName (int note)
@@ -197,7 +208,7 @@ void Bridge::handleButtons (const ButtonState& now)
                 if (is)
                 {
                     releaseAllNotes();
-                    settings.mode = settings.mode.load() == int (Mode::Drums) ? int (Mode::Keys) : int (Mode::Drums);
+                    settings.mode = (settings.mode.load() + 1) % kNumModes;   // batteria > tastiera > accordi
                 }
                 continue;
             }
@@ -244,6 +255,18 @@ void Bridge::handlePad (int pad, int pressure)
             sentNote[pad] = note;
             sentChannel[pad] = juce::jlimit (1, 16, settings.padChannel.load());
             send (juce::MidiMessage::noteOn (sentChannel[pad], note, e.value));
+            if (chordMode())   // le altre note dell'accordo, stessa velocity
+            {
+                const auto chord = scales::chordForPad (settings.scale.load(), pad);
+                for (int c = 1; c < chord.count; ++c)
+                {
+                    const int n = note + chord.notes[c] - chord.notes[0];
+                    sentChord[pad][c] = (n >= 0 && n <= 127) ? n : -1;
+                    if (sentChord[pad][c] >= 0)
+                        send (juce::MidiMessage::noteOn (sentChannel[pad], n, e.value));
+                }
+            }
+            mirror.lastPad = pad;
             mirror.velocity[pad] = e.value;
             mirror.lastNote = note;
             mirror.lastVelocity = e.value;
@@ -260,11 +283,17 @@ void Bridge::handlePad (int pad, int pressure)
             if (sentNote[pad] >= 0)
                 send (juce::MidiMessage::noteOff (sentChannel[pad], sentNote[pad]));
             sentNote[pad] = -1;
+            for (auto& n : sentChord[pad])
+                if (const int old = std::exchange (n, -1); old >= 0)
+                    send (juce::MidiMessage::noteOff (sentChannel[pad], old));
             mirror.velocity[pad] = 0;
         }
         else if (e.type == PadEvent::Pressure && sentNote[pad] >= 0)
         {
             send (juce::MidiMessage::aftertouchChange (sentChannel[pad], sentNote[pad], e.value));
+            for (const int n : sentChord[pad])
+                if (n >= 0)
+                    send (juce::MidiMessage::aftertouchChange (sentChannel[pad], n, e.value));
         }
     }
 }
@@ -273,13 +302,13 @@ void Bridge::localPadFunction (int pad)
 {
     auto shiftBase = [this] (int delta)
     {
-        auto& base = settings.mode.load() == int (Mode::Keys) ? settings.keyBase : settings.drumBase;
+        auto& base = usesKeyBase() ? settings.keyBase : settings.drumBase;
         base = juce::jlimit (0, 127 - (kNumPads - 1), base.load() + delta);
     };
 
     // In Keys con una scala, il semitono sposta la tonalità (C -> C# ...) e la scala resta giusta
     auto shiftRoot = [this] (int delta) { settings.root = scales::mod (settings.root.load() + delta, 12); };
-    const bool scaled = settings.mode.load() == int (Mode::Keys) && settings.scale.load() != 0;
+    const bool scaled = (settings.mode.load() == int (Mode::Keys) && settings.scale.load() != 0) || chordMode();
 
     switch (pad)
     {
@@ -300,6 +329,12 @@ void Bridge::releaseAllNotes()
         if (sentNote[p] >= 0)
             send (juce::MidiMessage::noteOff (sentChannel[p], sentNote[p]));
         sentNote[p] = -1;
+        for (auto& n : sentChord[p])
+        {
+            if (n >= 0)
+                send (juce::MidiMessage::noteOff (sentChannel[p], n));
+            n = -1;
+        }
         mirror.velocity[p] = 0;
         mirror.pressure[p] = 0;
         pads[p].reset();
@@ -351,7 +386,7 @@ void Bridge::refreshOutputs (bool force)
 LedState Bridge::computeLeds()
 {
     LedState l {};
-    const bool keys = settings.mode.load() == int (Mode::Keys);
+    const bool keys = usesKeyBase();   // tastiera o accordi: PAD MODE acceso
     const bool shift = buttons.pressed (Shift);
 
     for (size_t i = 0; i < kButtons.size(); ++i)
@@ -367,6 +402,8 @@ LedState Bridge::computeLeds()
 
     if (buttons.pressed (Group))
         setRgb (l, kLedGroup, 127, 127, 127);
+    else if (chordMode())
+        setRgb (l, kLedGroup, 20, 127, 40);
     else if (keys)
         setRgb (l, kLedGroup, 0, 40, 127);
     else
@@ -420,18 +457,26 @@ LedState Bridge::computeLeds()
 
 void Bridge::drawDisplay (Display& d) const
 {
-    const bool keys = settings.mode.load() == int (Mode::Keys);
+    const bool keys = usesKeyBase();
+    const bool chords = chordMode();
     const int ch = settings.padChannel.load();
 
     // Barra del titolo in negativo
     d.fillRect (0, 0, kDisplayW, 9, true);
     d.text (2, 2, "MIKRO BRIDGE", 1, false);
-    const char* mode = keys ? "KEYS" : "DRUMS";
+    const char* mode = chords ? "CHORDS" : keys ? "KEYS" : "DRUMS";
     d.text (kDisplayW - 2 - Display::textWidth (mode), 2, mode, 1, false);
 
-    // Ultima nota, grande
+    // Ultima nota (in Accordi: ultimo accordo e il suo grado), grande
     const int last = mirror.lastNote.load();
     juce::String big = noteName (last);
+    if (chords && mirror.lastPad.load() >= 0)
+    {
+        const int lp = mirror.lastPad.load();
+        big = scales::chordName (settings.scale.load(), settings.root.load(), lp);
+        const juce::String deg ("PAD " + juce::String (lp + 1));
+        d.text (kDisplayW - 2 - Display::textWidth (deg.toRawUTF8()), 25, deg.toRawUTF8());
+    }
     d.text (2, 14, big.toRawUTF8(), 3);
     if (last >= 0)
     {
@@ -439,10 +484,12 @@ void Bridge::drawDisplay (Display& d) const
         d.text (kDisplayW - 2 - Display::textWidth (v.toRawUTF8()), 16, v.toRawUTF8());
     }
     const juce::String chs ("CH " + juce::String (ch));
-    d.text (kDisplayW - 2 - Display::textWidth (chs.toRawUTF8()), 25, chs.toRawUTF8());
+    if (! chords)
+        d.text (kDisplayW - 2 - Display::textWidth (chs.toRawUTF8()), 25, chs.toRawUTF8());
 
     // Estensione dei pad
-    const juce::String range ("PAD 1-16  " + noteName (noteForPad (0)) + " - " + noteName (noteForPad (15)));
+    const juce::String range = chords ? juce::String ("1-7 TRIADI  9-15 SETTIME")
+                                      : "PAD 1-16  " + noteName (noteForPad (0)) + " - " + noteName (noteForPad (15));
     d.text (2, 36, range.toRawUTF8());
 
     const char* curves[] { "SOFT", "LIN", "HARD", "FIXED" };

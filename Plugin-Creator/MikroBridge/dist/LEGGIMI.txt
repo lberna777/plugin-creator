@@ -42,7 +42,7 @@ ABLETON LIVE
 
 USO
 ---
-PAD MODE ............... batteria (16 note) / tastiera IN SCALA
+PAD MODE ............... batteria (16 note) > tastiera IN SCALA > ACCORDI
 SHIFT + pad 13 / 14 .... un semitono giù / su (in tastiera con una scala: cambia tonalità)
 SHIFT + pad 15 / 16 .... banco di 16 giù / su (in tastiera: ottava)
 SHIFT + pad 1-12 ....... CC 102-113 (per Undo, Redo, Quantize... nel DAW)
@@ -70,3 +70,17 @@ i 16 pad suonano solo note della scala, una dopo l'altra (pad 1 = tonica,
 in Maggiore pad 8 = ottava sopra). Qualunque pad tocchi, sei intonato.
 Funziona con ogni strumento di FL, non solo con l'RSU-10.
 "Cromatica" = il comportamento di prima (tutte le 12 note).
+
+
+ACCORDI PER GRADO (scrivere progressioni coi numeri)
+--------------------------------------------------
+Terzo modo di PAD MODE (luce GROUP verde, display "CHORDS"), oppure Modo =
+"Accordi" nella finestra. Con la Tonalità e la Scala scelte:
+  pad 1-7 .... triadi sui gradi I-VII     (Do maggiore: C Dm Em F G Am Bdim)
+  pad 8 ...... I un'ottava sopra
+  pad 9-15 ... gli stessi gradi con la settima (Cmaj7 Dm7 Em7 Fmaj7 G7 Am7 Bm7b5)
+  pad 16 ..... I con la settima, un'ottava sopra
+Una progressione "6-2-1" = pad 6, 2, 1; "4-3-2" = pad 4, 3, 2; "2-5-1" col jazz
+= pad 10, 13, 9. Il display della Mikro e la finestra mostrano il nome
+dell'accordo e il numero romano. SHIFT + pad 13/14 cambia tonalità,
+15/16 l'ottava. Rende meglio con le scale da 7 note (maggiore, minori, modi).

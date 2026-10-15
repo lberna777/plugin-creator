@@ -6,7 +6,15 @@ namespace
 {
 constexpr int kControlInterval = 16;          // ricalcolo di filtri e altezza ogni N campioni
 constexpr float kKillMs = 4.0f;               // choke / furto di voce
-constexpr float kMidiRibbonHoldMs = 300.0f;
+constexpr float kMidiRibbonHoldMs = 150.0f;   // dopo l'ultimo scatto dell'encoder la "mano" resta sul disco
+
+// Scratch come un giradischi: il disco ha inerzia, la mano lo trascina, il motore lo riporta a velocità
+constexpr float kScratchSecondsPerSweep = 0.3f;   // tutto il ribbon = 0,3 s di audio (circa un quarto di giro a 33)
+constexpr float kScratchMaxRate = 3.0f;
+constexpr float kHandSmoothS = 0.03f;             // la mano non va a scatti (encoder, mouse)
+constexpr float kGripS = 0.012f;                  // presa della mano sul disco
+constexpr float kBrakeS = 0.05f;                  // dito fermo sul disco: si ferma in fretta ma non di colpo
+constexpr float kMotorS = 0.07f;                  // motore: torna a velocità in ~200 ms
 
 inline float dbToGain (float db) noexcept { return db <= -59.9f ? 0.0f : std::pow (10.0f, db / 20.0f); }
 
@@ -468,23 +476,41 @@ void Engine::updateRibbon (int n, const EngineGlobals& g)
     const float dt = float (n / sr);
     const float smooth = 1.0f - std::exp (-dt / 0.015f);
 
-    // Scratch: dito fermo = disco fermo, movimento = velocità; senza dito gira normale
-    float targetScratch = 1.0f;
-    if (g.ribbonMode == RibbonMode::Scratch && active)
-        targetScratch = touch ? juce::jlimit (-4.0f, 4.0f, (ribbonValue - ribbonPrev) / juce::jmax (1.0e-4f, dt) * 0.25f) : 0.0f;
-    const float startScratch = scratchRate;
+    // Scratch: la velocità della mano (ammorbidita) muove il disco, che ha inerzia
+    const bool scratchMode = g.ribbonMode == RibbonMode::Scratch && active;
+    const float rawHand = (scratchMode && touch) ? (ribbonValue - ribbonPrev) / juce::jmax (1.0e-4f, dt) : 0.0f;
+    handVelocity += (rawHand - handVelocity) * (1.0f - std::exp (-dt / kHandSmoothS));
+    float targetScratch = 1.0f, tau = kMotorS;
+    if (scratchMode)
+    {
+        if (touch)
+        {
+            targetScratch = juce::jlimit (-kScratchMaxRate, kScratchMaxRate, handVelocity * kScratchSecondsPerSweep);
+            tau = std::abs (handVelocity) > 0.05f ? kGripS : kBrakeS;
+        }
+        else
+        {
+            targetScratch = 0.0f;   // HOLD senza dito: il disco resta fermo
+            tau = kBrakeS;
+        }
+    }
+    const float k = 1.0f - std::exp (-1.0f / (tau * float (sr)));
     for (int i = 0; i < n; ++i)
     {
-        const float t = float (i + 1) / float (n);
-        scratchBuf[size_t (i)] = startScratch + (targetScratch - startScratch) * smooth * t;
+        scratchRate += (targetScratch - scratchRate) * k;
+        scratchBuf[size_t (i)] = scratchRate;
     }
-    scratchRate = startScratch + (targetScratch - startScratch) * smooth;
     ribbonPrev = ribbonValue;
 
     const float targetPitch = (g.ribbonMode == RibbonMode::Pitch && active) ? (ribbonValue - 0.5f) * 2.0f * g.ribbonPitchRange : 0.0f;
     pitchSemis += (targetPitch - pitchSemis) * smooth;
 
-    const float targetCut = (g.ribbonMode == RibbonMode::Filter && active) ? 80.0f * std::pow (250.0f, ribbonValue) : 20000.0f;
+    // FILTER: il ribbon apre il filtro. SCRATCH: il disco lento suona più scuro, come un vinile vero
+    float targetCut = 20000.0f;
+    if (g.ribbonMode == RibbonMode::Filter && active)
+        targetCut = 80.0f * std::pow (250.0f, ribbonValue);
+    else if (std::abs (scratchRate - 1.0f) > 1.0e-3f)
+        targetCut = 900.0f + 19100.0f * juce::square (juce::jmin (1.0f, std::abs (scratchRate)));
     ribbonCutoff += (targetCut - ribbonCutoff) * smooth;
 
     reverseNow = g.ribbonMode == RibbonMode::Reverse && active;
@@ -587,6 +613,13 @@ void Engine::render (int start, int num, const EngineGlobals& g)
                 step = v.pitchRate * dirNow * scratch;
                 l = readHermite (src[0], len, v.pos);
                 r = stereo ? readHermite (src[1], len, v.pos) : l;
+            }
+            if (scratching)
+            {
+                // la puntina rende in proporzione alla velocità: il disco lento è più debole
+                const float sg = std::sqrt (juce::jmin (1.0f, std::abs (scratch)));
+                l *= sg;
+                r *= sg;
             }
 
             // ---- fade ai bordi della regione

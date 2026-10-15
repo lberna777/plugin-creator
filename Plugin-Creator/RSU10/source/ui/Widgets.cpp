@@ -36,8 +36,10 @@ juce::Array<juce::File> audioFilesIn (const juce::File& folder)
 
 juce::Rectangle<float> Knob::knobArea() const
 {
-    const float side = juce::jmin (getWidth(), getHeight()) * 0.72f;
-    return juce::Rectangle<float> (side, side).withCentre (getLocalBounds().toFloat().getCentre());
+    // quadrato in alto (centrato sul foro della placca), sotto resta la serigrafia col nome
+    const float w = (float) getWidth();
+    const float side = juce::jmin (w, (float) getHeight()) * 0.74f;
+    return juce::Rectangle<float> (side, side).withCentre ({ w * 0.5f, w * 0.5f });
 }
 
 float Knob::value01() const
@@ -68,12 +70,23 @@ void Knob::paint (juce::Graphics& g)
     {
         g.setColour (skin::col::alu.withAlpha (0.55f));
         g.fillEllipse (area.expanded (2.0f));
+        return;
     }
+
+    // Serigrafia sotto la manopola: il nome; girandola o passandoci sopra, il valore
+    auto label = getLocalBounds().toFloat().withTop (area.getBottom() + area.getHeight() * 0.24f);
+    const float h = juce::jmin (label.getHeight() * 0.62f, getWidth() * 0.15f);
+    if (dragging || hovering)
+        skin::drawSilk (g, formatValue (PP (pp), proc.pads.get (proc.selectedPad, PP (pp))), label,
+                        juce::Justification::centredTop, h, skin::col::amber);
+    else
+        skin::drawSilk (g, ppDefs()[size_t (pp)].name, label, juce::Justification::centredTop, h, skin::col::silk.withAlpha (0.85f));
 }
 
 void Knob::mouseDown (const juce::MouseEvent&)
 {
     dragStart01 = value01();
+    dragging = true;
 }
 
 void Knob::mouseDrag (const juce::MouseEvent& e)
@@ -91,7 +104,11 @@ void Knob::mouseDrag (const juce::MouseEvent& e)
     setValue01 (v);
 }
 
-void Knob::mouseUp (const juce::MouseEvent&) {}
+void Knob::mouseUp (const juce::MouseEvent&)
+{
+    dragging = false;
+    repaint();
+}
 
 void Knob::mouseDoubleClick (const juce::MouseEvent&)
 {
@@ -141,11 +158,9 @@ void PadView::paint (juce::Graphics& g)
     else if (scaleOn && proc.scalePad == pad)
         skin::drawPadRing (g, area, skin::col::cyan, 0.7f);
     else if (selected)
-        skin::drawPadRing (g, area, skin::col::amber, 0.55f);
+        skin::drawPadRing (g, area, skin::col::amber, 0.45f);
     else if (playing)
-        skin::drawPadRing (g, area, skin::col::amber, 0.25f);
-    else if (hasSample)
-        skin::drawPadRing (g, area, skin::col::amber, 0.06f);
+        skin::drawPadRing (g, area, skin::col::amber, 0.2f);
 
     // MUTE: anello rosso; SOLO: anello verde
     const bool muted = proc.engine.muted[pad].load(), soloed = proc.engine.soloed[pad].load();
@@ -162,10 +177,15 @@ void PadView::paint (juce::Graphics& g)
     const int layers = proc.samples.layerCount (pad);
     if (layers > 1)
         name << "  x" << layers;
+    // serigrafia sulla gomma: piccola e un po' consumata, non un'etichetta stampata sopra
     skin::drawSilk (g, name, inner.withHeight (inner.getHeight() * 0.42f), juce::Justification::topLeft,
-                    juce::jmax (8.0f, area.getHeight() * 0.11f), hasSample ? skin::col::silk : skin::col::dim);
+                    juce::jmax (7.0f, area.getHeight() * 0.095f), hasSample ? skin::col::silk.withAlpha (0.62f) : skin::col::dim.withAlpha (0.5f));
     skin::drawSilk (g, juce::String (pad % kPadsPerBank + 1), inner.withTrimmedTop (inner.getHeight() * 0.5f),
-                    juce::Justification::bottomRight, area.getHeight() * 0.26f, skin::col::silk);
+                    juce::Justification::bottomRight, area.getHeight() * 0.17f, skin::col::silk.withAlpha (0.55f));
+    // uscita separata nel mixer di FL
+    if (const int o = proc.pads.getInt (pad, PP::Output); o > 0)
+        skin::drawSilk (g, "OUT " + juce::String (o + 1), inner.withTrimmedTop (inner.getHeight() * 0.36f).withTrimmedBottom (inner.getHeight() * 0.36f),
+                        juce::Justification::centredLeft, area.getHeight() * 0.1f, skin::col::cyan.withAlpha (0.8f));
     if (muted || soloed)
         skin::drawSilk (g, muted ? "M" : "S", inner.withTrimmedTop (inner.getHeight() * 0.5f), juce::Justification::bottomLeft,
                         area.getHeight() * 0.22f, muted ? skin::col::recRed : juce::Colour (0xff5be37a));
@@ -378,9 +398,12 @@ juce::Rectangle<float> Ribbon::stripArea() const
 void Ribbon::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().toFloat();
-    // vetro nero lucido (originale)
-    g.setColour (skin::col::bezel);
-    g.fillRoundedRectangle (r, 4.0f);
+    // vetro nero lucido (originale): con la piastra il vetro è già nella foto
+    if (! skin::asset ("bg_plate.jpg").isValid())
+    {
+        g.setColour (skin::col::bezel);
+        g.fillRoundedRectangle (r, 4.0f);
+    }
     g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.10f), r.getX(), r.getY(),
                                              juce::Colours::transparentWhite, r.getX(), r.getY() + r.getHeight() * 0.5f, false));
     g.fillRoundedRectangle (r.reduced (2.0f), 3.0f);
@@ -972,16 +995,15 @@ void MainScreen::mouseMove (const juce::MouseEvent& e)
 
 void KitScreen::paint (juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat().reduced (8.0f, 2.0f);
+    auto r = getLocalBounds().toFloat().reduced (10.0f, 2.0f);
+    // display a segmenti: prima i segmenti spenti (come i VFD veri), poi la scritta accesa con alone
+    const auto text = proc.kitName.startsWithIgnoreCase ("KIT") ? proc.kitName : "KIT " + proc.kitName;
+    const auto font = skin::screenFont (r.getHeight() * 0.5f, true);
+    g.setFont (font);
+    g.setColour (skin::col::amber.withAlpha (0.07f));
+    g.drawFittedText (juce::String::repeatedString ("8", juce::jmax (12, text.length())), r.toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
+    g.setColour (skin::col::amber.withAlpha (0.18f));
+    g.drawFittedText (text, r.translated (0.0f, 0.6f).toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
     g.setColour (skin::col::amber);
-    g.setFont (skin::screenFont (r.getHeight() * 0.55f, true));
-    g.drawFittedText ("KIT  " + proc.kitName, r.toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
-
-    // misuratore d'uscita a destra
-    const float peak = juce::jlimit (0.0f, 1.0f, proc.engine.outPeak.load());
-    auto meter = r.removeFromRight (r.getWidth() * 0.22f).reduced (0.0f, r.getHeight() * 0.36f);
-    g.setColour (juce::Colours::white.withAlpha (0.08f));
-    g.fillRect (meter);
-    g.setColour (peak > 0.98f ? skin::col::recRed : skin::col::cyan);
-    g.fillRect (meter.withWidth (meter.getWidth() * std::sqrt (peak)));
+    g.drawFittedText (text, r.toNearestInt(), juce::Justification::centredLeft, 1, 0.7f);
 }

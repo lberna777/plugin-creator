@@ -183,6 +183,18 @@ static void testScales()
     CHECK (degreeToSemitones (1, 7) == 12);             // maggiore: pad 8 = ottava
     CHECK (degreeToSemitones (11, 5) == 12);            // pentatonica minore: pad 6 = ottava
     CHECK (snap (1, 0, 61) == 60 && snap (1, 0, 66) == 65);
+
+    // Accordi per grado: in Do maggiore 6-2-1 = Am Dm C, le settime sui pad 9-16
+    CHECK (chordName (1, 0, 5) == "Am" && chordName (1, 0, 1) == "Dm" && chordName (1, 0, 0) == "C");
+    CHECK (chordName (1, 0, 6) == "Bdim" && chordName (1, 0, 12) == "G7" && chordName (1, 0, 14) == "Bm7b5");
+    CHECK (chordName (2, 9, 4) == "Em" && chordName (3, 9, 4) == "E");   // La minore: v naturale, V armonica
+    for (int sc = 1; sc < kNumScales; ++sc)
+        for (int p = 0; p < 16; ++p)
+        {
+            const auto c = chordForPad (sc, p);
+            for (int k = 0; k < c.count; ++k)
+                CHECK (inScale (sc, 0, c.notes[k]) && (k == 0 || c.notes[k] > c.notes[k - 1]));
+        }
 }
 
 int main()

@@ -18,7 +18,8 @@ class Bridge final : private juce::Thread, private juce::MidiInputCallback
 public:
     static constexpr const char* kPortName = "Mikro MK2 Bridge";
 
-    enum class Mode { Drums = 0, Keys = 1 };
+    enum class Mode { Drums = 0, Keys = 1, Chords = 2 };   // PAD MODE li gira in quest'ordine
+    static constexpr int kNumModes = 3;
     enum class Status { Searching, Connected, Busy };
 
     // Impostazioni: scritte dalla UI, lette dal thread USB
@@ -44,6 +45,7 @@ public:
         std::atomic<int> velocity[mikro::kNumPads] {};   // >0 mentre il pad suona
         std::atomic<int> feedback[mikro::kNumPads] {};   // velocity ricevuta dal DAW
         std::atomic<int> lastNote { -1 }, lastVelocity { 0 };
+        std::atomic<int> lastPad { -1 };   // per mostrare l'ultimo accordo
         std::atomic<int> status { int (Status::Searching) };
     };
 
@@ -54,7 +56,10 @@ public:
     Mirror mirror;
 
     bool hasVirtualPorts() const noexcept { return midiOut != nullptr; }
-    int noteForPad (int physicalPad) const noexcept;
+    int noteForPad (int physicalPad) const noexcept;               // in Accordi: la fondamentale
+    bool usesKeyBase() const noexcept { return settings.mode.load() != int (Mode::Drums); }
+    bool chordMode() const noexcept   { return settings.mode.load() == int (Mode::Chords); }
+    juce::String chordLabel (int physicalPad) const;               // "Am" + numero romano
     static juce::String noteName (int note);
 
     // Tasti che il ponte usa da sé (non mandati al DAW): elenco per la legenda
@@ -87,6 +92,7 @@ private:
     bool haveButtons = false;
     mikro::PadEngine pads[mikro::kNumPads];
     int sentNote[mikro::kNumPads];        // nota mandata da ogni pad (per il NoteOff giusto)
+    int sentChord[mikro::kNumPads][4];    // modo Accordi: le altre note dell'accordo (-1 = nessuna)
     int sentChannel[mikro::kNumPads];
     bool shiftPadDown[mikro::kNumPads] {};
     std::array<int, mikro::kNumPads> rawPressure {};

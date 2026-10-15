@@ -21,7 +21,8 @@ public:
 
     void paint (juce::Graphics& g) override
     {
-        const bool keys = bridge.settings.mode.load() == int (Bridge::Mode::Keys);
+        const bool keys = bridge.usesKeyBase();
+        const bool chords = bridge.chordMode();
         const float cell = float (getWidth()) / 4.0f, gap = cell * 0.08f;
 
         for (int p = 0; p < 16; ++p)
@@ -57,8 +58,20 @@ public:
             g.setFont (juce::FontOptions (11.0f));
             g.drawText (juce::String (p + 1), r.reduced (6.0f), juce::Justification::topLeft);
             g.setColour (vel > 0 ? Col::bg : Col::text);
-            g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
-            g.drawText (Bridge::noteName (note), r, juce::Justification::centred);
+            if (chords)   // nome dell'accordo e grado: "Am" sopra, "vi" sotto
+            {
+                const auto label = bridge.chordLabel (p);
+                g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+                g.drawText (label.upToFirstOccurrenceOf (" ", false, false), r.withTrimmedBottom (r.getHeight() * 0.25f), juce::Justification::centred);
+                g.setColour (vel > 0 ? Col::bg : Col::dim);
+                g.setFont (juce::FontOptions (11.5f));
+                g.drawText (label.fromFirstOccurrenceOf (" ", false, false), r.withTrimmedTop (r.getHeight() * 0.45f), juce::Justification::centred);
+            }
+            else
+            {
+                g.setFont (juce::FontOptions (15.0f, juce::Font::bold));
+                g.drawText (Bridge::noteName (note), r, juce::Justification::centred);
+            }
             if (vel > 0)
             {
                 g.setFont (juce::FontOptions (11.0f));
@@ -85,13 +98,14 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     legend.setColour (juce::Label::textColourId, Col::dim);
     legend.setJustificationType (juce::Justification::topLeft);
     legend.setText (juce::String ("Nel DAW scegli \"") + Bridge::kPortName + "\" come ingresso MIDI (e come uscita, se vuoi le luci).\n"
-                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala.  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
+                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala / accordi (pad 1-7 = gradi I-VII, 9-15 con la settima).  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
                     "Tasti: CC 20-46 sul canale controlli (con SHIFT: CC 70-96).  SHIFT + pad 1-12: CC 102-113.  Encoder: CC 14 relativo (SHIFT: CC 15).",
                     juce::dontSendNotification);
     addAndMakeVisible (legend);
 
     mode.addItem ("Batteria (16 pad)", 1);
     mode.addItem ("Tastiera (in scala)", 2);
+    mode.addItem ("Accordi (pad = grado)", 3);
     for (int r = 0; r < 12; ++r)
         root.addItem (scales::kRootNames[r], r + 1);
     for (int i = 0; i < scales::kNumScales; ++i)
@@ -126,7 +140,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     mode.onChange   = [this] { bridge.settings.mode = mode.getSelectedId() - 1; save(); };
     base.onChange   = [this]
     {
-        auto& target = bridge.settings.mode.load() == int (Bridge::Mode::Keys) ? bridge.settings.keyBase : bridge.settings.drumBase;
+        auto& target = bridge.usesKeyBase() ? bridge.settings.keyBase : bridge.settings.drumBase;
         target = base.getSelectedId() - 1;
         save();
     };
@@ -139,7 +153,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     aftertouch.onClick = [this] { bridge.settings.aftertouch = aftertouch.getToggleState(); save(); };
     flipped.onClick    = [this] { bridge.settings.flippedPads = flipped.getToggleState(); save(); };
 
-    setSize (720, 540);
+    setSize (760, 560);
     startTimerHz (30);
 }
 
@@ -166,7 +180,7 @@ void MainComponent::fillBaseNotes()
 void MainComponent::load()
 {
     auto& s = bridge.settings;
-    s.mode        = props.getIntValue ("mode", s.mode);
+    s.mode        = juce::jlimit (0, Bridge::kNumModes - 1, props.getIntValue ("mode", s.mode));
     s.drumBase    = props.getIntValue ("drumBase", s.drumBase);
     s.keyBase     = props.getIntValue ("keyBase", s.keyBase);
     s.scale       = juce::jlimit (0, scales::kNumScales - 1, props.getIntValue ("scale", s.scale));
@@ -211,7 +225,7 @@ void MainComponent::timerCallback()
 {
     // La Mikro cambia modo e nota base da sé (PAD MODE, SHIFT + pad): la UI insegue
     const int m = bridge.settings.mode.load();
-    const int b = m == int (Bridge::Mode::Keys) ? bridge.settings.keyBase.load() : bridge.settings.drumBase.load();
+    const int b = bridge.usesKeyBase() ? bridge.settings.keyBase.load() : bridge.settings.drumBase.load();
     if (m != shownMode || (base.getSelectedId() != b + 1 && ! base.isPopupActive()))
     {
         if (m != shownMode)
@@ -263,7 +277,7 @@ void MainComponent::resized()
     status.setBounds (area.removeFromTop (kRowH));
     area.removeFromTop (kGap);
 
-    legend.setBounds (area.removeFromBottom (64));
+    legend.setBounds (area.removeFromBottom (80));
     area.removeFromBottom (kGap);
 
     const int side = juce::jmin (area.getHeight(), area.getWidth() / 2);

@@ -132,11 +132,14 @@ bool RSU10Editor::editorCommand (Cmd c)
 
 void RSU10Editor::enterKey()
 {
+    // ENTER (come sull'SU10): conferma la scelta del browser. Cartella = entra, suono = va nel pad scelto
     const auto f = browser.selection();
     if (f.isDirectory())
         browser.openFolder (f);
     else if (Sample::isAudioFile (f))
         proc.loadSample (proc.selectedPad, ui.viewLayer, f);
+    else
+        proc.postMessage ("ENTER: scegli un suono nel browser a sinistra, ENTER lo carica nel pad " + padLabel (proc.selectedPad));
 }
 
 juce::Rectangle<int> RSU10Editor::gridCell (const char* group, int col, int row) const
@@ -201,6 +204,9 @@ void RSU10Editor::kitMenu()
     m.addSeparator();
     m.addItem (3, "Kit di prova");
     m.addItem (4, "Kit vuoto");
+    m.addSeparator();
+    m.addItem (5, "Ogni pad nel suo canale del mixer (pad 1 MAIN, pad 2-16 OUT 2-16)");
+    m.addItem (6, "Tutti i pad sulla MAIN");
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&kitScreen), [this] (int r)
     {
         if (r == 1) openKit();
@@ -213,6 +219,14 @@ void RSU10Editor::kitMenu()
             proc.pads.resetAll();
             proc.kitName = "NUOVO KIT";
             proc.kitFile = juce::File();
+        }
+        else if (r == 5 || r == 6)
+        {
+            // pad n del banco -> uscita n (le 16 uscite stereo del plugin, una per pad)
+            for (int p = 0; p < kNumPads; ++p)
+                proc.pads.set (p, PP::Output, r == 5 ? float (p % kPadsPerBank) : 0.0f);
+            proc.postMessage (r == 5 ? "Uscite separate: in FL abilita le uscite nel plugin (ingranaggio > Processing)"
+                                     : "Tutti i pad sulla MAIN");
         }
         repaint();
     });
@@ -326,6 +340,28 @@ void RSU10Editor::paint (juce::Graphics& g)
 
 void RSU10Editor::paintOverChildren (juce::Graphics& g)
 {
+    // Vetro sopra gli schermi: un riflesso diagonale e un filo di luce sul bordo alto,
+    // così il contenuto sta "dietro" il vetro come nella foto della piastra
+    const auto b = getLocalBounds();
+    for (const char* glass : { "kit/glass", "browser/glass", "main/glass", "ribbon" })
+    {
+        const auto r = layout.rect (glass, b).toFloat();
+        juce::Path refl;
+        refl.startNewSubPath (r.getX() + r.getWidth() * 0.52f, r.getY());
+        refl.lineTo (r.getX() + r.getWidth() * 0.80f, r.getY());
+        refl.lineTo (r.getX() + r.getWidth() * 0.42f, r.getBottom());
+        refl.lineTo (r.getX() + r.getWidth() * 0.14f, r.getBottom());
+        refl.closeSubPath();
+        g.saveState();
+        g.reduceClipRegion (r.toNearestInt());
+        g.setColour (juce::Colours::white.withAlpha (0.035f));
+        g.fillPath (refl);
+        g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (0.06f), r.getX(), r.getY(),
+                                                 juce::Colours::transparentWhite, r.getX(), r.getY() + r.getHeight() * 0.18f, false));
+        g.fillRect (r);
+        g.restoreState();
+    }
+
     // LED moderni accanto alle etichette dei tasti che hanno uno stato
     for (auto& l : labelled)
         if (l.key->led != nullptr && l.above)

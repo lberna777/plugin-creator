@@ -16,8 +16,8 @@
                "silk":  { "x0": 0.267, "y0": 0.446, "x1": 0.622, "y1": 0.472 } },
 
   "knobPlate": { "x0": 0.240, "y0": 0.513, "x1": 0.649, "y1": 0.696 },
-  "_knobs": "7 fori, centri da 0.2784 a 0.6075 (passo 0.0549), cy 0.6085: celle quadrate centrate sui fori",
-  "knobs":     { "x0": 0.2510, "y0": 0.5648, "x1": 0.6350, "y1": 0.6522 },
+  "_knobs": "7 fori, centri da 0.2784 a 0.6075 (passo 0.0549), cy 0.6085: la manopola sta nel quadrato in alto della cella (centrato sul foro), sotto il nome serigrafato",
+  "knobs":     { "x0": 0.2510, "y0": 0.5648, "x1": 0.6350, "y1": 0.6900 },
 
   "_maschine": "blocco 3x3 a sinistra: MUTE SOLO SELECT / DUPLICATE ERASE UNDO / NOTE REPEAT PAD MODE FIXED VEL",
   "maschine": {

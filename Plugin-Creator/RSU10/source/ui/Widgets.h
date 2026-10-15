@@ -56,6 +56,8 @@ public:
     void mouseUp (const juce::MouseEvent&) override;
     void mouseDoubleClick (const juce::MouseEvent&) override;
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseEnter (const juce::MouseEvent&) override { hovering = true; repaint(); }
+    void mouseExit (const juce::MouseEvent&) override  { hovering = false; repaint(); }
 
     juce::Rectangle<float> knobArea() const;
 
@@ -67,6 +69,7 @@ private:
     UiState& ui;
     int pp = -1;
     float dragStart01 = 0.0f;
+    bool hovering = false, dragging = false;
 };
 
 // ---------------------------------------------------------------- pad

@@ -212,18 +212,20 @@ void RSU10AudioProcessor::loadSamplesFrom (int firstPad, const juce::Array<juce:
 
 void RSU10AudioProcessor::stepSampleInFolder (int pad, int delta)
 {
+    // -1/+1 scorrono i campioni della cartella del pad; se il pad non viene da un file
+    // (kit di prova, pad vuoto) quelli della cartella aperta nel browser
     auto* s = samples.get (pad, 0);
-    if (s == nullptr || ! s->file().existsAsFile())
-    {
-        postMessage ("Il pad non ha un file da cui partire");
-        return;
-    }
-    auto siblings = s->file().getParentDirectory().findChildFiles (juce::File::findFiles, false);
+    const bool fromFile = s != nullptr && s->file().existsAsFile();
+    const auto folder = fromFile ? s->file().getParentDirectory() : browserFolder;
+    auto siblings = folder.findChildFiles (juce::File::findFiles, false);
     siblings.removeIf ([] (const juce::File& f) { return ! Sample::isAudioFile (f); });
     siblings.sort();
-    const int i = siblings.indexOf (s->file());
-    if (i < 0 || siblings.isEmpty())
+    if (siblings.isEmpty())
+    {
+        postMessage ("-1/+1: nessun campione in " + folder.getFileName() + ". Apri una cartella di suoni nel browser");
         return;
+    }
+    const int i = fromFile ? siblings.indexOf (s->file()) : (delta > 0 ? -1 : 0);
     loadSample (pad, 0, siblings[(i + delta + siblings.size()) % siblings.size()]);
 }
 
