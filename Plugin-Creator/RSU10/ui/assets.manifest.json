@@ -1,0 +1,258 @@
+{
+  "_comment": "Asset dell'RSU-10. Sorgenti: immagini Gemini (ui/GEMINI_PROMPTS.md) in src/, verde pieno #00FF00 tranne la piastra. Eseguire da RSU10/ui: python3 ../../tools/build_assets.py assets.manifest.json. Poi ricompilare: ogni PNG in source/assets sostituisce il disegno da codice.",
+  "assets": [
+    {
+      "input": "src/bg_plate.png",
+      "output": "../source/assets/bg_plate.png",
+      "expect_alpha": false,
+      "ops": [
+        {
+          "op": "resize",
+          "w": 2560,
+          "h": 1600
+        },
+        "opaque"
+      ],
+      "expect": [
+        2560,
+        1600
+      ],
+      "_nota": "16:10 come la finestra; se Gemini aggiunge bordi, prima un crop_box misurato"
+    },
+    {
+      "input": "src/knob.png",
+      "output": "../source/assets/knob.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "rotate_to_top",
+        "square",
+        {
+          "op": "resize",
+          "w": 160,
+          "h": 160
+        }
+      ],
+      "expect": [
+        160,
+        160
+      ]
+    },
+    {
+      "input": "src/pad_up.png",
+      "output": "../source/assets/pad_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "square",
+        {
+          "op": "resize",
+          "w": 240,
+          "h": 240
+        }
+      ],
+      "expect": [
+        240,
+        240
+      ]
+    },
+    {
+      "input": "src/pad_down.png",
+      "output": "../source/assets/pad_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "square",
+        {
+          "op": "resize",
+          "w": 240,
+          "h": 240
+        }
+      ],
+      "expect": [
+        240,
+        240
+      ]
+    },
+    {
+      "input": "src/key_grey_up.png",
+      "output": "../source/assets/key_grey_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_grey_down.png",
+      "output": "../source/assets/key_grey_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_violet_up.png",
+      "output": "../source/assets/key_violet_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_violet_down.png",
+      "output": "../source/assets/key_violet_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_rubber_up.png",
+      "output": "../source/assets/key_rubber_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 72
+        }
+      ]
+    },
+    {
+      "input": "src/key_rubber_down.png",
+      "output": "../source/assets/key_rubber_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 72
+        }
+      ]
+    },
+    {
+      "input": "src/key_wide_up.png",
+      "output": "../source/assets/key_wide_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 96
+        }
+      ]
+    },
+    {
+      "input": "src/key_wide_down.png",
+      "output": "../source/assets/key_wide_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 96
+        }
+      ]
+    },
+    {
+      "input": "src/key_enter_up.png",
+      "output": "../source/assets/key_enter_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_enter_down.png",
+      "output": "../source/assets/key_enter_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_tiny_up.png",
+      "output": "../source/assets/key_tiny_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_tiny_down.png",
+      "output": "../source/assets/key_tiny_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        {
+          "op": "resize",
+          "h": 64
+        }
+      ]
+    },
+    {
+      "input": "src/key_rec_up.png",
+      "output": "../source/assets/key_rec_up.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "square",
+        {
+          "op": "resize",
+          "w": 96,
+          "h": 96
+        }
+      ],
+      "expect": [
+        96,
+        96
+      ]
+    },
+    {
+      "input": "src/key_rec_down.png",
+      "output": "../source/assets/key_rec_down.png",
+      "ops": [
+        "chroma_key",
+        "autocrop",
+        "square",
+        {
+          "op": "resize",
+          "w": 96,
+          "h": 96
+        }
+      ],
+      "expect": [
+        96,
+        96
+      ]
+    }
+  ]
+}

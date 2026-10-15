@@ -1,0 +1,60 @@
+name: RSU-10 macOS (AU + VST3)
+
+on:
+  push:
+    branches: [main]
+    paths: ['Plugin-Creator/RSU10/**', 'Plugin-Creator/tools/**', '.github/workflows/rsu10-macos.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configura (universal arm64 + x86_64)
+        run: cmake -S Plugin-Creator/RSU10 -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Compila AU, VST3, Standalone e banco di prova
+        run: cmake --build build --config Release --target RSU10_AU RSU10_VST3 RSU10_Standalone RSU10Measure -j 4
+
+      - name: Banco di prova (pad, choke, strati, stretch, grade, ribbon, uscite, kit, CPU)
+        run: ./build/RSU10Measure_artefacts/Release/RSU10Measure
+
+      - name: Firma ad-hoc e installa l'AU
+        run: |
+          A=build/RSU10_artefacts/Release
+          codesign --force --deep -s - "$A/AU/RSU-10.component"
+          codesign --force --deep -s - "$A/VST3/RSU-10.vst3"
+          codesign --force --deep -s - "$A/Standalone/RSU-10.app"
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "$A/AU/RSU-10.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true
+          sleep 3
+
+      - name: auval
+        run: auval -v aumu Rsu1 Mypl
+
+      - name: pluginval (AU e VST3, strictness 10)
+        run: |
+          curl -sSL -o pv.zip https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_macOS.zip
+          unzip -q pv.zip
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --skip-gui-tests \
+            ~/Library/Audio/Plug-Ins/Components/RSU-10.component
+          ./pluginval.app/Contents/MacOS/pluginval --strictness-level 10 --validate-in-process --skip-gui-tests \
+            build/RSU10_artefacts/Release/VST3/RSU-10.vst3
+
+      - name: Pacchetto installabile offline
+        run: |
+          A=build/RSU10_artefacts/Release
+          mkdir -p pkg/RSU-10
+          cp -R "$A/AU/RSU-10.component" "$A/VST3/RSU-10.vst3" "$A/Standalone/RSU-10.app" pkg/RSU-10/
+          cp "Plugin-Creator/RSU10/dist/Installa RSU-10.command" Plugin-Creator/RSU10/dist/LEGGIMI.txt pkg/RSU-10/
+          chmod +x "pkg/RSU-10/Installa RSU-10.command"
+          cd pkg && ditto -c -k --keepParent RSU-10 RSU-10-macOS.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RSU-10-macOS
+          path: pkg/RSU-10-macOS.zip

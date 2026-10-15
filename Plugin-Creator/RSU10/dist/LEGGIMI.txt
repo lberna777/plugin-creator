@@ -1,0 +1,67 @@
+RSU-10 — RESTOMOD SAMPLING UNIT
+Campionatore a 16 pad per FL Studio (AU + VST3), macOS, Mac con chip Apple e Intel
+=================================================================================
+
+COSA C'È IN QUESTA CARTELLA
+  RSU-10.component ........ il plugin Audio Unit
+  RSU-10.vst3 ............. il plugin VST3 (FL Studio usa questo o l'AU)
+  RSU-10.app .............. versione autonoma, senza DAW
+  Installa RSU-10.command . installa tutto con un doppio clic
+  LEGGIMI.txt ............. questo file
+
+
+INSTALLAZIONE
+-------------
+1. Chiudi FL Studio.
+2. Tasto destro su "Installa RSU-10.command" > Apri > Apri.
+   (Se il Mac non mostra "Apri": Impostazioni di Sistema > Privacy e
+   sicurezza, in fondo, "Apri comunque".)
+3. Apri FL Studio: Opzioni > Gestione plugin > Trova plugin.
+   RSU-10 compare tra i Generatori: aggiungilo al Channel Rack.
+
+
+CON LA MIKRO MK2
+----------------
+Apri Mikro Bridge. In FL: Opzioni > Impostazioni MIDI, attiva l'ingresso
+"Mikro MK2 Bridge". Seleziona il canale RSU-10 nel Channel Rack e suona.
+- Pad 1-16 = banco A (C1 ... D#2).
+- SHIFT + pad 15/16 sulla Mikro: banco B, C, D (sono le note più alte).
+- Encoder della Mikro = ribbon (scratch, pitch, filtro...).
+- Registri come al solito in FL: la batteria va nel piano roll.
+
+
+COME SI USA
+-----------
+Pad ............... clic = suona (più in alto clicchi, più forte)
+                    trascina un campione dal browser o dal Finder sul pad
+                    trascina una CARTELLA = un campione per pad, dal pad in poi
+                    SHIFT + trascina = strato di velocity (fino a 4 per pad)
+                    trascina un pad su un altro = copia
+                    tasto destro = carica, svuota, copia, mostra nel Finder
+Browser (sinistra)  clic = ascolto, doppio clic = carica nel pad scelto
+                    BWD / FWD = campione precedente / successivo
+                    EXIT = cartella sopra
+Schermo ........... forma d'onda del pad: trascina S, E e LOOP
+                    V1-V4 = strati, SCALE = il pad su tutte le note (C3 = originale)
+                    REC: INGR./USCITA = da dove campiona REC
+Manopole .......... 8 per pagina, i valori sono sullo schermo sopra
+                    doppio clic = valore iniziale, SHIFT = regolazione fine
+Pagine ............ SUONO   volume, pan, intonazione, inviluppo
+                    TAGLIO  inizio, fine, loop, fade, modo, reverse, stretch
+                    COLORE  filtro, velocity, grade lo-fi, saturazione, compressore
+                    USCITA  uscita nel mixer, choke, mono, soglie degli strati
+-1 / +1 ........... cambia il campione del pad con il precedente/successivo
+                    della sua cartella (per provare i suoni al volo)
+< / > ............. pad precedente / successivo
+Ribbon ............ striscia nera in alto a destra; sopra si sceglie il modo
+HOLD / REV / SCRATCH  come sull'SU10
+BANK .............. banco A-D mostrato sui pad
+REC ............... campiona nel pad scelto (parte da solo col segnale);
+                    di nuovo REC o EXIT per fermare.
+                    I file vanno in Musica > RSU-10 > Registrazioni
+SAVE / LOAD ....... salva e carica i kit: i campioni vengono copiati accanto
+                    al kit, così il kit funziona anche spostato
+
+USCITE SEPARATE IN FL: nel wrapper del plugin (icona a ingranaggio >
+Processing) abilita le uscite, poi su ogni pad scegli OUT 2...16 nella
+pagina USCITA.
