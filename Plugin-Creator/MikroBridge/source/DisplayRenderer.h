@@ -246,28 +246,36 @@ private:
     void drawKnob (juce::Graphics& gi, juce::Graphics& gt, const DisplayState& s)
     {
         const auto& k = mikro::kKnobFx[juce::jlimit (0, mikro::kNumKnobFx - 1, s.knobFx)];
-        const juce::Rectangle<int> box (6, 14, kDisplayW - 12, 36);
+        // copre tutta la fascia tra il titolo e la riga tratteggiata: sotto non deve spuntare niente
+        const juce::Rectangle<int> area (0, 12, kDisplayW, 40), box (1, 13, kDisplayW - 2, 38);
         gi.setColour (juce::Colours::black);
-        gi.fillRect (box);
+        gi.fillRect (area);
         gt.setColour (juce::Colours::black);
-        gt.fillRect (box);
+        gt.fillRect (area);
         gi.setColour (juce::Colours::white);
-        gi.drawRect (box, 1);
-        pixelText (gi, juce::String ("MANOPOLA: ") + k.shortName, box.getX() + 4, box.getY() + 4);
+        gi.drawRoundedRectangle (box.toFloat().reduced (0.5f), 2.0f, 1.0f);
+
         juce::String value;
         if (k.cc == mikro::kKnobFxDaw)
-            value = "SCORRE IN FL";
+            value = "JOG / RIBBON";
         else if (k.cc == mikro::kKnobFxArpRate)
             value = mikro::kArpRateNames[juce::jlimit (0, mikro::kNumArpRates - 1, s.knobValue)];
         else if (k.cc == mikro::kKnobFxPitchBend || k.cc == 10)
-            value = s.knobValue == 64 ? juce::String ("CENTRO") : juce::String (s.knobValue - 64);
+            value = s.knobValue == 64 ? juce::String ("CENTRO") : (s.knobValue > 64 ? "+" : "") + juce::String (s.knobValue - 64);
         else
             value = juce::String (s.knobValue);
-        pixelText (gi, value, box.getRight() - 4 - pixelWidth (value), box.getY() + 4);
+
+        // riga 1: effetto (grande) a sinistra, valore a destra
+        const juce::String name (k.shortName);
+        const float nameEnd = text (gi, name, 4.0f, 27.0f, fitted (name, 13.0f, 70.0f));
+        const int vx = juce::jmax (juce::roundToInt (nameEnd) + 6, box.getRight() - 4 - pixelWidth (value));
+        pixelText (gi, value, vx, 19);
+
+        // riga 2: barra del valore, o il promemoria del tasto
         if (k.cc >= 0 || k.cc == mikro::kKnobFxPitchBend)
-            velocityBar (gi, gt, { box.getX() + 4, box.getY() + 16, box.getWidth() - 8, 12 }, s.knobValue);
+            velocityBar (gi, gt, { box.getX() + 4, box.getY() + 21, box.getWidth() - 8, 11 }, s.knobValue);
         else
-            pixelText (gi, "GROUP = ALTRO EFFETTO", box.getX() + 4, box.getY() + 20);
+            pixelText (gi, "GROUP = ALTRO EFFETTO", box.getX() + 4, box.getY() + 25);
     }
 
     void footer (juce::Graphics& g, const juce::String& t)
@@ -318,12 +326,14 @@ private:
 
     void drawDrums (juce::Graphics& gi, juce::Graphics& gt, const DisplayState& s)
     {
-        const auto big = fitted (noteName (s.lastNote), 28.0f, 62.0f);
+        // nota grande, poi "PAD" e il numero impilati nello spazio rimasto prima della mappa dei pad
+        const auto big = fitted (noteName (s.lastNote), 28.0f, s.lastPad >= 0 ? 58.0f : 86.0f);
         const float end = text (gi, noteName (s.lastNote), 0.0f, 38.0f, big);
         if (s.lastPad >= 0)
         {
-            pixelText (gi, "PAD", juce::roundToInt (end) + 4, 25);
-            text (gi, juce::String (s.lastPad + 1), end + 3.0f, 38.0f, font (14.0f, true));
+            const int lx = juce::roundToInt (end) + 5;
+            pixelText (gi, "PAD", lx, 20);
+            text (gi, juce::String (s.lastPad + 1), float (lx) - 1.0f, 38.0f, font (13.0f, true));
         }
         velocityBar (gi, gt, { 0, 42, 70, 7 }, s.lastVelocity);
         const juce::String v (s.lastNote >= 0 ? juce::String (s.lastVelocity) : juce::String ("--"));
@@ -340,9 +350,8 @@ private:
         text (gi, noteName (s.lastNote), 0.0f, 38.0f, big);
 
         const juce::String rootName (scales::kRootNames[scales::mod (s.root, 12)]);
-        const juce::String sc = s.harmony ? rootName + " " + scales::get (s.scale).shortName + " ARMONIA"
-                                          : rootName + " " + scales::get (s.scale).name;
-        pixelText (gi, (pixelWidth (sc) <= 82 ? sc : rootName + " " + scales::get (s.scale).shortName + (s.harmony ? " ARM" : "")).toUpperCase(), 0, 43);
+        const juce::String sc = rootName + " " + scales::get (s.scale).name;
+        pixelText (gi, (pixelWidth (sc.toUpperCase()) <= 82 ? sc : rootName + " " + scales::get (s.scale).shortName).toUpperCase(), 0, 43);
 
         // Ottava di pianoforte: tasti della scala marcati, ultima nota piena
         const int x0 = 86, y0 = 15, kw = 6, kh = 32;
@@ -389,8 +398,8 @@ private:
                 gi.setColour (juce::Colours::transparentBlack);
             }
         }
-        footer (gi, juce::String ("PAD ") + noteName (s.lowNote) + juce::String ("-")
-                    + noteName (s.highNote) + "    CH " + juce::String (s.channel));
+        footer (gi, juce::String (s.harmony ? "ARMONIA " : "PAD ") + noteName (s.lowNote) + juce::String ("-")
+                    + noteName (s.highNote) + (s.harmony ? "  CH " : "    CH ") + juce::String (s.channel));
     }
 
     void drawChords (juce::Graphics& gi, juce::Graphics& gt, const DisplayState& s)
@@ -401,7 +410,8 @@ private:
             name = scales::chordName (s.scale, s.root, s.lastPad);
             roman = juce::CharPointer_UTF8 (scales::chordRoman (s.scale, s.lastPad).c_str());
         }
-        text (gi, name, 0.0f, 35.0f, fitted (name, 26.0f, 88.0f));
+        // altezza limitata: le gambe (j, g) non devono entrare nel riquadro del grado sotto
+        text (gi, name, 0.0f, 30.0f, fitted (name, 20.0f, 88.0f));
         if (roman.isNotEmpty())
         {
             // Grado in una cornice, come un'etichetta
@@ -413,8 +423,13 @@ private:
             pixelText (gi, "PAD " + juce::String (s.lastPad + 1), juce::roundToInt (w) + 4, 43);
         }
         padMap (gi, gt, 93, 14, 7, s, true);
-        footer (gi, juce::String (scales::kRootNames[scales::mod (s.root, 12)]) + " " + scales::get (s.scale).shortName
-                    + "  TRIADI 1-7  +7 9-15");
+        const juce::String key = juce::String (scales::kRootNames[scales::mod (s.root, 12)]) + " " + scales::get (s.scale).shortName;
+        juce::String f = key + "  TRIADI 1-7  +7 9-15";
+        if (pixelWidth (f) > kDisplayW)
+            f = key + "  1-7  +7 9-15";
+        if (pixelWidth (f) > kDisplayW)
+            f = key + "  +7 9-15";
+        footer (gi, f);
     }
 
     void convert (Display& out) const

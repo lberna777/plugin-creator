@@ -53,3 +53,10 @@ target_link_libraries(MikroBridge PRIVATE hidapi::hidapi juce::juce_gui_extra ju
 if(APPLE)
     target_include_directories(MikroBridge PRIVATE ${hidapi_SOURCE_DIR}/mac)   # hidapi_darwin.h
 endif()
+
+# --- Foglio di render del display (tutte le schermate, per controllare le sovrapposizioni) ---
+juce_add_console_app(MikroDisplayShoot PRODUCT_NAME "MikroDisplayShoot")
+target_sources(MikroDisplayShoot PRIVATE tools/display_shoot/main.cpp)
+target_include_directories(MikroDisplayShoot PRIVATE source ../shared)
+target_compile_definitions(MikroDisplayShoot PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+target_link_libraries(MikroDisplayShoot PRIVATE juce::juce_gui_basics PUBLIC juce::juce_recommended_config_flags)
