@@ -10,6 +10,9 @@ using namespace mikro;
 namespace
 {
 constexpr double kReopenMs = 1000.0, kLedMs = 10.0, kDisplayMs = 40.0;
+constexpr double kSettleMs = 1500.0;          // dopo l'apertura: solo lettura, la Mikro finisce di avviarsi
+constexpr double kStableMs = 8000.0;          // aperta da almeno tanto = collegamento sano, pausa azzerata
+constexpr double kMaxReopenMs = 10000.0;
 constexpr int kReadTimeoutMs = 2;
 
 constexpr int kShiftPadSemiDown = 12, kShiftPadSemiUp = 13, kShiftPadOctDown = 14, kShiftPadOctUp = 15;   // pad 13..16
@@ -112,16 +115,22 @@ bool Bridge::openDevice()
     }
     haveButtons = false;
     displayValid = false;
-    splashStart = juce::Time::getMillisecondCounterHiRes();
+    settled = false;
+    openedAt = juce::Time::getMillisecondCounterHiRes();
+    splashStart = openedAt + kSettleMs;   // l'animazione parte quando si può scrivere
     for (auto& p : pads)
         p.reset();
     mirror.status = int (Status::Connected);
-    refreshOutputs (true);
-    return true;
+    return true;   // niente scritture qui: le fa run() dopo kSettleMs
 }
 
 void Bridge::closeDevice()
 {
+    // scollegata poco dopo l'apertura = probabile riavvio della Mikro: si aspetta di più a riaprire
+    const double now = juce::Time::getMillisecondCounterHiRes();
+    if (dev != nullptr && now - openedAt < kStableMs)
+        reopenDelayMs = juce::jmin (kMaxReopenMs, reopenDelayMs * 2.0);
+    lastOpenAttempt = now;
     releaseAllNotes();
     if (dev != nullptr)
         hid_close (dev);
@@ -138,7 +147,7 @@ void Bridge::run()
         if (dev == nullptr)
         {
             const double now = juce::Time::getMillisecondCounterHiRes();
-            if (now - lastOpenAttempt >= kReopenMs)
+            if (now - lastOpenAttempt >= reopenDelayMs)
             {
                 lastOpenAttempt = now;
                 if (openDevice())
@@ -165,9 +174,18 @@ void Bridge::run()
 
         if (dev != nullptr)
         {
-            tickArp (juce::Time::getMillisecondCounterHiRes());
+            const double now = juce::Time::getMillisecondCounterHiRes();
+            tickArp (now);
             updateDisplay();
-            refreshOutputs (false);
+            if (! settled && now - openedAt >= kSettleMs)
+            {
+                settled = true;
+                refreshOutputs (true);   // prima scrittura: la Mikro ha finito di avviarsi
+            }
+            else if (settled)
+                refreshOutputs (false);
+            if (settled && now - openedAt >= kStableMs)
+                reopenDelayMs = kReopenMs;
         }
     }
 
@@ -507,8 +525,24 @@ void Bridge::send (const juce::MidiMessage& m)
 
 // ---------------------------------------------------------------- LED e display
 
+// Una scrittura che fallisce = la Mikro non risponde (si sta riavviando): si chiude e si riprova
+// più tardi, invece di insistere e tenerla in crash
+bool Bridge::write (const std::vector<uint8_t>& report)
+{
+    if (dev == nullptr)
+        return false;
+    if (hid_write (dev, report.data(), report.size()) < 0)
+    {
+        closeDevice();
+        return false;
+    }
+    return true;
+}
+
 void Bridge::refreshOutputs (bool force)
 {
+    if (dev == nullptr)
+        return;
     const double now = juce::Time::getMillisecondCounterHiRes();
 
     if (force || now - lastLedWrite >= kLedMs)
@@ -516,8 +550,13 @@ void Bridge::refreshOutputs (bool force)
         const auto leds = computeLeds();
         if (force || leds != lastLeds)
         {
-            const auto r = ledReport (leds);
-            hid_write (dev, r.data(), r.size());
+            // Luminosità: le luci accese consumano corrente; su un hub carico la Mikro si spegne e riparte
+            auto dimmed = leds;
+            const int level = juce::jlimit (5, 100, settings.ledLevel.load());
+            for (auto& v : dimmed)
+                v = uint8_t ((int (v) * level + 50) / 100);
+            if (! write (ledReport (dimmed)))
+                return;
             lastLeds = leds;
         }
         lastLedWrite = now;
@@ -526,10 +565,8 @@ void Bridge::refreshOutputs (bool force)
     if (frameValid && (force || ! displayValid || frame != lastDisplay))
     {
         for (int c = 0; c < 4; ++c)
-        {
-            const auto r = displayReport (frame.data(), c);
-            hid_write (dev, r.data(), r.size());
-        }
+            if (! write (displayReport (frame.data(), c)))
+                return;
         lastDisplay = frame;
         displayValid = true;
     }
@@ -543,7 +580,7 @@ void Bridge::updateDisplay()
         return;
     lastDisplayRender = now;
 
-    const double splash = now - splashStart;
+    const double splash = juce::jmax (0.0, now - splashStart);   // prima di kSettleMs resta al primo fotogramma
     if (splash < DisplayRenderer::kSplashMs)
     {
         renderer.renderSplash (splash, frame);

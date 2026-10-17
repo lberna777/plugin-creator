@@ -139,3 +139,15 @@ della nota, latch (continua senza dita; il gesto dopo sostituisce le note).
 A tempo con FL: Opzioni > Impostazioni MIDI, nell'Output scegli
 "Mikro MK2 Bridge" e attiva "Send master sync". Senza clock usa il
 "Tempo senza clock" della finestra. Con gli Accordi: accordo arpeggiato.
+
+
+SE LA MIKRO SI SPEGNE E RIPARTE (si collega e scollega in loop)
+--------------------------------------------------------------
+È la corrente USB: la Mikro si alimenta dal cavo e con le luci accese chiede
+di più. Su un hub già carico (mouse con luci, tastiera...) la tensione cala e
+la Mikro si riavvia. Rimedi, in ordine:
+1. Collegala DIRETTAMENTE a una porta del Mac, o a un hub alimentato.
+2. Abbassa "Luminosità luci" nella finestra (50% di partenza).
+Il Bridge aspetta 1,5 s dopo ogni collegamento prima di scrivere sulla Mikro
+e, se si scollega subito, aspetta sempre di più (fino a 10 s) prima di
+riprovare: un calo di corrente non diventa più un riavvio continuo.

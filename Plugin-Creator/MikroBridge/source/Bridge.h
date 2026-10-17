@@ -42,6 +42,7 @@ public:
         std::atomic<int> arpPattern { 0 }, arpRate { 3 }, arpOctaves { 1 }, arpGate { 60 };
         std::atomic<bool> arpLatch { false };
         std::atomic<int> arpBpm { 120 };    // se FL non manda il clock MIDI
+        std::atomic<int> ledLevel { 50 };   // luminosità delle luci in %: meno corrente dall'USB
         std::atomic<bool> aftertouch { false };
         std::atomic<bool> flippedPads { false };
     };
@@ -135,6 +136,11 @@ private:
     mikro::Display frame, lastDisplay, preview;   // frame = disegnato, lastDisplay = inviato alla Mikro
     mutable juce::SpinLock previewLock;
     double lastLedWrite = 0, lastDisplayRender = 0, lastOpenAttempt = -1.0e9;
+    // Contro il loop di riavvii: dopo l'apertura la Mikro si sta ancora avviando e una scrittura
+    // subito la manda in crash; se si scollega appena aperta, si aspetta sempre di più a riaprirla
+    double openedAt = -1.0e9, reopenDelayMs = 1000.0;
+    bool settled = false;
+    bool write (const std::vector<uint8_t>& report);
     double splashStart = 0;                       // animazione della barca all'avvio e a ogni collegamento
     bool displayValid = false, frameValid = false, frameIsSplash = false;
 

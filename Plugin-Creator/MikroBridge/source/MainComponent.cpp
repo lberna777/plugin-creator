@@ -157,6 +157,11 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     crosstalk.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 20);
     crosstalk.setRange (0.0, 80.0, 1.0);
     crosstalk.setTextValueSuffix (" %");
+    ledLevel.setSliderStyle (juce::Slider::LinearHorizontal);
+    ledLevel.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 20);
+    ledLevel.setRange (5.0, 100.0, 5.0);
+    ledLevel.setTextValueSuffix (" %");
+    ledLevel.setTooltip ("Luci piu' basse = meno corrente. Se la Mikro si spegne e riparte, abbassale o collegala direttamente al Mac");
     crosstalk.setTooltip ("Colpi fantasma: un pad parte solo se ha almeno questa % della pressione del pad piu' premuto. 0 = spento");
 
     addRow (modeL, mode, "Modo");
@@ -168,6 +173,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     addRow (curveL, curve, "Velocity");
     addRow (threshL, threshold, "Soglia colpo");
     addRow (crosstalkL, crosstalk, "Anti-fantasma");
+    addRow (ledLevelL, ledLevel, "Luminosita' luci");
     addAndMakeVisible (harmony);
 
     // ---- manopola e arpeggiatore
@@ -216,6 +222,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     curve.onChange  = [this] { bridge.settings.curve = curve.getSelectedId() - 1; save(); };
     threshold.onValueChange = [this] { bridge.settings.threshold = int (threshold.getValue()); save(); };
     crosstalk.onValueChange = [this] { bridge.settings.crosstalk = int (crosstalk.getValue()); save(); };
+    ledLevel.onValueChange  = [this] { bridge.settings.ledLevel = int (ledLevel.getValue()); save(); };
     harmony.onClick    = [this] { bridge.settings.harmony = harmony.getToggleState(); save(); };
     knob.onChange       = [this] { bridge.settings.knobFx = knob.getSelectedId() - 1; save(); };
     arpOn.onClick       = [this] { bridge.settings.arp = arpOn.getToggleState(); save(); };
@@ -265,6 +272,7 @@ void MainComponent::load()
     s.curve       = props.getIntValue ("curve", s.curve);
     s.threshold   = props.getIntValue ("threshold", s.threshold);
     s.crosstalk   = juce::jlimit (0, 80, props.getIntValue ("crosstalk", s.crosstalk));
+    s.ledLevel    = juce::jlimit (5, 100, props.getIntValue ("ledLevel", s.ledLevel));
     s.harmony     = props.getBoolValue ("harmony", s.harmony);
     s.knobFx      = juce::jlimit (0, mikro::kNumKnobFx - 1, props.getIntValue ("knobFx", s.knobFx));
     s.arp         = props.getBoolValue ("arp", s.arp);
@@ -286,6 +294,7 @@ void MainComponent::load()
     curve.setSelectedId (s.curve + 1, juce::dontSendNotification);
     threshold.setValue (s.threshold, juce::dontSendNotification);
     crosstalk.setValue (s.crosstalk, juce::dontSendNotification);
+    ledLevel.setValue (s.ledLevel, juce::dontSendNotification);
     harmony.setToggleState (s.harmony, juce::dontSendNotification);
     knob.setSelectedId (s.knobFx + 1, juce::dontSendNotification);
     arpOn.setToggleState (s.arp, juce::dontSendNotification);
@@ -312,6 +321,7 @@ void MainComponent::save()
     props.setValue ("curve", s.curve.load());
     props.setValue ("threshold", s.threshold.load());
     props.setValue ("crosstalk", s.crosstalk.load());
+    props.setValue ("ledLevel", s.ledLevel.load());
     props.setValue ("harmony", s.harmony.load());
     props.setValue ("knobFx", s.knobFx.load());
     props.setValue ("arp", s.arp.load());
@@ -439,8 +449,8 @@ void MainComponent::resized()
     }
 
     auto row = [&area] { auto r = area.removeFromTop (kRowH); area.removeFromTop (kGap); return r; };
-    juce::Label* labels[] { &modeL, &baseL, &rootL, &scaleL, &padChL, &ctrlChL, &curveL, &threshL, &crosstalkL };
-    juce::Component* comps[] { &mode, &base, &root, &scale, &padCh, &ctrlCh, &curve, &threshold, &crosstalk };
+    juce::Label* labels[] { &modeL, &baseL, &rootL, &scaleL, &padChL, &ctrlChL, &curveL, &threshL, &crosstalkL, &ledLevelL };
+    juce::Component* comps[] { &mode, &base, &root, &scale, &padCh, &ctrlCh, &curve, &threshold, &crosstalk, &ledLevel };
     for (size_t i = 0; i < std::size (labels); ++i)
     {
         auto r = row();

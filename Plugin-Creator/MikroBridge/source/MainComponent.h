@@ -32,8 +32,8 @@ private:
     juce::Label status, legend;
     juce::Label modeL, baseL, rootL, scaleL, padChL, ctrlChL, curveL, threshL;
     juce::ComboBox mode, base, root, scale, padCh, ctrlCh, curve;
-    juce::Slider threshold, crosstalk;
-    juce::Label crosstalkL;
+    juce::Slider threshold, crosstalk, ledLevel;
+    juce::Label crosstalkL, ledLevelL;
     juce::ToggleButton aftertouch { "Aftertouch polifonico" }, flipped { "Pad numerati al contrario" };
     juce::ToggleButton harmony { "Armonia: in tastiera ogni combinazione di pad suona bene" };
     bool shownHarmony = false;
