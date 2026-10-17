@@ -131,7 +131,7 @@ public:
     static std::vector<double> findSlices (const juce::AudioBuffer<float>& audio, double rate, int from, int to, int maxSlices);
 
     // UNDO / REDO delle modifiche ai pad (cancella, copia, carica, registra)
-    void pushUndo (int pad);
+    void pushUndo (int pad, int group = 0);   // group != 0: si annulla insieme (es. le 16 fette del chop)
     void undo();
     void redo();
 
@@ -155,13 +155,14 @@ private:
 
     struct PadSnapshot
     {
-        int pad = 0;
+        int pad = 0, group = 0;
         std::array<float, rsu::kNumPP> values {};
         std::array<rsu::Sample::Ptr, rsu::kMaxLayers> layers;
     };
     PadSnapshot snapshot (int pad) const;
     void restore (const PadSnapshot&);
     std::vector<PadSnapshot> undoStack, redoStack;
+    int undoGroupCounter = 0;
     struct ChopMemory { rsu::Sample::Ptr sample; int pad = -1; float start = 0, end = 1; double at = -1.0e9; ChopMode mode = ChopMode::Transients; };
     ChopMemory lastChop;   // ripremendo CHOP subito sullo stesso campione si passa ai tagli uguali
     int clipboardPad = -1;

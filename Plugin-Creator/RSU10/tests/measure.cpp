@@ -365,6 +365,58 @@ int main()
         check (p.samples.get (8, 0) == p.samples.get (0, 0), "DUPLICATE: A1 copiato su A9");
     }
 
+    // ---- 14. CHOP: un loop con 8 colpi diventa 8 pad, poi parti uguali, UNDO in un colpo solo
+    {
+        RSU10AudioProcessor p;
+        p.prepareToPlay (kRate, kBlock);
+        const double rate = 44100.0;
+        juce::AudioBuffer<float> loop (1, int (rate * 2.0));
+        loop.clear();
+        const double hits[] { 0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75 };
+        for (double h : hits)   // colpo: rumore che decade in 80 ms
+        {
+            juce::Random rng (int (h * 1000) + 7);
+            const int at = int (h * rate);
+            for (int i = 0; i < int (0.08 * rate); ++i)
+                loop.setSample (0, at + i, (rng.nextFloat() * 2.0f - 1.0f) * 0.8f * std::exp (-float (i) / float (0.02 * rate)));
+        }
+        Sample::Ptr src = new Sample (std::move (loop), rate, "loop");
+        p.samples.set (0, 0, src);
+        p.pads.resetPad (0);
+        const auto before = p.samples.get (5, 0);
+
+        const int n = p.chopPad (0, RSU10AudioProcessor::ChopMode::Transients);
+        bool aligned = n == 8;
+        for (int i = 0; i < n && aligned; ++i)
+            aligned = std::abs (p.pads.get (i, PP::Start) * 2.0 - hits[i]) < 0.012   // entro ~12 ms dal colpo
+                      && p.samples.get (i, 0) == src.get();
+        check (aligned, "CHOP sui colpi: " + juce::String (n) + " fette allineate ai colpi");
+        check (std::abs (p.pads.get (7, PP::End) - 1.0f) < 1.0e-4f && p.pads.get (2, PP::End) == p.pads.get (3, PP::Start),
+               "le fette sono contigue e l'ultima arriva alla fine");
+
+        // SHIFT + pad 10 dalla Mikro subito dopo: parti uguali, 16 fette
+        juce::AudioBuffer<float> buf (2, kBlock);
+        juce::MidiBuffer m;
+        m.addEvent (juce::MidiMessage::controllerEvent (16, 111, 127), 0);
+        buf.clear(); p.processBlock (buf, m);
+        p.drainPosted();
+        check (p.samples.get (15, 0) == src.get() && std::abs (p.pads.get (1, PP::Start) - 1.0f / 16.0f) < 1.0e-3f,
+               "di nuovo CHOP (SHIFT + pad 10): 16 parti uguali");
+
+        // ogni fetta suona
+        float peak = 0.0f;
+        juce::MidiBuffer hit;
+        hit.addEvent (juce::MidiMessage::noteOn (1, kFirstNote + 4, (juce::uint8) 120), 0);
+        buf.clear(); p.processBlock (buf, hit);
+        for (int i = 0; i < 10; ++i) { buf.clear(); juce::MidiBuffer none; p.processBlock (buf, none); peak = juce::jmax (peak, buf.getMagnitude (0, 0, kBlock)); }
+        check (peak > 0.05f, "la fetta del pad 5 suona (picco " + juce::String (peak, 2) + ")");
+
+        p.runCommand (Cmd::Undo);   // annulla il chop in parti uguali
+        p.runCommand (Cmd::Undo);   // annulla il chop sui colpi
+        check (p.samples.get (5, 0) == before && p.samples.get (0, 0) == src.get() && p.pads.get (0, PP::Start) == 0.0f,
+               "due UNDO: torna tutto com'era prima dei chop");
+    }
+
     std::cout << (failures == 0 ? "TUTTO OK\n" : juce::String (failures) + " test falliti\n");
     return failures == 0 ? 0 : 1;
 }

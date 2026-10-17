@@ -99,3 +99,14 @@ SAVE / LOAD ....... salva e carica i kit: i campioni vengono copiati accanto
 USCITE SEPARATE IN FL: nel wrapper del plugin (icona a ingranaggio >
 Processing) abilita le uscite, poi su ogni pad scegli OUT 2...16 nella
 pagina USCITA.
+
+
+CHOP: TAGLIARE UN CAMPIONE SUI PAD (dalla Mikro)
+-----------------------------------------------
+1. Metti un loop o una frase su un pad (trascinalo dal browser o dal Finder)
+   e selezionalo.
+2. Sulla Mikro: SHIFT + pad 10. Il campione viene tagliato sui colpi e ogni
+   fetta va su un pad del banco, dal pad 1 (fino a 16 fette). Ogni fetta ha
+   il suono del pad di partenza (filtro, grade, ecc.).
+3. SHIFT + pad 10 di nuovo subito dopo: 16 parti uguali (per voci, pad, frasi).
+4. Suona le fette dai pad. UNDO (SHIFT + pad 1) annulla tutto il chop in un colpo.

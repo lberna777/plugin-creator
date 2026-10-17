@@ -1033,10 +1033,11 @@ int RSU10AudioProcessor::chopPad (int pad, ChopMode mode)
         base[size_t (i)] = pads.get (pad, PP (i));
     engine.panic();
     const int n = (int) starts.size();
+    const int group = ++undoGroupCounter;
     for (int i = 0; i < n; ++i)
     {
         const int target = first + i;
-        pushUndo (target);
+        pushUndo (target, group);
         samples.set (target, 0, s);
         for (int l = 1; l < kMaxLayers; ++l)
             samples.set (target, l, nullptr);
@@ -1079,12 +1080,13 @@ void RSU10AudioProcessor::restore (const PadSnapshot& s)
     selectedPad = s.pad;
 }
 
-void RSU10AudioProcessor::pushUndo (int pad)
+void RSU10AudioProcessor::pushUndo (int pad, int group)
 {
     if (pad < 0 || pad >= kNumPads)
         return;
     undoStack.push_back (snapshot (pad));
-    if (undoStack.size() > 32)
+    undoStack.back().group = group;
+    if (undoStack.size() > 128)   // abbastanza per qualche chop da 16 fette
         undoStack.erase (undoStack.begin());
     redoStack.clear();
 }
@@ -1096,12 +1098,21 @@ void RSU10AudioProcessor::undo()
         postMessage ("Niente da annullare");
         return;
     }
-    const auto s = undoStack.back();
-    undoStack.pop_back();
-    redoStack.push_back (snapshot (s.pad));
     engine.panic();
-    restore (s);
-    postMessage ("UNDO: " + padLabel (s.pad));
+    const int group = undoStack.back().group;
+    int restored = 0, firstPad = 0;
+    do
+    {
+        const auto s = undoStack.back();
+        undoStack.pop_back();
+        redoStack.push_back (snapshot (s.pad));
+        redoStack.back().group = group;
+        restore (s);
+        firstPad = s.pad;
+        ++restored;
+    }
+    while (group != 0 && ! undoStack.empty() && undoStack.back().group == group);
+    postMessage ("UNDO: " + (restored > 1 ? juce::String (restored) + " pad" : padLabel (firstPad)));
 }
 
 void RSU10AudioProcessor::redo()
@@ -1111,12 +1122,21 @@ void RSU10AudioProcessor::redo()
         postMessage ("Niente da ripetere");
         return;
     }
-    const auto s = redoStack.back();
-    redoStack.pop_back();
-    undoStack.push_back (snapshot (s.pad));
     engine.panic();
-    restore (s);
-    postMessage ("REDO: " + padLabel (s.pad));
+    const int group = redoStack.back().group;
+    int restored = 0, firstPad = 0;
+    do
+    {
+        const auto s = redoStack.back();
+        redoStack.pop_back();
+        undoStack.push_back (snapshot (s.pad));
+        undoStack.back().group = group;
+        restore (s);
+        firstPad = s.pad;
+        ++restored;
+    }
+    while (group != 0 && ! redoStack.empty() && redoStack.back().group == group);
+    postMessage ("REDO: " + (restored > 1 ? juce::String (restored) + " pad" : padLabel (firstPad)));
 }
 
 juce::AudioProcessorEditor* RSU10AudioProcessor::createEditor()
