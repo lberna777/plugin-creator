@@ -88,6 +88,9 @@ RSU10Editor::RSU10Editor (RSU10AudioProcessor& p)
     setupKey (keyFwd,  [this] { proc.runCommand (Cmd::Fwd); });
     setupKey (keyStop, [this] { proc.runCommand (Cmd::Stop); });
     setupKey (keyPlay, [this] { proc.runCommand (Cmd::Play); }, [this] { return proc.engine.previewPlaying.load(); });
+    keyTop.glyph = skin::Glyph::Top;   keyBwd.glyph = skin::Glyph::Bwd;   keyStop.glyph = skin::Glyph::Stop;
+    keyPlay.glyph = skin::Glyph::Play; keyFwd.glyph = skin::Glyph::Fwd;
+    keyLeft.glyph = skin::Glyph::Left; keyRight.glyph = skin::Glyph::Right;
 
     // I tasti della Mikro che servono il browser arrivano qui
     proc.editorCommand = [this] (Cmd c) { return editorCommand (c); };
@@ -302,31 +305,44 @@ void RSU10Editor::renderBackground()
     // Serigrafia rossa sotto lo schermo, come "SAMPLING UNIT SU10"
     auto silk = rect ("main/silk");
     skin::drawSilk (g, "RESTOMOD SAMPLING UNIT", silk.removeFromLeft (silk.getWidth() * 0.62f), juce::Justification::centredRight,
-                    H * 0.020f, skin::col::silkRed);
+                    H * 0.022f, skin::col::silkRed, true);
     silk.removeFromLeft (silk.getWidth() * 0.04f);
-    g.setColour (skin::col::silkRed);
-    g.setFont (juce::Font (juce::FontOptions (H * 0.036f, juce::Font::bold | juce::Font::italic)).withHorizontalScale (1.25f));
-    g.drawText ("RSU-10", silk, juce::Justification::centredLeft);
+    {
+        // logo inclinato come "SU10" sotto lo schermo: il corsivo è il grassetto inclinato
+        juce::Graphics::ScopedSaveState ss (g);
+        g.addTransform (juce::AffineTransform::shear (-0.18f, 0.0f).translated (silk.getCentreY() * 0.18f, 0.0f));
+        skin::drawSilk (g, "RSU-10", silk, juce::Justification::centredLeft, H * 0.040f, skin::col::silkRed, true);
+    }
 
     // Targhetta in alluminio (anima nuova)
     auto badge = rect ("badge").reduced (H * 0.012f, H * 0.006f);
-    g.setFont (juce::Font (juce::FontOptions (H * 0.040f, juce::Font::bold)).withExtraKerningFactor (0.06f));
+    // logo inciso: ombra scura sotto, luce sopra
     auto logo = badge.removeFromLeft (badge.getWidth() * 0.56f);
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.drawFittedText ("RSU-10", logo.translated (0.0f, 1.0f).toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
-    g.setColour (juce::Colours::white.withAlpha (0.85f));
-    g.drawFittedText ("RSU-10", logo.toNearestInt(), juce::Justification::centredLeft, 1, 0.6f);
-    skin::drawSilk (g, juce::String ("RESTOMOD\nSAMPLING UNIT  v") + JucePlugin_VersionString, badge, juce::Justification::centredRight,
-                    H * 0.014f, juce::Colours::black.withAlpha (0.6f));
+    skin::drawSilk (g, "RSU-10", logo.translated (0.0f, 1.0f), juce::Justification::centredLeft, H * 0.05f, juce::Colours::black.withAlpha (0.55f), true);
+    skin::drawSilk (g, "RSU-10", logo, juce::Justification::centredLeft, H * 0.05f, juce::Colours::white.withAlpha (0.85f), true);
+    auto info = badge.withSizeKeepingCentre (badge.getWidth(), H * 0.036f);
+    skin::drawSilk (g, "RESTOMOD", info.removeFromTop (info.getHeight() * 0.5f), juce::Justification::bottomRight,
+                    H * 0.017f, juce::Colours::black.withAlpha (0.6f));
+    skin::drawSilk (g, juce::String ("SAMPLING UNIT  v") + JucePlugin_VersionString, info, juce::Justification::topRight,
+                    H * 0.017f, juce::Colours::black.withAlpha (0.6f));
 
-    // Etichette sopra i tasti (serigrafia bianca dell'SU10)
+    // Etichette sopra i tasti (serigrafia bianca dell'SU10): stessa altezza e stessa distanza dal tasto
+    // per tutti, centrate sul tasto; sul trasporto il simbolo sta tra la scritta e il tasto
+    const float labelH = H * 0.0205f, labelGap = H * 0.003f, glyphH = H * 0.0105f;
     for (auto& l : labelled)
         if (l.above)
         {
             const auto kb = l.key->getBounds().toFloat();
-            const float lh = H * 0.0145f;
-            auto lr = juce::Rectangle<float> (kb.getX() - 6.0f, kb.getY() - lh * 1.3f, kb.getWidth() + 12.0f, lh * 1.2f);
-            skin::drawSilk (g, l.key->getButtonText(), lr, juce::Justification::centred, lh);
+            float bottom = kb.getY() - labelGap;
+            // REC non ha simbolo ma sta in riga col trasporto: scritta alla stessa altezza delle altre
+            if (l.key->glyph != skin::Glyph::None || l.key->style == skin::KeyStyle::Rec)
+            {
+                skin::drawGlyph (g, l.key->glyph, { kb.getX(), bottom - glyphH, kb.getWidth(), glyphH }, skin::col::silk);
+                bottom -= glyphH + labelGap * 1.6f;
+            }
+            const float spill = kb.getWidth() * 0.2f;   // le parole lunghe possono sporgere un poco
+            skin::drawSilk (g, l.key->getButtonText(), { kb.getX() - spill, bottom - labelH, kb.getWidth() + spill * 2.0f, labelH },
+                            juce::Justification::centredBottom, labelH);
         }
 
 }
@@ -362,22 +378,13 @@ void RSU10Editor::paintOverChildren (juce::Graphics& g)
         g.restoreState();
     }
 
-    // LED moderni accanto alle etichette dei tasti che hanno uno stato
-    for (auto& l : labelled)
-        if (l.key->led != nullptr && l.above)
-        {
-            const auto kb = l.key->getBounds().toFloat();
-            const float rad = juce::jmax (2.0f, getHeight() * 0.0035f);
-            const auto c = l.key->style == skin::KeyStyle::Rec ? skin::col::recRed : skin::col::amber;
-            if (l.key->style == skin::KeyStyle::Rec)
-            {
-                skin::drawLed (g, { kb.getRight() + rad * 2.5f, kb.getY() + rad }, rad, l.key->led(), c);
-                continue;
-            }
-            const float lh = getHeight() * 0.0145f;
-            const float textW = juce::GlyphArrangement::getStringWidth (skin::silkFont (lh), l.key->getButtonText());
-            skin::drawLed (g, { kb.getCentreX() - textW * 0.5f - rad * 3.0f, kb.getY() - lh * 0.75f }, rad, l.key->led(), c);
-        }
+    // REC: LED rosso accanto al tasto tondo (gli altri tasti hanno il LED nel tappo)
+    if (keyRec.led != nullptr)
+    {
+        const auto kb = keyRec.getBounds().toFloat();
+        const float rad = juce::jmax (2.0f, getHeight() * 0.0035f);
+        skin::drawLed (g, { kb.getRight() + rad * 2.5f, kb.getY() + rad }, rad, keyRec.led(), skin::col::recRed);
+    }
 }
 
 void RSU10Editor::resized()

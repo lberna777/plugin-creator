@@ -25,19 +25,33 @@ public:
     {
         const auto r = getLocalBounds().toFloat().reduced (1.0f);
         skin::drawKey (g, r, style, down);
-        // ENTER, -1/+1 e frecce hanno la scritta sul tasto, come sull'SU10
+        const auto face = r.translated (0.0f, down ? 1.0f : 0.0f);
+        // ENTER, -1/+1 e frecce: scritta scura stampata sul tasto, come sull'SU10
         if (style == skin::KeyStyle::Enter || style == skin::KeyStyle::Tiny)
-            skin::drawSilk (g, getButtonText(), r.translated (0.0f, down ? 1.0f : 0.0f), juce::Justification::centred,
-                            r.getHeight() * 0.42f, juce::Colour (0xff2a2a2a));
-        // tasti in gomma delle pagine: scritta sul tasto, ambra quando la pagina è attiva
+        {
+            const juce::Colour ink (0xff34363b);
+            if (glyph != skin::Glyph::None)
+                skin::drawGlyph (g, glyph, face.withSizeKeepingCentre (face.getWidth(), face.getHeight() * 0.24f), ink);
+            else
+                skin::drawSilk (g, getButtonText(), face, juce::Justification::centred, face.getHeight() * 0.4f, ink);
+        }
+        // tasti in gomma delle pagine: nome in alto a sinistra come sui pad dell'SU10, LED in basso
         else if (labelOnKey)
-            skin::drawSilk (g, getButtonText(), r.reduced (r.getWidth() * 0.08f, 0.0f).translated (0.0f, down ? 1.0f : 0.0f),
-                            juce::Justification::centred, r.getHeight() * 0.2f,
-                            led != nullptr && led() ? skin::col::amber : skin::col::silk.withAlpha (0.75f));
+        {
+            const auto inner = face.reduced (face.getWidth() * 0.12f, face.getHeight() * 0.12f);
+            skin::drawSilk (g, getButtonText(), inner.withHeight (face.getHeight() * 0.22f), juce::Justification::topLeft,
+                            face.getHeight() * 0.2f, skin::col::silk.withAlpha (0.88f));
+            if (led != nullptr)
+                skin::drawKeyLed (g, face, led(), skin::col::amber, 0.8f);
+            return;
+        }
+        if (led != nullptr && style != skin::KeyStyle::Rec)
+            skin::drawKeyLed (g, face, led());
     }
     skin::KeyStyle style;
+    skin::Glyph glyph = skin::Glyph::None;   // simbolo: sul tasto (frecce) o serigrafato sopra (trasporto)
     bool labelOnKey = false;
-    std::function<bool()> led;   // LED moderno accanto all'etichetta (nullptr = nessuno)
+    std::function<bool()> led;   // LED nel tappo (nullptr = nessuno); REC lo ha accanto
 };
 
 // ---------------------------------------------------------------- manopola

@@ -42,11 +42,18 @@ void drawPad (juce::Graphics&, juce::Rectangle<float>, bool down);
 void drawPadRing (juce::Graphics&, juce::Rectangle<float> pad, juce::Colour, float intensity);
 void drawKnob (juce::Graphics&, juce::Rectangle<float>, float angleRadians);
 void drawKnobArc (juce::Graphics&, juce::Rectangle<float> knob, float from01, float to01, bool bipolar);
+// Serigrafia su una riga: il testo non viene mai schiacciato su due righe, al massimo si stringe un poco
 void drawSilk (juce::Graphics&, const juce::String&, juce::Rectangle<float>, juce::Justification, float height,
-               juce::Colour = col::silk);
+               juce::Colour = col::silk, bool bold = false);
 void drawLed (juce::Graphics&, juce::Point<float> centre, float radius, bool on, juce::Colour = col::amber);
+// LED nel tasto: una finestrella in alto sul tappo, così l'etichetta sopra resta centrata
+void drawKeyLed (juce::Graphics&, juce::Rectangle<float> key, bool on, juce::Colour = col::amber, float yFrac = 0.2f);
 
-juce::Font silkFont (float height);
+// Simboli serigrafati del trasporto, come sull'SU10 (|<  <<  []  >  >>)
+enum class Glyph { None, Top, Bwd, Stop, Play, Fwd, Left, Right };
+void drawGlyph (juce::Graphics&, Glyph, juce::Rectangle<float>, juce::Colour);
+
+juce::Font silkFont (float height, bool bold = false);
 juce::Font screenFont (float height, bool bold = false);
 
 inline constexpr float kKnobStart = juce::MathConstants<float>::pi * 1.25f;   // -135°

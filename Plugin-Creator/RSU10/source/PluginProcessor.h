@@ -27,7 +27,7 @@ enum class Cmd
 {
     Play, Rec, Top, Stop, Bwd, Fwd, Enter, Exit, Bank, PrevPad, NextPad, NextPage,
     Scratch, Rev, NextRibbonMode, Hold, NextPadMode, FixedVel, RepeatRate,
-    Undo, Redo, SampleMinus, SamplePlus, ClearSelected, CopyPad, PastePad, ActionEnd
+    Undo, Redo, SampleMinus, SamplePlus, ClearSelected, CopyPad, PastePad, ActionEnd, Chop
 };
 
 class RSU10AudioProcessor final : public juce::AudioProcessor, private juce::Timer
@@ -124,6 +124,12 @@ public:
     static constexpr const char* kRepeatRateNames[kRepeatRates] { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
     static constexpr double kRepeatBeats[kRepeatRates] { 1.0, 0.5, 1.0 / 3.0, 0.25, 1.0 / 6.0, 0.125 };
 
+    // CHOP: il campione del pad diviso in fette sui pad del suo banco (una fetta = un pad).
+    // Ritorna il numero di fette. Transienti: tagli sui colpi; Equal: 16 parti uguali.
+    enum class ChopMode { Transients, Equal };
+    int chopPad (int pad, ChopMode mode);
+    static std::vector<double> findSlices (const juce::AudioBuffer<float>& audio, double rate, int from, int to, int maxSlices);
+
     // UNDO / REDO delle modifiche ai pad (cancella, copia, carica, registra)
     void pushUndo (int pad);
     void undo();
@@ -156,6 +162,8 @@ private:
     PadSnapshot snapshot (int pad) const;
     void restore (const PadSnapshot&);
     std::vector<PadSnapshot> undoStack, redoStack;
+    struct ChopMemory { rsu::Sample::Ptr sample; int pad = -1; float start = 0, end = 1; double at = -1.0e9; ChopMode mode = ChopMode::Transients; };
+    ChopMemory lastChop;   // ripremendo CHOP subito sullo stesso campione si passa ai tagli uguali
     int clipboardPad = -1;
 
     std::atomic<int> heldAction { 0 };

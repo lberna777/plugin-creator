@@ -75,7 +75,7 @@ void Knob::paint (juce::Graphics& g)
 
     // Serigrafia sotto la manopola: il nome; girandola o passandoci sopra, il valore
     auto label = getLocalBounds().toFloat().withTop (area.getBottom() + area.getHeight() * 0.24f);
-    const float h = juce::jmin (label.getHeight() * 0.62f, getWidth() * 0.15f);
+    const float h = juce::jmin (label.getHeight() * 0.75f, getWidth() * 0.19f);
     if (dragging || hovering)
         skin::drawSilk (g, formatValue (PP (pp), proc.pads.get (proc.selectedPad, PP (pp))), label,
                         juce::Justification::centredTop, h, skin::col::amber);
@@ -171,17 +171,16 @@ void PadView::paint (juce::Graphics& g)
 
     skin::drawPad (g, area, pressed);
 
-    // Serigrafia sul pad come l'SU10: nome in alto a sinistra, numero in basso a destra
-    const auto inner = area.reduced (area.getWidth() * 0.1f);
+    // Serigrafia sul pad come l'SU10: nome in alto a sinistra, numero grande in basso a destra
+    const auto inner = area.reduced (area.getWidth() * 0.11f, area.getHeight() * 0.1f);
     juce::String name = hasSample ? proc.samples.get (pad, 0)->name().toUpperCase() : juce::String ("—");
     const int layers = proc.samples.layerCount (pad);
     if (layers > 1)
         name << "  x" << layers;
-    // serigrafia sulla gomma: piccola e un po' consumata, non un'etichetta stampata sopra
-    skin::drawSilk (g, name, inner.withHeight (inner.getHeight() * 0.42f), juce::Justification::topLeft,
-                    juce::jmax (7.0f, area.getHeight() * 0.095f), hasSample ? skin::col::silk.withAlpha (0.62f) : skin::col::dim.withAlpha (0.5f));
+    skin::drawSilk (g, name, inner.withHeight (area.getHeight() * 0.17f), juce::Justification::topLeft,
+                    area.getHeight() * 0.15f, hasSample ? skin::col::silk.withAlpha (0.86f) : skin::col::dim.withAlpha (0.6f));
     skin::drawSilk (g, juce::String (pad % kPadsPerBank + 1), inner.withTrimmedTop (inner.getHeight() * 0.5f),
-                    juce::Justification::bottomRight, area.getHeight() * 0.17f, skin::col::silk.withAlpha (0.55f));
+                    juce::Justification::bottomRight, area.getHeight() * 0.3f, skin::col::silk.withAlpha (0.8f), true);
     // uscita separata nel mixer di FL
     if (const int o = proc.pads.getInt (pad, PP::Output); o > 0)
         skin::drawSilk (g, "OUT " + juce::String (o + 1), inner.withTrimmedTop (inner.getHeight() * 0.36f).withTrimmedBottom (inner.getHeight() * 0.36f),

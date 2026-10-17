@@ -657,6 +657,7 @@ bool RSU10AudioProcessor::controllerButton (int cc, int value)
                 case 0:  postCommand (Cmd::Undo); break;
                 case 1:  postCommand (Cmd::Redo); break;
                 case 8:  postCommand (Cmd::ClearSelected); break;
+                case 9:  postCommand (Cmd::Chop); break;   // SHIFT + pad 10
                 case 10: postCommand (Cmd::CopyPad); break;
                 case 11: postCommand (Cmd::PastePad); break;
                 default: break;
@@ -926,9 +927,136 @@ void RSU10AudioProcessor::runCommand (Cmd c)
             }
             break;
         case Cmd::ActionEnd:   duplicateSource = -1; break;
+        case Cmd::Chop:
+        {
+            // ripremuto entro 4 s sul campione appena tagliato: tagli uguali; poi di nuovo transienti
+            const double now = juce::Time::getMillisecondCounterHiRes();
+            const bool again = lastChop.sample != nullptr && now - lastChop.at < 4000.0
+                               && sel / kPadsPerBank == lastChop.pad / kPadsPerBank;
+            const auto mode = again && lastChop.mode == ChopMode::Transients ? ChopMode::Equal : ChopMode::Transients;
+            chopPad (again ? lastChop.pad : sel, mode);
+            break;
+        }
         case Cmd::Bwd: case Cmd::Fwd: case Cmd::Enter:
             break;   // servono il browser dell'editor
     }
+}
+
+// ---------------------------------------------------------------- CHOP
+
+std::vector<double> RSU10AudioProcessor::findSlices (const juce::AudioBuffer<float>& audio, double rate,
+                                                     int from, int to, int maxSlices)
+{
+    // Inviluppo a finestre da 5 ms; un colpo = salto d'energia sopra la media recente, abbastanza
+    // forte rispetto al picco e ad almeno 60 ms dal precedente. Si tengono i colpi più forti.
+    const int hop = juce::jmax (16, int (rate * 0.005));
+    const int frames = (to - from) / hop;
+    std::vector<double> starts { double (from) };
+    if (frames < 4)
+        return starts;
+
+    std::vector<float> env (size_t (frames), 0.0f);
+    float peak = 0.0f;
+    for (int f = 0; f < frames; ++f)
+    {
+        float e = 0.0f;
+        for (int ch = 0; ch < audio.getNumChannels(); ++ch)
+        {
+            const float* x = audio.getReadPointer (ch, from + f * hop);
+            for (int i = 0; i < hop; ++i)
+                e += x[i] * x[i];
+        }
+        env[size_t (f)] = std::sqrt (e / float (hop * juce::jmax (1, audio.getNumChannels())));
+        peak = juce::jmax (peak, env[size_t (f)]);
+    }
+    if (peak <= 1.0e-6f)
+        return starts;
+
+    struct Onset { int frame; float strength; };
+    std::vector<Onset> onsets;
+    const int minGap = juce::jmax (1, int (0.06 * rate / hop));
+    float recent = env[0];
+    int last = 0;
+    for (int f = 1; f < frames; ++f)
+    {
+        const float rise = env[size_t (f)] - recent;
+        if (rise > 0.12f * peak && env[size_t (f)] > 1.6f * recent && f - last >= minGap)
+        {
+            onsets.push_back ({ f, rise });
+            last = f;
+        }
+        recent = recent * 0.8f + env[size_t (f)] * 0.2f;
+    }
+    // i più forti, poi in ordine di tempo (il primo pezzo parte sempre dall'inizio)
+    std::sort (onsets.begin(), onsets.end(), [] (const Onset& a, const Onset& b) { return a.strength > b.strength; });
+    if ((int) onsets.size() > maxSlices - 1)
+        onsets.resize (size_t (maxSlices - 1));
+    for (const auto& o : onsets)
+        if (o.frame * hop > hop * minGap)   // non a ridosso dell'inizio
+            starts.push_back (double (from + o.frame * hop));
+    std::sort (starts.begin(), starts.end());
+    return starts;
+}
+
+int RSU10AudioProcessor::chopPad (int pad, ChopMode mode)
+{
+    if (pad < 0 || pad >= kNumPads)
+        return 0;
+    // Se si richiama il chop appena fatto, si riparte dal campione e dalla regione originali
+    const bool redo = lastChop.sample != nullptr && lastChop.pad == pad && samples.get (pad, 0) == lastChop.sample.get();
+    Sample::Ptr s = redo ? lastChop.sample : Sample::Ptr (samples.get (pad, 0));
+    if (s == nullptr || s->length() < 1000)
+    {
+        postMessage ("CHOP: il pad " + padLabel (pad) + " non ha un campione da tagliare");
+        return 0;
+    }
+    const float regionStart = redo ? lastChop.start : pads.get (pad, PP::Start);
+    const float regionEnd = redo ? lastChop.end : pads.get (pad, PP::End);
+    const int len = s->length();
+    const int a = juce::jlimit (0, len - 1, int (regionStart * len)), b = juce::jlimit (a + 1, len, int (regionEnd * len));
+
+    std::vector<double> starts;
+    if (mode == ChopMode::Transients)
+        starts = findSlices (s->audio(), s->rate(), a, b, kPadsPerBank);
+    if (starts.size() < 2)   // niente colpi chiari (pad, voce...): parti uguali
+    {
+        mode = ChopMode::Equal;
+        starts.clear();
+        for (int i = 0; i < kPadsPerBank; ++i)
+            starts.push_back (a + (b - a) * double (i) / kPadsPerBank);
+    }
+
+    // Le fette vanno sui pad del banco, dal primo: ognuna eredita il suono del pad di partenza
+    const int first = (pad / kPadsPerBank) * kPadsPerBank;
+    std::array<float, kNumPP> base {};
+    for (int i = 0; i < kNumPP; ++i)
+        base[size_t (i)] = pads.get (pad, PP (i));
+    engine.panic();
+    const int n = (int) starts.size();
+    for (int i = 0; i < n; ++i)
+    {
+        const int target = first + i;
+        pushUndo (target);
+        samples.set (target, 0, s);
+        for (int l = 1; l < kMaxLayers; ++l)
+            samples.set (target, l, nullptr);
+        for (int k = 0; k < kNumPP; ++k)
+            pads.set (target, PP (k), base[size_t (k)]);
+        const double end = i + 1 < n ? starts[size_t (i + 1)] : double (b);
+        pads.set (target, PP::Start, float (starts[size_t (i)] / len));
+        pads.set (target, PP::End, float (end / len));
+        pads.set (target, PP::PlayMode, float (PlayMode::OneShot));
+        pads.set (target, PP::Reverse, 0.0f);
+        pads.set (target, PP::Stretch, float (Stretch::Off));
+        pads.set (target, PP::FadeIn, 1.0f);    // niente click ai tagli
+        pads.set (target, PP::FadeOut, 6.0f);
+    }
+    lastChop = { s, first, regionStart, regionEnd, juce::Time::getMillisecondCounterHiRes(), mode };
+    selectedPad = first;
+    postMessage ("CHOP " + juce::String (mode == ChopMode::Transients ? "sui colpi" : "in parti uguali") + ": "
+                 + juce::String (n) + " fette su " + padLabel (first) + "-" + padLabel (first + n - 1)
+                 + (mode == ChopMode::Transients ? "  (di nuovo SHIFT+pad 10 = parti uguali)" : ""));
+    return n;
 }
 
 RSU10AudioProcessor::PadSnapshot RSU10AudioProcessor::snapshot (int pad) const

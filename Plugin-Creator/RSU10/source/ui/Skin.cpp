@@ -2,6 +2,18 @@
 
 namespace skin
 {
+namespace
+{
+const void* resource (const juce::String& fileName, int& size)
+{
+    for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
+        if (fileName == BinaryData::originalFilenames[i])
+            return BinaryData::getNamedResource (BinaryData::namedResourceList[i], size);
+    size = 0;
+    return nullptr;
+}
+} // namespace
+
 juce::Image asset (const char* fileName)
 {
     static std::map<juce::String, juce::Image> cache;
@@ -10,14 +22,9 @@ juce::Image asset (const char* fileName)
         return it->second;
 
     juce::Image img;
-    for (int i = 0; i < BinaryData::namedResourceListSize; ++i)
-        if (key == BinaryData::originalFilenames[i])
-        {
-            int size = 0;
-            if (auto* data = BinaryData::getNamedResource (BinaryData::namedResourceList[i], size))
-                img = juce::ImageCache::getFromMemory (data, size);
-            break;
-        }
+    int size = 0;
+    if (auto* data = resource (key, size))
+        img = juce::ImageCache::getFromMemory (data, size);
     cache[key] = img;
     return img;
 }
@@ -77,9 +84,28 @@ void drawSliced (juce::Graphics& g, const juce::Image& img, juce::Rectangle<floa
 }
 } // namespace
 
-juce::Font silkFont (float h)
+juce::Font silkFont (float h, bool bold)
 {
-    return juce::Font (juce::FontOptions (h, juce::Font::bold)).withExtraKerningFactor (0.04f);
+    // Serigrafia: un condensed vero, incluso nel plugin. RSU10_SILK sceglie la famiglia per l'anteprima
+    // (barlow / archivo / plex); dopo la scelta resta una sola famiglia.
+    static const juce::String family = []
+    {
+        const auto env = juce::SystemStats::getEnvironmentVariable ("RSU10_SILK", "barlow");
+        return env == "archivo" ? juce::String ("ArchivoNarrow")
+             : env == "plex"    ? juce::String ("IBMPlexSansCondensed")
+                                : juce::String ("BarlowSemiCondensed");
+    }();
+    static const auto load = [] (const char* weight) -> juce::Typeface::Ptr
+    {
+        int n = 0;
+        auto* d = resource (family + "-" + weight + ".ttf", n);
+        return d != nullptr ? juce::Typeface::createSystemTypefaceFor (d, (size_t) n) : nullptr;
+    };
+    static const juce::Typeface::Ptr semi = load ("SemiBold"), heavy = load ("Bold");
+    const auto tf = bold ? heavy : semi;
+    if (tf == nullptr)
+        return juce::Font (juce::FontOptions (h, juce::Font::bold));
+    return juce::Font (juce::FontOptions (tf).withHeight (h)).withExtraKerningFactor (bold ? 0.02f : 0.06f);
 }
 
 juce::Font screenFont (float h, bool bold)
@@ -283,11 +309,65 @@ void drawKnobArc (juce::Graphics& g, juce::Rectangle<float> knob, float from01, 
     g.strokePath (arc, juce::PathStrokeType (2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
-void drawSilk (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> r, juce::Justification j, float h, juce::Colour c)
+void drawSilk (juce::Graphics& g, const juce::String& text, juce::Rectangle<float> r, juce::Justification j, float h, juce::Colour c, bool bold)
 {
-    g.setFont (silkFont (h));
+    juce::GlyphArrangement ga;
+    ga.addFittedText (silkFont (h, bold), text, r.getX(), r.getY(), r.getWidth(), r.getHeight(), j, 1, 0.85f);
     g.setColour (c);
-    g.drawFittedText (text, r.toNearestInt(), j, 2, 0.8f);
+    ga.draw (g);
+}
+
+void drawKeyLed (juce::Graphics& g, juce::Rectangle<float> key, bool on, juce::Colour c, float yFrac)
+{
+    const auto led = juce::Rectangle<float> (key.getWidth() * 0.34f, juce::jmax (2.5f, key.getHeight() * 0.075f))
+                         .withCentre ({ key.getCentreX(), key.getY() + key.getHeight() * yFrac });
+    const float rr = led.getHeight() * 0.5f;
+    if (on)
+    {
+        g.setColour (c.withAlpha (0.28f));
+        g.fillRoundedRectangle (led.expanded (rr * 1.6f), rr * 2.6f);
+        g.setColour (c);
+        g.fillRoundedRectangle (led, rr);
+        g.setColour (juce::Colours::white.withAlpha (0.45f));
+        g.fillRoundedRectangle (led.reduced (led.getWidth() * 0.2f, led.getHeight() * 0.3f), rr * 0.4f);
+        return;
+    }
+    // spento: una finestrella fumé incassata nel tappo
+    g.setColour (juce::Colours::black.withAlpha (0.42f));
+    g.fillRoundedRectangle (led, rr);
+    g.setColour (juce::Colours::white.withAlpha (0.18f));
+    g.drawLine (led.getX() + rr, led.getBottom() + 0.5f, led.getRight() - rr, led.getBottom() + 0.5f, 0.8f);
+}
+
+void drawGlyph (juce::Graphics& g, Glyph glyph, juce::Rectangle<float> r, juce::Colour c)
+{
+    // tutto in un quadrato alto quanto r, centrato
+    const float s = r.getHeight();
+    const auto b = juce::Rectangle<float> (s, s).withCentre (r.getCentre());
+    auto tri = [] (juce::Path& p, float x0, float x1, float y0, float y1, bool right)
+    {
+        const float ym = (y0 + y1) * 0.5f;
+        if (right) p.addTriangle (x0, y0, x1, ym, x0, y1);
+        else       p.addTriangle (x1, y0, x0, ym, x1, y1);
+    };
+    juce::Path p;
+    const float y0 = b.getY(), y1 = b.getBottom(), cx = b.getCentreX();
+    switch (glyph)
+    {
+        case Glyph::None: return;
+        case Glyph::Stop:  p.addRectangle (b.reduced (s * 0.08f)); break;
+        case Glyph::Play:  tri (p, cx - s * 0.38f, cx + s * 0.42f, y0, y1, true); break;
+        case Glyph::Left:  tri (p, cx - s * 0.38f, cx + s * 0.38f, y0, y1, false); break;
+        case Glyph::Right: tri (p, cx - s * 0.38f, cx + s * 0.38f, y0, y1, true); break;
+        case Glyph::Fwd:   tri (p, cx - s * 0.75f, cx, y0, y1, true); tri (p, cx, cx + s * 0.75f, y0, y1, true); break;
+        case Glyph::Bwd:   tri (p, cx - s * 0.75f, cx, y0, y1, false); tri (p, cx, cx + s * 0.75f, y0, y1, false); break;
+        case Glyph::Top:
+            p.addRectangle (cx - s * 0.5f, y0, s * 0.16f, s);
+            tri (p, cx - s * 0.3f, cx + s * 0.5f, y0, y1, false);
+            break;
+    }
+    g.setColour (c);
+    g.fillPath (p);
 }
 
 void drawLed (juce::Graphics& g, juce::Point<float> p, float radius, bool on, juce::Colour c)

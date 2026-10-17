@@ -45,7 +45,9 @@ juce_generate_juce_header(RSU10)
 
 # Asset FINALI (generati da ui/assets.manifest.json; i sorgenti di Gemini in ui/src NON vanno qui) + layout
 file(GLOB RSU10_ASSETS CONFIGURE_DEPENDS source/assets/*.png source/assets/*.jpg)
-juce_add_binary_data(RSU10Assets SOURCES ${RSU10_ASSETS} source/assets/layout.json)
+# Font della serigrafia (OFL, licenze in source/fonts/OFL-*.txt): inclusi, così è uguale su Mac e Windows
+file(GLOB RSU10_FONTS CONFIGURE_DEPENDS source/fonts/*.ttf)
+juce_add_binary_data(RSU10Assets SOURCES ${RSU10_ASSETS} ${RSU10_FONTS} source/assets/layout.json)
 
 set(RSU10_CORE source/PadParams.cpp source/Sample.cpp source/Engine.cpp)
 target_include_directories(RSU10 PRIVATE ../shared)   # Scales.h, condiviso con Mikro Bridge
