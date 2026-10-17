@@ -117,6 +117,8 @@ private:
     int sentNote[mikro::kNumPads];        // nota mandata da ogni pad (per il NoteOff giusto)
     int sentChord[mikro::kNumPads][4];    // modo Accordi: le altre note dell'accordo (-1 = nessuna)
     mikro::Arpeggiator arp;
+    // Quanti pad tengono ogni nota (per canale): due accordi con note in comune non si spengono a vicenda
+    uint8_t noteRefs[16][128] {};
     int arpChannel = 1;
     int knobValues[mikro::kNumKnobFx] {};
     bool arpWasActive = false;

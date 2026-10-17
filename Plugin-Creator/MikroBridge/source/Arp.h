@@ -78,9 +78,12 @@ public:
         ++heldCount;
         for (int i = 0; i < count; ++i)
             if (notes[size_t (i)].note == note)
+            {
+                ++notes[size_t (i)].holders;   // la stessa nota da un altro pad (accordi vicini)
                 return;
+            }
         if (count < kMaxNotes)
-            notes[size_t (count++)] = { note, velocity, order++ };
+            notes[size_t (count++)] = { note, velocity, order++, 1 };
     }
 
     void release (int note, bool latch) noexcept
@@ -94,6 +97,8 @@ public:
         for (int i = 0; i < count; ++i)
             if (notes[size_t (i)].note == note)
             {
+                if (--notes[size_t (i)].holders > 0)   // un altro pad la tiene ancora
+                    break;
                 for (int j = i; j < count - 1; ++j)
                     notes[size_t (j)] = notes[size_t (j + 1)];
                 --count;
@@ -152,7 +157,7 @@ public:
     int soundingNote() const noexcept { return sounding; }
 
 private:
-    struct Held { int note, velocity; uint32_t order; };
+    struct Held { int note, velocity; uint32_t order; int holders; };
     struct Step { int note, velocity; };
 
     Step nextNote (const ArpSettings& s) noexcept

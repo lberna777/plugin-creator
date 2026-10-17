@@ -401,6 +401,8 @@ void Bridge::releaseAllNotes()
     if (const int n = arp.soundingNote(); n >= 0)
         send (juce::MidiMessage::noteOff (arpChannel, n));
     arp.clear();
+    for (auto& ch : noteRefs)   // releaseAllNotes manda i noteOff diretti: i conteggi ripartono da zero
+        std::fill (std::begin (ch), std::end (ch), uint8_t (0));
     for (int p = 0; p < kNumPads; ++p)
     {
         if (sentNote[p] >= 0)
@@ -428,6 +430,10 @@ void Bridge::noteOn (int channel, int note, int velocity)
         arp.press (note, velocity);
         return;
     }
+    auto& refs = noteRefs[juce::jlimit (1, 16, channel) - 1][note & 127];
+    if (refs > 0)   // già suonata da un altro pad: si ripete il colpo senza staccare la nota
+        send (juce::MidiMessage::noteOff (channel, note));
+    refs = uint8_t (juce::jmin (255, refs + 1));
     send (juce::MidiMessage::noteOn (channel, note, (juce::uint8) velocity));
 }
 
@@ -438,6 +444,13 @@ void Bridge::noteOff (int channel, int note)
         arp.release (note, settings.arpLatch.load());
         return;
     }
+    auto& refs = noteRefs[juce::jlimit (1, 16, channel) - 1][note & 127];
+    if (refs > 1)   // un altro pad la tiene ancora: resta accesa
+    {
+        --refs;
+        return;
+    }
+    refs = 0;
     send (juce::MidiMessage::noteOff (channel, note));
 }
 

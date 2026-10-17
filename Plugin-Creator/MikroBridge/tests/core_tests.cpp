@@ -317,6 +317,15 @@ static void testArp()
         const auto ons = runArp (a, s, 500.0, 750.0);
         CHECK (! ons.empty() && ons.back() == 72 && std::find (ons.begin(), ons.end(), 60) == ons.end());
     }
+    {
+        Arpeggiator a;   // due accordi con una nota in comune: lasciarne uno non toglie la nota all'altro
+        s.pattern = ArpPattern::Up; s.latch = false;
+        a.press (60, 100); a.press (64, 100);   // pad 1
+        a.press (64, 100); a.press (67, 100);   // pad 2
+        a.release (60, false); a.release (64, false);   // lascio il pad 1
+        const auto ons = runArp (a, s, 0.0, 500.0);
+        CHECK ((ons == std::vector<int> { 64, 67, 64, 67 }));
+    }
     CHECK (kKnobFx[0].cc == kKnobFxDaw && kKnobFx[1].cc == 74);
 }
 
