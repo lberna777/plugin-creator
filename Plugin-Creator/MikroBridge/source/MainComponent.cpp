@@ -128,7 +128,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     legend.setColour (juce::Label::textColourId, Col::dim);
     legend.setJustificationType (juce::Justification::topLeft);
     legend.setText (juce::String ("Nel DAW scegli \"") + Bridge::kPortName + "\" come ingresso MIDI (e come uscita, se vuoi le luci).\n"
-                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala / accordi (pad 1-7 = gradi I-VII, 9-15 con la settima).  SHIFT + PAD MODE: armonia.  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
+                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala / accordi (pad 1-7 = gradi I-VII, 9-15 con la settima).  SHIFT + PAD MODE: armonia.  GROUP: effetto della manopola (premuta = reset).  SHIFT + GROUP: arpeggiatore.  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
                     "Tasti: CC 20-46 sul canale controlli (con SHIFT: CC 70-96).  SHIFT + pad 1-12: CC 102-113.  Encoder: CC 14 relativo (SHIFT: CC 15).",
                     juce::dontSendNotification);
     addAndMakeVisible (legend);
@@ -169,6 +169,34 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     addRow (threshL, threshold, "Soglia colpo");
     addRow (crosstalkL, crosstalk, "Anti-fantasma");
     addAndMakeVisible (harmony);
+
+    // ---- manopola e arpeggiatore
+    for (int i = 0; i < mikro::kNumKnobFx; ++i)
+        knob.addItem (mikro::kKnobFx[i].name, i + 1);
+    for (int i = 0; i < mikro::kNumArpPatterns; ++i)
+        arpPattern.addItem (mikro::kArpPatternNames[i], i + 1);
+    for (int i = 0; i < mikro::kNumArpRates; ++i)
+        arpRate.addItem (mikro::kArpRateNames[i], i + 1);
+    for (int o = 1; o <= 3; ++o)
+        arpOct.addItem (juce::String (o) + (o == 1 ? " ottava" : " ottave"), o);
+    for (auto* sl : { &arpGate, &arpBpm })
+    {
+        sl->setSliderStyle (juce::Slider::LinearHorizontal);
+        sl->setTextBoxStyle (juce::Slider::TextBoxRight, false, 60, 20);
+    }
+    arpGate.setRange (5.0, 98.0, 1.0);
+    arpGate.setTextValueSuffix (" %");
+    arpBpm.setRange (40.0, 240.0, 1.0);
+    arpBpm.setTextValueSuffix (" BPM");
+    arpBpm.setTooltip ("Tempo dell'arpeggiatore se FL non manda il clock MIDI alla porta Mikro MK2 Bridge");
+    addRow (knobL, knob, "Manopola (GROUP)");
+    addAndMakeVisible (arpOn);
+    addRow (arpPatternL, arpPattern, "Ordine");
+    addRow (arpRateL, arpRate, "Velocita'");
+    addRow (arpOctL, arpOct, "Estensione");
+    addRow (arpGateL, arpGate, "Durata nota");
+    addRow (arpBpmL, arpBpm, "Tempo senza clock");
+    addAndMakeVisible (arpLatch);
     addAndMakeVisible (aftertouch);
     addAndMakeVisible (flipped);
 
@@ -189,10 +217,18 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     threshold.onValueChange = [this] { bridge.settings.threshold = int (threshold.getValue()); save(); };
     crosstalk.onValueChange = [this] { bridge.settings.crosstalk = int (crosstalk.getValue()); save(); };
     harmony.onClick    = [this] { bridge.settings.harmony = harmony.getToggleState(); save(); };
+    knob.onChange       = [this] { bridge.settings.knobFx = knob.getSelectedId() - 1; save(); };
+    arpOn.onClick       = [this] { bridge.settings.arp = arpOn.getToggleState(); save(); };
+    arpPattern.onChange = [this] { bridge.settings.arpPattern = arpPattern.getSelectedId() - 1; save(); };
+    arpRate.onChange    = [this] { bridge.settings.arpRate = arpRate.getSelectedId() - 1; save(); };
+    arpOct.onChange     = [this] { bridge.settings.arpOctaves = arpOct.getSelectedId(); save(); };
+    arpGate.onValueChange = [this] { bridge.settings.arpGate = int (arpGate.getValue()); save(); };
+    arpBpm.onValueChange  = [this] { bridge.settings.arpBpm = int (arpBpm.getValue()); save(); };
+    arpLatch.onClick    = [this] { bridge.settings.arpLatch = arpLatch.getToggleState(); save(); };
     aftertouch.onClick = [this] { bridge.settings.aftertouch = aftertouch.getToggleState(); save(); };
     flipped.onClick    = [this] { bridge.settings.flippedPads = flipped.getToggleState(); save(); };
 
-    setSize (760, 790);
+    setSize (1180, 720);
     startTimerHz (30);
 }
 
@@ -230,6 +266,14 @@ void MainComponent::load()
     s.threshold   = props.getIntValue ("threshold", s.threshold);
     s.crosstalk   = juce::jlimit (0, 80, props.getIntValue ("crosstalk", s.crosstalk));
     s.harmony     = props.getBoolValue ("harmony", s.harmony);
+    s.knobFx      = juce::jlimit (0, mikro::kNumKnobFx - 1, props.getIntValue ("knobFx", s.knobFx));
+    s.arp         = props.getBoolValue ("arp", s.arp);
+    s.arpPattern  = juce::jlimit (0, mikro::kNumArpPatterns - 1, props.getIntValue ("arpPattern", s.arpPattern));
+    s.arpRate     = juce::jlimit (0, mikro::kNumArpRates - 1, props.getIntValue ("arpRate", s.arpRate));
+    s.arpOctaves  = juce::jlimit (1, 3, props.getIntValue ("arpOctaves", s.arpOctaves));
+    s.arpGate     = juce::jlimit (5, 98, props.getIntValue ("arpGate", s.arpGate));
+    s.arpBpm      = juce::jlimit (40, 240, props.getIntValue ("arpBpm", s.arpBpm));
+    s.arpLatch    = props.getBoolValue ("arpLatch", s.arpLatch);
     s.aftertouch  = props.getBoolValue ("aftertouch", s.aftertouch);
     s.flippedPads = props.getBoolValue ("flippedPads", s.flippedPads);
 
@@ -243,6 +287,14 @@ void MainComponent::load()
     threshold.setValue (s.threshold, juce::dontSendNotification);
     crosstalk.setValue (s.crosstalk, juce::dontSendNotification);
     harmony.setToggleState (s.harmony, juce::dontSendNotification);
+    knob.setSelectedId (s.knobFx + 1, juce::dontSendNotification);
+    arpOn.setToggleState (s.arp, juce::dontSendNotification);
+    arpPattern.setSelectedId (s.arpPattern + 1, juce::dontSendNotification);
+    arpRate.setSelectedId (s.arpRate + 1, juce::dontSendNotification);
+    arpOct.setSelectedId (s.arpOctaves, juce::dontSendNotification);
+    arpGate.setValue (s.arpGate, juce::dontSendNotification);
+    arpBpm.setValue (s.arpBpm, juce::dontSendNotification);
+    arpLatch.setToggleState (s.arpLatch, juce::dontSendNotification);
     aftertouch.setToggleState (s.aftertouch, juce::dontSendNotification);
     flipped.setToggleState (s.flippedPads, juce::dontSendNotification);
 }
@@ -261,6 +313,14 @@ void MainComponent::save()
     props.setValue ("threshold", s.threshold.load());
     props.setValue ("crosstalk", s.crosstalk.load());
     props.setValue ("harmony", s.harmony.load());
+    props.setValue ("knobFx", s.knobFx.load());
+    props.setValue ("arp", s.arp.load());
+    props.setValue ("arpPattern", s.arpPattern.load());
+    props.setValue ("arpRate", s.arpRate.load());
+    props.setValue ("arpOctaves", s.arpOctaves.load());
+    props.setValue ("arpGate", s.arpGate.load());
+    props.setValue ("arpBpm", s.arpBpm.load());
+    props.setValue ("arpLatch", s.arpLatch.load());
     props.setValue ("aftertouch", s.aftertouch.load());
     props.setValue ("flippedPads", s.flippedPads.load());
     props.saveIfNeeded();
@@ -278,6 +338,25 @@ void MainComponent::timerCallback()
         shownMode = m;
         mode.setSelectedId (m + 1, juce::dontSendNotification);
         base.setSelectedId (b + 1, juce::dontSendNotification);
+    }
+    // GROUP / SHIFT + GROUP / manopola sulla Mikro: la finestra insegue
+    if (const int k = bridge.settings.knobFx.load(); k != shownKnob && ! knob.isPopupActive())
+    {
+        if (shownKnob >= 0) save();
+        shownKnob = k;
+        knob.setSelectedId (k + 1, juce::dontSendNotification);
+    }
+    if (const bool a = bridge.settings.arp.load(); a != shownArp)
+    {
+        shownArp = a;
+        arpOn.setToggleState (a, juce::dontSendNotification);
+        save();
+    }
+    if (const int r = bridge.settings.arpRate.load(); r != shownArpRate && ! arpRate.isPopupActive())
+    {
+        if (shownArpRate >= 0) save();
+        shownArpRate = r;
+        arpRate.setSelectedId (r + 1, juce::dontSendNotification);
     }
     if (const bool h = bridge.settings.harmony.load(); h != shownHarmony)
     {
@@ -334,13 +413,30 @@ void MainComponent::resized()
     area.removeFromBottom (kGap);
 
     // Colonna sinistra: specchio del display (2:1, come il 128x64) sopra la griglia dei pad
-    const int side = area.getWidth() / 2;
+    const int side = juce::jmin (380, area.getWidth() / 3);
     auto left = area.removeFromLeft (side);
     display->setBounds (left.removeFromTop (side / 2));
     left.removeFromTop (kGap * 2);
     const int gridSide = juce::jmin (side, left.getHeight());
     grid->setBounds (left.removeFromTop (gridSide).withSizeKeepingCentre (gridSide, gridSide));
     area.removeFromLeft (kMargin + kGap);
+
+    // Colonna di destra: manopola e arpeggiatore
+    auto right = area.removeFromRight ((area.getWidth() - kMargin) / 2);
+    area.removeFromRight (kMargin);
+    {
+        auto rrow = [&right] { auto r = right.removeFromTop (kRowH); right.removeFromTop (kGap); return r; };
+        auto labelled = [&rrow] (juce::Label& l, juce::Component& c) { auto r = rrow(); l.setBounds (r.removeFromLeft (kLabelW)); c.setBounds (r); };
+        labelled (knobL, knob);
+        rrow();
+        arpOn.setBounds (rrow());
+        labelled (arpPatternL, arpPattern);
+        labelled (arpRateL, arpRate);
+        labelled (arpOctL, arpOct);
+        labelled (arpGateL, arpGate);
+        labelled (arpBpmL, arpBpm);
+        arpLatch.setBounds (rrow());
+    }
 
     auto row = [&area] { auto r = area.removeFromTop (kRowH); area.removeFromTop (kGap); return r; };
     juce::Label* labels[] { &modeL, &baseL, &rootL, &scaleL, &padChL, &ctrlChL, &curveL, &threshL, &crosstalkL };

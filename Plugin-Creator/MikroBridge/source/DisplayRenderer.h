@@ -4,6 +4,8 @@
 // Immagini preallocate: render() alloca solo il contesto grafico, e il ponte lo chiama solo a stato cambiato.
 #pragma once
 
+#include "Arp.h"
+
 #include "Display.h"
 #include "Scales.h"
 
@@ -21,6 +23,9 @@ struct DisplayState
     uint16_t held = 0;               // pad che suonano adesso
     bool aftertouch = false;
     bool harmony = false;            // tastiera: solo note che stanno bene insieme
+    bool arp = false;                // arpeggiatore acceso
+    int knobFx = 0, knobValue = 0;   // effetto della manopola e valore
+    bool knobShown = false;          // appena girata o cambiata: riquadro in primo piano
 
     bool inKey (int pc) const noexcept { return harmony ? scales::inConsonant (scale, root, pc) : scales::inScale (scale, root, pc); }
 
@@ -28,7 +33,8 @@ struct DisplayState
     {
         return mode == o.mode && lastNote == o.lastNote && lastVelocity == o.lastVelocity && lastPad == o.lastPad
             && root == o.root && scale == o.scale && channel == o.channel && curve == o.curve
-            && lowNote == o.lowNote && highNote == o.highNote && held == o.held && aftertouch == o.aftertouch && harmony == o.harmony;
+            && lowNote == o.lowNote && highNote == o.highNote && held == o.held && aftertouch == o.aftertouch && harmony == o.harmony
+            && arp == o.arp && knobFx == o.knobFx && knobValue == o.knobValue && knobShown == o.knobShown;
     }
     bool operator!= (const DisplayState& o) const noexcept { return ! (*this == o); }
 };
@@ -59,6 +65,8 @@ public:
             if (s.mode == 2)      drawChords (gi, gt, s);
             else if (s.mode == 1) drawKeys (gi, gt, s);
             else                  drawDrums (gi, gt, s);
+            if (s.knobShown)
+                drawKnob (gi, gt, s);
         }
         convert (out);
     }
@@ -212,18 +220,54 @@ private:
     void drawHeader (juce::Graphics& g, const DisplayState& s)
     {
         static const char* modes[] { "DRUMS", "KEYS", "CHORDS" };
-        text (g, kTitle, 0.0f, 10.0f, font (13.0f, true));
 
-        // Modo in negativo, a destra
-        const juce::String m (modes[juce::jlimit (0, 2, s.mode)]);
+        // Modo in negativo, a destra (con l'arpeggiatore acceso: "KEYS+ARP")
+        juce::String m (modes[juce::jlimit (0, 2, s.mode)]);
+        if (s.arp && s.mode != 0)
+            m << "+ARP";
         const int w = pixelWidth (m) + 6;
         g.setColour (juce::Colours::white);
         g.fillRoundedRectangle (float (kDisplayW - w), 1.0f, float (w), 9.0f, 1.5f);
         pixelText (g, m, kDisplayW - w + 3, 3, juce::Colours::black);
 
+        // Titolo nello spazio che resta
+        g.setColour (juce::Colours::white);
+        auto titleFont = font (13.0f, true);
+        for (float sz = 13.0f; sz > 8.0f && width (titleFont, kTitle) > float (kDisplayW - w - 3); sz -= 1.0f)
+            titleFont = font (sz - 1.0f, true);
+        text (g, kTitle, 0.0f, 10.0f, titleFont);
+
         // Riga del fondo, tratteggiata
         for (int x = 0; x < kDisplayW; x += 2)
             g.fillRect (x, 52, 1, 1);
+    }
+
+    // Manopola: riquadro sopra la schermata con il nome dell'effetto e il valore (barra sfumata)
+    void drawKnob (juce::Graphics& gi, juce::Graphics& gt, const DisplayState& s)
+    {
+        const auto& k = mikro::kKnobFx[juce::jlimit (0, mikro::kNumKnobFx - 1, s.knobFx)];
+        const juce::Rectangle<int> box (6, 14, kDisplayW - 12, 36);
+        gi.setColour (juce::Colours::black);
+        gi.fillRect (box);
+        gt.setColour (juce::Colours::black);
+        gt.fillRect (box);
+        gi.setColour (juce::Colours::white);
+        gi.drawRect (box, 1);
+        pixelText (gi, juce::String ("MANOPOLA: ") + k.shortName, box.getX() + 4, box.getY() + 4);
+        juce::String value;
+        if (k.cc == mikro::kKnobFxDaw)
+            value = "SCORRE IN FL";
+        else if (k.cc == mikro::kKnobFxArpRate)
+            value = mikro::kArpRateNames[juce::jlimit (0, mikro::kNumArpRates - 1, s.knobValue)];
+        else if (k.cc == mikro::kKnobFxPitchBend || k.cc == 10)
+            value = s.knobValue == 64 ? juce::String ("CENTRO") : juce::String (s.knobValue - 64);
+        else
+            value = juce::String (s.knobValue);
+        pixelText (gi, value, box.getRight() - 4 - pixelWidth (value), box.getY() + 4);
+        if (k.cc >= 0 || k.cc == mikro::kKnobFxPitchBend)
+            velocityBar (gi, gt, { box.getX() + 4, box.getY() + 16, box.getWidth() - 8, 12 }, s.knobValue);
+        else
+            pixelText (gi, "GROUP = ALTRO EFFETTO", box.getX() + 4, box.getY() + 20);
     }
 
     void footer (juce::Graphics& g, const juce::String& t)

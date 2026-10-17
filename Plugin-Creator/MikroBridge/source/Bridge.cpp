@@ -27,6 +27,8 @@ Bridge::Bridge() : juce::Thread ("Mikro USB")
     std::fill (std::begin (sentNote), std::end (sentNote), -1);
     for (auto& c : sentChord)
         std::fill (std::begin (c), std::end (c), -1);
+    for (int i = 0; i < kNumKnobFx; ++i)
+        knobValues[i] = kKnobFx[i].initial;
     std::fill (std::begin (sentChannel), std::end (sentChannel), 1);
 
    #if ! JUCE_WINDOWS
@@ -163,6 +165,7 @@ void Bridge::run()
 
         if (dev != nullptr)
         {
+            tickArp (juce::Time::getMillisecondCounterHiRes());
             updateDisplay();
             refreshOutputs (false);
         }
@@ -223,6 +226,30 @@ void Bridge::handleButtons (const ButtonState& now)
             if (was == is)
                 continue;
 
+            if (id == Group)   // GROUP: effetto della manopola; SHIFT + GROUP: arpeggiatore
+            {
+                if (is)
+                {
+                    if (shift)
+                    {
+                        releaseAllNotes();
+                        settings.arp = ! settings.arp.load();
+                    }
+                    else
+                        settings.knobFx = (settings.knobFx.load() + 1) % kNumKnobFx;
+                    const int fx = juce::jlimit (0, kNumKnobFx - 1, settings.knobFx.load());
+                    mirror.knobValue = kKnobFx[fx].cc == kKnobFxArpRate ? settings.arpRate.load() : knobValues[fx];
+                    mirror.knobTouchedMs = juce::Time::getMillisecondCounterHiRes();
+                }
+                continue;
+            }
+            if (id == EncoderPush && settings.knobFx.load() != 0)   // manopola premuta: valore iniziale
+            {
+                if (is)
+                    resetKnob();
+                continue;
+            }
+
             if (id == PadMode)
             {
                 if (is)
@@ -241,7 +268,12 @@ void Bridge::handleButtons (const ButtonState& now)
         }
 
         if (const int d = encoderDelta (buttons.encoder, now.encoder); d != 0)
-            send (juce::MidiMessage::controllerEvent (ch, shift ? kShiftEncoderCc : kEncoderCc, juce::jlimit (1, 127, 64 + d)));
+        {
+            if (settings.knobFx.load() != 0)
+                turnKnob (d, shift);   // SHIFT = regolazione fine
+            else
+                send (juce::MidiMessage::controllerEvent (ch, shift ? kShiftEncoderCc : kEncoderCc, juce::jlimit (1, 127, 64 + d)));
+        }
     }
 
     buttons = now;
@@ -278,7 +310,7 @@ void Bridge::handlePad (int pad, int pressure, int othersMax, double nowMs)
                 continue;
             sentNote[pad] = note;
             sentChannel[pad] = juce::jlimit (1, 16, settings.padChannel.load());
-            send (juce::MidiMessage::noteOn (sentChannel[pad], note, e.value));
+            noteOn (sentChannel[pad], note, e.value);
             if (chordMode())   // le altre note dell'accordo, stessa velocity
             {
                 const auto chord = scales::chordForPad (settings.scale.load(), pad);
@@ -287,7 +319,7 @@ void Bridge::handlePad (int pad, int pressure, int othersMax, double nowMs)
                     const int n = note + chord.notes[c] - chord.notes[0];
                     sentChord[pad][c] = (n >= 0 && n <= 127) ? n : -1;
                     if (sentChord[pad][c] >= 0)
-                        send (juce::MidiMessage::noteOn (sentChannel[pad], n, e.value));
+                        noteOn (sentChannel[pad], n, e.value);
                 }
             }
             mirror.lastPad = pad;
@@ -305,11 +337,11 @@ void Bridge::handlePad (int pad, int pressure, int othersMax, double nowMs)
                 continue;
             }
             if (sentNote[pad] >= 0)
-                send (juce::MidiMessage::noteOff (sentChannel[pad], sentNote[pad]));
+                noteOff (sentChannel[pad], sentNote[pad]);
             sentNote[pad] = -1;
             for (auto& n : sentChord[pad])
                 if (const int old = std::exchange (n, -1); old >= 0)
-                    send (juce::MidiMessage::noteOff (sentChannel[pad], old));
+                    noteOff (sentChannel[pad], old);
             mirror.velocity[pad] = 0;
         }
         else if (e.type == PadEvent::Pressure && sentNote[pad] >= 0)
@@ -348,6 +380,9 @@ void Bridge::localPadFunction (int pad)
 
 void Bridge::releaseAllNotes()
 {
+    if (const int n = arp.soundingNote(); n >= 0)
+        send (juce::MidiMessage::noteOff (arpChannel, n));
+    arp.clear();
     for (int p = 0; p < kNumPads; ++p)
     {
         if (sentNote[p] >= 0)
@@ -363,6 +398,105 @@ void Bridge::releaseAllNotes()
         mirror.pressure[p] = 0;
         pads[p].reset();
     }
+}
+
+// ---------------------------------------------------------------- note, arpeggiatore, manopola
+
+void Bridge::noteOn (int channel, int note, int velocity)
+{
+    if (arpActive())
+    {
+        arpChannel = channel;
+        arp.press (note, velocity);
+        return;
+    }
+    send (juce::MidiMessage::noteOn (channel, note, (juce::uint8) velocity));
+}
+
+void Bridge::noteOff (int channel, int note)
+{
+    if (arpActive())
+    {
+        arp.release (note, settings.arpLatch.load());
+        return;
+    }
+    send (juce::MidiMessage::noteOff (channel, note));
+}
+
+void Bridge::tickArp (double nowMs)
+{
+    if (! arpActive())
+    {
+        if (arpWasActive)
+        {
+            if (const int n = arp.soundingNote(); n >= 0)
+                send (juce::MidiMessage::noteOff (arpChannel, n));
+            arp.clear();
+        }
+        arpWasActive = false;
+        return;
+    }
+    arpWasActive = true;
+    if (arpRestart.exchange (false))
+        arp.restart();
+
+    ArpSettings s;
+    s.pattern = ArpPattern (juce::jlimit (0, kNumArpPatterns - 1, settings.arpPattern.load()));
+    s.rate = juce::jlimit (0, kNumArpRates - 1, settings.arpRate.load());
+    s.octaves = juce::jlimit (1, 3, settings.arpOctaves.load());
+    s.gate = float (juce::jlimit (5, 98, settings.arpGate.load())) / 100.0f;
+    s.latch = settings.arpLatch.load();
+    const bool clocked = nowMs - clockSeenMs.load() < 500.0 && mirror.clockBpm.load() > 0.0;
+    s.bpm = clocked ? mirror.clockBpm.load() : double (juce::jlimit (20, 400, settings.arpBpm.load()));
+
+    std::array<ArpEvent, 2> ev;
+    const int n = arp.tick (nowMs, s, ev);
+    for (int i = 0; i < n; ++i)
+    {
+        if (ev[size_t (i)].type == ArpEvent::NoteOn)
+        {
+            send (juce::MidiMessage::noteOn (arpChannel, ev[size_t (i)].note, ev[size_t (i)].velocity));
+            mirror.lastNote = ev[size_t (i)].note;
+        }
+        else
+            send (juce::MidiMessage::noteOff (arpChannel, ev[size_t (i)].note));
+    }
+}
+
+void Bridge::turnKnob (int delta, bool fine)
+{
+    const int fx = juce::jlimit (0, kNumKnobFx - 1, settings.knobFx.load());
+    if (kKnobFx[fx].cc == kKnobFxArpRate)   // velocità dell'arpeggiatore: uno scatto = una suddivisione
+        settings.arpRate = juce::jlimit (0, kNumArpRates - 1, settings.arpRate.load() + (delta > 0 ? 1 : -1));
+    else
+        knobValues[fx] = juce::jlimit (0, 127, knobValues[fx] + delta * (fine ? 1 : 3));
+    sendKnob (fx);
+}
+
+void Bridge::resetKnob()
+{
+    const int fx = juce::jlimit (0, kNumKnobFx - 1, settings.knobFx.load());
+    if (kKnobFx[fx].cc == kKnobFxArpRate)
+        settings.arpRate = kKnobFx[fx].initial;
+    else
+        knobValues[fx] = kKnobFx[fx].initial;
+    sendKnob (fx);
+}
+
+// Manda allo strumento (canale dei pad) il valore dell'effetto e lo mostra sul display
+void Bridge::sendKnob (int fx)
+{
+    const auto& k = kKnobFx[fx];
+    const int ch = juce::jlimit (1, 16, settings.padChannel.load());
+    int shown = knobValues[fx];
+    if (k.cc == kKnobFxArpRate)
+        shown = settings.arpRate.load();
+    else if (k.cc == kKnobFxPitchBend)
+        send (juce::MidiMessage::pitchWheel (ch, shown <= 64 ? shown * 8192 / 64 : 8192 + (shown - 64) * 8191 / 63));
+    else if (k.cc >= 0)
+        send (juce::MidiMessage::controllerEvent (ch, k.cc, shown));
+    mirror.knobValue = shown;
+    mirror.knobTouchedMs = juce::Time::getMillisecondCounterHiRes();
 }
 
 void Bridge::send (const juce::MidiMessage& m)
@@ -520,6 +654,10 @@ DisplayState Bridge::displayState() const noexcept
     s.curve = settings.curve.load();
     s.aftertouch = settings.aftertouch.load();
     s.harmony = settings.harmony.load() && settings.mode.load() == int (Mode::Keys);
+    s.arp = arpActive();
+    s.knobFx = settings.knobFx.load();
+    s.knobValue = mirror.knobValue.load();
+    s.knobShown = juce::Time::getMillisecondCounterHiRes() - mirror.knobTouchedMs.load() < 1500.0;
     s.lowNote = noteForPad (0);
     s.highNote = noteForPad (kNumPads - 1);
     for (int p = 0; p < kNumPads; ++p)
@@ -532,6 +670,26 @@ DisplayState Bridge::displayState() const noexcept
 
 void Bridge::handleIncomingMidiMessage (juce::MidiInput*, const juce::MidiMessage& m)
 {
+    // Clock MIDI di FL (24 impulsi a nota da 1/4): l'arpeggiatore va a tempo col progetto
+    if (m.isMidiClock())
+    {
+        const double now = juce::Time::getMillisecondCounterHiRes();
+        if (lastClockMs > 0.0 && now - lastClockMs < 250.0)
+        {
+            const double dt = now - lastClockMs;
+            clockInterval = clockInterval > 0.0 ? clockInterval * 0.9 + dt * 0.1 : dt;
+            mirror.clockBpm = 60000.0 / (clockInterval * 24.0);
+        }
+        lastClockMs = now;
+        clockSeenMs = now;
+        return;
+    }
+    if (m.isMidiStart())
+    {
+        arpRestart = true;
+        return;
+    }
+
     if (m.getChannel() == settings.padChannel.load())
     {
         if (m.isNoteOn())

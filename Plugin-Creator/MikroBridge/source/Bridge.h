@@ -5,6 +5,7 @@
 
 #include "DisplayRenderer.h"
 #include "PadEngine.h"
+#include "Arp.h"
 #include "Scales.h"
 
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -36,6 +37,11 @@ public:
         std::atomic<int> threshold { 250 };
         std::atomic<int> crosstalk { 35 };  // anti-fantasma: % della pressione del pad più premuto (0 = spento)
         std::atomic<bool> harmony { false };// modo Keys: solo le note della scala che stanno bene tutte insieme
+        std::atomic<int> knobFx { 0 };      // effetto dell'encoder (mikro::kKnobFx), si cambia con GROUP
+        std::atomic<bool> arp { false };    // arpeggiatore (tastiera e accordi), SHIFT + GROUP
+        std::atomic<int> arpPattern { 0 }, arpRate { 3 }, arpOctaves { 1 }, arpGate { 60 };
+        std::atomic<bool> arpLatch { false };
+        std::atomic<int> arpBpm { 120 };    // se FL non manda il clock MIDI
         std::atomic<bool> aftertouch { false };
         std::atomic<bool> flippedPads { false };
     };
@@ -48,6 +54,9 @@ public:
         std::atomic<int> feedback[mikro::kNumPads] {};   // velocity ricevuta dal DAW
         std::atomic<int> lastNote { -1 }, lastVelocity { 0 };
         std::atomic<int> lastPad { -1 };   // per mostrare l'ultimo accordo
+        std::atomic<int> knobValue { 0 };  // valore dell'effetto della manopola, 0..127
+        std::atomic<double> knobTouchedMs { -1.0e9 };   // il display mostra l'effetto per un po'
+        std::atomic<double> clockBpm { 0.0 };           // tempo dal clock MIDI di FL (0 = nessuno)
         std::atomic<int> status { int (Status::Searching) };
     };
 
@@ -81,6 +90,13 @@ private:
     void handleReport (const uint8_t* data, int len);
     void handleButtons (const mikro::ButtonState& now);
     void handlePad (int pad, int pressure, int othersMax, double nowMs);
+    void noteOn (int channel, int note, int velocity);   // passa dall'arpeggiatore se acceso
+    void noteOff (int channel, int note);
+    void turnKnob (int delta, bool fine);
+    void resetKnob();
+    void sendKnob (int fx);
+    void tickArp (double nowMs);
+    bool arpActive() const noexcept { return settings.arp.load() && usesKeyBase(); }
     void localPadFunction (int pad);
     void releaseAllNotes();
     void send (const juce::MidiMessage& m);
@@ -99,6 +115,13 @@ private:
     mikro::PadEngine pads[mikro::kNumPads];
     int sentNote[mikro::kNumPads];        // nota mandata da ogni pad (per il NoteOff giusto)
     int sentChord[mikro::kNumPads][4];    // modo Accordi: le altre note dell'accordo (-1 = nessuna)
+    mikro::Arpeggiator arp;
+    int arpChannel = 1;
+    int knobValues[mikro::kNumKnobFx] {};
+    bool arpWasActive = false;
+    std::atomic<bool> arpRestart { false };
+    double lastClockMs = -1.0, clockInterval = 0.0;   // thread MIDI
+    std::atomic<double> clockSeenMs { -1.0e9 };
     int sentChannel[mikro::kNumPads];
     bool shiftPadDown[mikro::kNumPads] {};
     std::array<int, mikro::kNumPads> rawPressure {};

@@ -37,6 +37,14 @@ private:
     juce::ToggleButton aftertouch { "Aftertouch polifonico" }, flipped { "Pad numerati al contrario" };
     juce::ToggleButton harmony { "Armonia: in tastiera ogni combinazione di pad suona bene" };
     bool shownHarmony = false;
+
+    // Manopola e arpeggiatore (colonna destra)
+    juce::Label knobL, arpPatternL, arpRateL, arpOctL, arpGateL, arpBpmL;
+    juce::ComboBox knob, arpPattern, arpRate, arpOct;
+    juce::Slider arpGate, arpBpm;
+    juce::ToggleButton arpOn { "Arpeggiatore (SHIFT + GROUP)" }, arpLatch { "Latch: continua anche staccando le dita" };
+    int shownKnob = -1, shownArpRate = -1;
+    bool shownArp = false;
     int shownMode = -1, shownRoot = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

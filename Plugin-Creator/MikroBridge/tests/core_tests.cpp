@@ -3,8 +3,11 @@
 #include "MikroProtocol.h"
 #include "Scales.h"
 #include "PadEngine.h"
+#include "Arp.h"
 
 #include <cstdio>
+#include <vector>
+#include <algorithm>
 #include <cstdlib>
 
 using namespace mikro;
@@ -249,8 +252,77 @@ static void testScales()
         }
 }
 
+// Arpeggiatore: ordine delle note, ottave, tempo, rilascio, latch
+static std::vector<int> runArp (Arpeggiator& a, const ArpSettings& s, double fromMs, double toMs)
+{
+    std::vector<int> ons;
+    std::array<ArpEvent, 2> ev;
+    for (double t = fromMs; t < toMs; t += 1.0)
+    {
+        const int n = a.tick (t, s, ev);
+        for (int i = 0; i < n; ++i)
+            if (ev[size_t (i)].type == ArpEvent::NoteOn)
+                ons.push_back (ev[size_t (i)].note);
+    }
+    return ons;
+}
+
+static void testArp()
+{
+    ArpSettings s;
+    s.bpm = 120.0;   // 1/16 = 125 ms
+    s.rate = 3;
+    {
+        Arpeggiator a;
+        a.press (64, 100); a.press (60, 100); a.press (67, 100);
+        const auto ons = runArp (a, s, 0.0, 1000.0);
+        const std::vector<int> want { 60, 64, 67, 60, 64, 67, 60, 64 };   // Su, 8 passi in 1 s
+        CHECK (ons == want);
+    }
+    {
+        Arpeggiator a;
+        s.pattern = ArpPattern::Down; s.octaves = 2;
+        a.press (60, 100); a.press (64, 100);
+        const auto ons = runArp (a, s, 0.0, 500.0);
+        const std::vector<int> want { 76, 72, 64, 60 };                    // Giu' su 2 ottave
+        CHECK (ons == want);
+    }
+    {
+        Arpeggiator a;
+        s.pattern = ArpPattern::UpDown; s.octaves = 1;
+        a.press (60, 100); a.press (64, 100); a.press (67, 100);
+        const auto ons = runArp (a, s, 0.0, 750.0);
+        const std::vector<int> want { 60, 64, 67, 64, 60, 64 };            // Su e giu', senza ripetere gli estremi
+        CHECK (ons == want);
+    }
+    {
+        Arpeggiator a;
+        s.pattern = ArpPattern::AsPlayed;
+        a.press (67, 100); a.press (60, 100);
+        CHECK ((runArp (a, s, 0.0, 150.0) == std::vector<int> { 67, 60 }));   // a 150 ms suona ancora il 60
+        a.release (67, false); a.release (60, false);
+        std::array<ArpEvent, 2> ev;
+        int offs = 0;
+        for (double t = 150.0; t < 400.0; t += 1.0)
+            for (int i = 0, n = a.tick (t, s, ev); i < n; ++i)
+                offs += ev[size_t (i)].type == ArpEvent::NoteOff ? 1 : 0;
+        CHECK (offs == 1 && ! a.active() && a.soundingNote() < 0);    // staccate le dita: l'ultima nota si chiude
+    }
+    {
+        Arpeggiator a;   // latch: continua senza dita, un nuovo gesto sostituisce le note
+        s.pattern = ArpPattern::Up;
+        a.press (60, 100); a.release (60, true);
+        CHECK (runArp (a, s, 0.0, 500.0).size() == 4);
+        a.press (72, 100);
+        const auto ons = runArp (a, s, 500.0, 750.0);
+        CHECK (! ons.empty() && ons.back() == 72 && std::find (ons.begin(), ons.end(), 60) == ons.end());
+    }
+    CHECK (kKnobFx[0].cc == kKnobFxDaw && kKnobFx[1].cc == 74);
+}
+
 int main()
 {
+    testArp();
     testScales();
     testParsers();
     testPadEngine();

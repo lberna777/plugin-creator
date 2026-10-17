@@ -116,3 +116,26 @@ COLPI FANTASMA E DOPPI COLPI
   parte della pressione del pad più premuto. Se ne senti ancora, alzalo (45-55%);
   se gli accordi a più dita perdono note, abbassalo. Anche "Soglia colpo" più
   alta aiuta coi pad molto sensibili.
+
+
+MANOPOLA CON GLI EFFETTI (tasto GROUP)
+-------------------------------------
+GROUP cambia cosa fa la manopola; il display mostra effetto e valore.
+  FL ............ come prima: scorre in FL (script) / ribbon dell'RSU-10
+  Filtro (CC 74), Risonanza (71), Modulazione (1), Volume (7), Pan (10),
+  Espressione (11), Riverbero (91), Delay/chorus (93), Attacco (73),
+  Rilascio (72), Pitch bend, Velocità dell'arpeggiatore
+Girare = valore allo strumento selezionato (canale dei pad); SHIFT + girare =
+regolazione fine; manopola premuta = valore iniziale.
+Molti synth rispondono da soli a CC 1/7/10/11/74; per gli altri in FL: tasto
+destro sul parametro > "Link to controller" e gira la manopola.
+
+ARPEGGIATORE (SHIFT + GROUP)
+---------------------------
+In tastiera e in accordi: tieni le note e il Bridge le suona una alla volta
+(display: "KEYS+ARP"). Nella finestra: ordine (su, giù, su e giù, casuale,
+come suonate), velocità (1/4 ... 1/32), estensione (1-3 ottave), durata
+della nota, latch (continua senza dita; il gesto dopo sostituisce le note).
+A tempo con FL: Opzioni > Impostazioni MIDI, nell'Output scegli
+"Mikro MK2 Bridge" e attiva "Send master sync". Senza clock usa il
+"Tempo senza clock" della finestra. Con gli Accordi: accordo arpeggiato.
