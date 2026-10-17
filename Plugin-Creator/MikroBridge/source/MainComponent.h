@@ -32,8 +32,11 @@ private:
     juce::Label status, legend;
     juce::Label modeL, baseL, rootL, scaleL, padChL, ctrlChL, curveL, threshL;
     juce::ComboBox mode, base, root, scale, padCh, ctrlCh, curve;
-    juce::Slider threshold;
+    juce::Slider threshold, crosstalk;
+    juce::Label crosstalkL;
     juce::ToggleButton aftertouch { "Aftertouch polifonico" }, flipped { "Pad numerati al contrario" };
+    juce::ToggleButton harmony { "Armonia: in tastiera ogni combinazione di pad suona bene" };
+    bool shownHarmony = false;
     int shownMode = -1, shownRoot = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainComponent)

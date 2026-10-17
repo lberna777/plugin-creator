@@ -128,7 +128,7 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     legend.setColour (juce::Label::textColourId, Col::dim);
     legend.setJustificationType (juce::Justification::topLeft);
     legend.setText (juce::String ("Nel DAW scegli \"") + Bridge::kPortName + "\" come ingresso MIDI (e come uscita, se vuoi le luci).\n"
-                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala / accordi (pad 1-7 = gradi I-VII, 9-15 con la settima).  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
+                    "Pad: note sul canale pad.  PAD MODE: batteria / tastiera in scala / accordi (pad 1-7 = gradi I-VII, 9-15 con la settima).  SHIFT + PAD MODE: armonia.  SHIFT + pad 13/14: semitono (in scala: tonalita'), 15/16: banco o ottava.\n"
                     "Tasti: CC 20-46 sul canale controlli (con SHIFT: CC 70-96).  SHIFT + pad 1-12: CC 102-113.  Encoder: CC 14 relativo (SHIFT: CC 15).",
                     juce::dontSendNotification);
     addAndMakeVisible (legend);
@@ -153,6 +153,11 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     threshold.setSliderStyle (juce::Slider::LinearHorizontal);
     threshold.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 20);
     threshold.setRange (60.0, 1200.0, 10.0);
+    crosstalk.setSliderStyle (juce::Slider::LinearHorizontal);
+    crosstalk.setTextBoxStyle (juce::Slider::TextBoxRight, false, 52, 20);
+    crosstalk.setRange (0.0, 80.0, 1.0);
+    crosstalk.setTextValueSuffix (" %");
+    crosstalk.setTooltip ("Colpi fantasma: un pad parte solo se ha almeno questa % della pressione del pad piu' premuto. 0 = spento");
 
     addRow (modeL, mode, "Modo");
     addRow (baseL, base, "Pad 1 suona");
@@ -162,6 +167,8 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     addRow (ctrlChL, ctrlCh, "Canale controlli");
     addRow (curveL, curve, "Velocity");
     addRow (threshL, threshold, "Soglia colpo");
+    addRow (crosstalkL, crosstalk, "Anti-fantasma");
+    addAndMakeVisible (harmony);
     addAndMakeVisible (aftertouch);
     addAndMakeVisible (flipped);
 
@@ -180,10 +187,12 @@ MainComponent::MainComponent (Bridge& b, juce::PropertiesFile& p) : bridge (b), 
     ctrlCh.onChange = [this] { bridge.settings.ctrlChannel = ctrlCh.getSelectedId(); save(); };
     curve.onChange  = [this] { bridge.settings.curve = curve.getSelectedId() - 1; save(); };
     threshold.onValueChange = [this] { bridge.settings.threshold = int (threshold.getValue()); save(); };
+    crosstalk.onValueChange = [this] { bridge.settings.crosstalk = int (crosstalk.getValue()); save(); };
+    harmony.onClick    = [this] { bridge.settings.harmony = harmony.getToggleState(); save(); };
     aftertouch.onClick = [this] { bridge.settings.aftertouch = aftertouch.getToggleState(); save(); };
     flipped.onClick    = [this] { bridge.settings.flippedPads = flipped.getToggleState(); save(); };
 
-    setSize (760, 720);
+    setSize (760, 790);
     startTimerHz (30);
 }
 
@@ -219,6 +228,8 @@ void MainComponent::load()
     s.ctrlChannel = props.getIntValue ("ctrlChannel", s.ctrlChannel);
     s.curve       = props.getIntValue ("curve", s.curve);
     s.threshold   = props.getIntValue ("threshold", s.threshold);
+    s.crosstalk   = juce::jlimit (0, 80, props.getIntValue ("crosstalk", s.crosstalk));
+    s.harmony     = props.getBoolValue ("harmony", s.harmony);
     s.aftertouch  = props.getBoolValue ("aftertouch", s.aftertouch);
     s.flippedPads = props.getBoolValue ("flippedPads", s.flippedPads);
 
@@ -230,6 +241,8 @@ void MainComponent::load()
     ctrlCh.setSelectedId (s.ctrlChannel, juce::dontSendNotification);
     curve.setSelectedId (s.curve + 1, juce::dontSendNotification);
     threshold.setValue (s.threshold, juce::dontSendNotification);
+    crosstalk.setValue (s.crosstalk, juce::dontSendNotification);
+    harmony.setToggleState (s.harmony, juce::dontSendNotification);
     aftertouch.setToggleState (s.aftertouch, juce::dontSendNotification);
     flipped.setToggleState (s.flippedPads, juce::dontSendNotification);
 }
@@ -246,6 +259,8 @@ void MainComponent::save()
     props.setValue ("ctrlChannel", s.ctrlChannel.load());
     props.setValue ("curve", s.curve.load());
     props.setValue ("threshold", s.threshold.load());
+    props.setValue ("crosstalk", s.crosstalk.load());
+    props.setValue ("harmony", s.harmony.load());
     props.setValue ("aftertouch", s.aftertouch.load());
     props.setValue ("flippedPads", s.flippedPads.load());
     props.saveIfNeeded();
@@ -263,6 +278,12 @@ void MainComponent::timerCallback()
         shownMode = m;
         mode.setSelectedId (m + 1, juce::dontSendNotification);
         base.setSelectedId (b + 1, juce::dontSendNotification);
+    }
+    if (const bool h = bridge.settings.harmony.load(); h != shownHarmony)
+    {
+        shownHarmony = h;
+        harmony.setToggleState (h, juce::dontSendNotification);
+        save();
     }
     if (const int r = bridge.settings.root.load(); r != shownRoot && ! root.isPopupActive())
     {
@@ -322,14 +343,15 @@ void MainComponent::resized()
     area.removeFromLeft (kMargin + kGap);
 
     auto row = [&area] { auto r = area.removeFromTop (kRowH); area.removeFromTop (kGap); return r; };
-    juce::Label* labels[] { &modeL, &baseL, &rootL, &scaleL, &padChL, &ctrlChL, &curveL, &threshL };
-    juce::Component* comps[] { &mode, &base, &root, &scale, &padCh, &ctrlCh, &curve, &threshold };
+    juce::Label* labels[] { &modeL, &baseL, &rootL, &scaleL, &padChL, &ctrlChL, &curveL, &threshL, &crosstalkL };
+    juce::Component* comps[] { &mode, &base, &root, &scale, &padCh, &ctrlCh, &curve, &threshold, &crosstalk };
     for (size_t i = 0; i < std::size (labels); ++i)
     {
         auto r = row();
         labels[i]->setBounds (r.removeFromLeft (kLabelW));
         comps[i]->setBounds (r);
     }
+    harmony.setBounds (row());
     aftertouch.setBounds (row());
     flipped.setBounds (row());
 }

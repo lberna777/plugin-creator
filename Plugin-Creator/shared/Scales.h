@@ -70,6 +70,76 @@ inline int snap (int scale, int root, int note) noexcept
     }
     return note;
 }
+// ---------------------------------------------------------------- armonia: ogni combinazione consonante
+// Dalla scala si tolgono le note che si scontrano: semitono (o settima maggiore, la stessa coppia
+// di classi) e tritono. Si toglie per prima la nota con più scontri, mai la tonica; a pari scontri
+// la meno importante per il colore della scala (terza e quinta restano). Dal maggiore resta la
+// pentatonica maggiore, dal minore la minore: qualunque gruppo di pad premuto insieme suona bene.
+struct Subset
+{
+    int count = 0;
+    int steps[12] {};
+};
+
+inline bool clash (int a, int b) noexcept
+{
+    const int d = mod (a - b, 12);
+    return d == 1 || d == 11 || d == 6;
+}
+
+inline Subset consonantSubset (int scale) noexcept
+{
+    const auto& s = get (scale);
+    bool keep[12] {};
+    for (int i = 0; i < s.count; ++i)
+        keep[i] = true;
+    for (;;)
+    {
+        int worst = -1, worstClashes = 0;
+        for (int i = 1; i < s.count; ++i)   // la tonica (i = 0) resta sempre
+        {
+            if (! keep[i])
+                continue;
+            int c = 0;
+            for (int j = 0; j < s.count; ++j)
+                if (keep[j] && j != i && clash (s.steps[i], s.steps[j]))
+                    ++c;
+            // importanza per posizione nella scala: 5a e 3a contano di più, poi 6a, 4a, 2a, 7a
+            static constexpr int importance[12] { 100, 2, 5, 3, 6, 4, 1, 1, 1, 1, 1, 1 };
+            if (c > 0 && (c > worstClashes || (c == worstClashes && importance[i] < importance[worst])))
+            {
+                worst = i;
+                worstClashes = c;
+            }
+        }
+        if (worst < 0)
+            break;
+        keep[worst] = false;
+    }
+    Subset out;
+    for (int i = 0; i < s.count; ++i)
+        if (keep[i])
+            out.steps[out.count++] = s.steps[i];
+    return out;
+}
+
+inline bool inConsonant (int scale, int root, int note) noexcept
+{
+    const auto sub = consonantSubset (scale);
+    const int pc = mod (note - root, 12);
+    for (int i = 0; i < sub.count; ++i)
+        if (sub.steps[i] == pc)
+            return true;
+    return false;
+}
+
+// Grado della scala "in armonia" -> semitoni dalla tonica
+inline int consonantDegreeToSemitones (int scale, int degree) noexcept
+{
+    const auto sub = consonantSubset (scale);
+    return 12 * floorDiv (degree, sub.count) + sub.steps[mod (degree, sub.count)];
+}
+
 // ---------------------------------------------------------------- accordi per grado
 // Pad 1-7 = triadi sui gradi I..VII, pad 8 = I all'ottava; pad 9-16 = gli stessi con la settima.
 // Così una progressione "6-2-1" si suona coi pad 6, 2, 1 (o 14, 10, 9 con le settime).

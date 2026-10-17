@@ -64,7 +64,12 @@ int Bridge::ccForButton (int buttonIndex, bool shift) noexcept
 int Bridge::noteForPad (int physicalPad) const noexcept
 {
     if (settings.mode.load() == int (Mode::Keys))   // gradi consecutivi della scala: ogni pad è intonato
-        return settings.keyBase.load() + settings.root.load() + scales::degreeToSemitones (settings.scale.load(), physicalPad);
+    {
+        const int sc = settings.scale.load();
+        const int semis = settings.harmony.load() ? scales::consonantDegreeToSemitones (sc, physicalPad)   // ARMONIA
+                                                  : scales::degreeToSemitones (sc, physicalPad);
+        return settings.keyBase.load() + settings.root.load() + semis;
+    }
     if (chordMode())                                 // fondamentale dell'accordo del pad
         return settings.keyBase.load() + settings.root.load() + scales::chordForPad (settings.scale.load(), physicalPad).notes[0];
     return settings.drumBase.load() + physicalPad;
@@ -189,9 +194,18 @@ void Bridge::handleReport (const uint8_t* data, int len)
 
     if (parsePads (data, size_t (len), rawPressure))
     {
+        // le due pressioni più alte: a ogni pad serve la più alta tra gli ALTRI (anti-diafonia)
+        int top1 = 0, top2 = 0, topIndex = -1;
+        for (int i = 0; i < kNumPads; ++i)
+        {
+            const int p = rawPressure[size_t (i)];
+            if (p > top1) { top2 = top1; top1 = p; topIndex = i; }
+            else if (p > top2) top2 = p;
+        }
+        const double now = juce::Time::getMillisecondCounterHiRes();
         const bool flipped = settings.flippedPads.load();
         for (int i = 0; i < kNumPads; ++i)
-            handlePad (physicalPad (i, flipped), rawPressure[size_t (i)]);
+            handlePad (physicalPad (i, flipped), rawPressure[size_t (i)], i == topIndex ? top2 : top1, now);
     }
 }
 
@@ -214,7 +228,10 @@ void Bridge::handleButtons (const ButtonState& now)
                 if (is)
                 {
                     releaseAllNotes();
-                    settings.mode = (settings.mode.load() + 1) % kNumModes;   // batteria > tastiera > accordi
+                    if (shift)   // SHIFT + PAD MODE: ARMONIA accesa/spenta (tastiera)
+                        settings.harmony = ! settings.harmony.load();
+                    else
+                        settings.mode = (settings.mode.load() + 1) % kNumModes;   // batteria > tastiera > accordi
                 }
                 continue;
             }
@@ -231,7 +248,7 @@ void Bridge::handleButtons (const ButtonState& now)
     haveButtons = true;
 }
 
-void Bridge::handlePad (int pad, int pressure)
+void Bridge::handlePad (int pad, int pressure, int othersMax, double nowMs)
 {
     mirror.pressure[pad] = pressure;
 
@@ -239,8 +256,9 @@ void Bridge::handlePad (int pad, int pressure)
     ps.onThreshold = juce::jlimit (60, 2000, settings.threshold.load());
     ps.curve = VelocityCurve (juce::jlimit (0, 3, settings.curve.load()));
     ps.aftertouch = settings.aftertouch.load();
+    ps.crosstalk = float (juce::jlimit (0, 80, settings.crosstalk.load())) / 100.0f;
 
-    const auto events = pads[pad].process (pressure, ps);
+    const auto events = pads[pad].process (pressure, ps, nowMs, othersMax);
 
     for (int k = 0; k < events.count; ++k)
     {
@@ -501,6 +519,7 @@ DisplayState Bridge::displayState() const noexcept
     s.channel = settings.padChannel.load();
     s.curve = settings.curve.load();
     s.aftertouch = settings.aftertouch.load();
+    s.harmony = settings.harmony.load() && settings.mode.load() == int (Mode::Keys);
     s.lowNote = noteForPad (0);
     s.highNote = noteForPad (kNumPads - 1);
     for (int p = 0; p < kNumPads; ++p)

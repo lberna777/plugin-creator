@@ -86,6 +86,8 @@ static void testPadEngine()
         auto ev = e.process (3300, s);
         CHECK (ev.count == 1 && ev.e[0].type == PadEvent::NoteOn && ev.e[0].value == 127);
         CHECK (e.process (2000, s).count == 0);          // tenuto, niente aftertouch
+        CHECK (e.process (90, s).count == 0);            // un solo report basso non basta (rimbalzo)
+        CHECK (e.process (90, s).count == 0);
         ev = e.process (90, s);
         CHECK (ev.count == 1 && ev.e[0].type == PadEvent::NoteOff);
         CHECK (! e.isHeld());
@@ -115,6 +117,39 @@ static void testPadEngine()
         CHECK (e.isHeld());
         CHECK (e.process (200, s).count == 0);
         CHECK (e.isHeld());
+    }
+
+    // Doppio colpo: la gomma rimbalza staccando il dito -> una sola nota
+    {
+        PadEngine e;
+        int ons = 0;
+        const int bounce[] { 1500, 2500, 2400, 80, 400, 60, 350, 40, 0, 0, 0, 0 };
+        double t = 0.0;
+        for (int p : bounce)
+        {
+            const auto ev = e.process (p, s, t);
+            for (int k = 0; k < ev.count; ++k) ons += ev.e[k].type == PadEvent::NoteOn ? 1 : 0;
+            t += 1.0;   // un report al millisecondo
+        }
+        CHECK (ons == 1);
+        // dopo il rilascio, entro 30 ms non riparte; dopo sì
+        CHECK (e.process (900, s, t + 5.0).count == 0);
+        e.process (0, s, t + 6.0);
+        CHECK (e.process (900, s, t + 60.0).count == 0 && e.process (700, s, t + 61.0).count == 1);
+    }
+
+    // Colpo fantasma: pad vicino con poca pressione mentre un altro è premuto forte -> ignorato
+    {
+        PadEngine ghost, chord;
+        int ghostOns = 0, chordOns = 0;
+        for (int r = 0; r < 6; ++r)
+        {
+            const auto g = ghost.process (400, s, r, 3000);   // 13% del pad forte
+            const auto c = chord.process (1600, s, r, 3000);  // 53%: accordo vero
+            for (int k = 0; k < g.count; ++k) ghostOns += g.e[k].type == PadEvent::NoteOn ? 1 : 0;
+            for (int k = 0; k < c.count; ++k) chordOns += c.e[k].type == PadEvent::NoteOn ? 1 : 0;
+        }
+        CHECK (ghostOns == 0 && chordOns == 1);
     }
 
     // Velocity: monotona, 1..127, curve ordinate
@@ -183,6 +218,23 @@ static void testScales()
     CHECK (degreeToSemitones (1, 7) == 12);             // maggiore: pad 8 = ottava
     CHECK (degreeToSemitones (11, 5) == 12);            // pentatonica minore: pad 6 = ottava
     CHECK (snap (1, 0, 61) == 60 && snap (1, 0, 66) == 65);
+
+    // Armonia: nessuna coppia di note che stride, maggiore -> pentatonica maggiore, minore -> minore
+    for (int sc = 0; sc < kNumScales; ++sc)
+    {
+        const auto sub = consonantSubset (sc);
+        CHECK (sub.count >= 3 && sub.steps[0] == 0);
+        for (int i = 0; i < sub.count; ++i)
+            for (int j = 0; j < sub.count; ++j)
+                CHECK (i == j || ! clash (sub.steps[i], sub.steps[j]));
+    }
+    {
+        const auto maj = consonantSubset (1), min = consonantSubset (2);
+        const int majWant[] { 0, 2, 4, 7, 9 }, minWant[] { 0, 3, 5, 7, 10 };
+        CHECK (maj.count == 5 && min.count == 5);
+        for (int i = 0; i < 5; ++i)
+            CHECK (maj.steps[i] == majWant[i] && min.steps[i] == minWant[i]);
+    }
 
     // Accordi per grado: in Do maggiore 6-2-1 = Am Dm C, le settime sui pad 9-16
     CHECK (chordName (1, 0, 5) == "Am" && chordName (1, 0, 1) == "Dm" && chordName (1, 0, 0) == "C");

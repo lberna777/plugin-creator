@@ -19,6 +19,14 @@ struct PadSettings
     int attackReports = 3;          // report su cui si cerca il picco (latenza ~1-3 ms)
     VelocityCurve curve = VelocityCurve::Linear;
     bool aftertouch = false;
+
+    // Contro i doppi colpi: il rilascio vale solo se la pressione resta bassa per qualche report
+    // (la gomma rimbalza quando si stacca il dito), poi il pad non riparte per retriggerMs
+    int releaseReports = 3;
+    double retriggerMs = 30.0;
+    // Contro i colpi fantasma (diafonia tra pad vicini): un pad parte solo se ha almeno questa
+    // frazione della pressione del pad più premuto in quel momento. 0 = spento
+    float crosstalk = 0.35f;
 };
 
 struct PadEvent
@@ -33,15 +41,19 @@ public:
     // Al più due eventi per report (NoteOn+NoteOff se il colpo è più breve della finestra d'attacco)
     struct Events { PadEvent e[2]; int count = 0; void add (PadEvent ev) { e[count++] = ev; } };
 
-    Events process (int pressure, const PadSettings& s) noexcept
+    // nowMs: orologio in millisecondi; othersMax: pressione più alta tra gli ALTRI pad in questo report
+    Events process (int pressure, const PadSettings& s, double nowMs = 0.0, int othersMax = 0) noexcept
     {
         Events out;
-        const int off = s.onThreshold / 2;
+        const int off = s.onThreshold * 2 / 5;
 
         switch (state)
         {
             case State::Idle:
-                if (pressure >= s.onThreshold)
+            {
+                const bool lockedOut = releasedAt > -1.0e8 && nowMs - releasedAt < s.retriggerMs;
+                const int threshold = std::max (s.onThreshold, int (s.crosstalk * float (othersMax)));
+                if (! lockedOut && pressure >= threshold)
                 {
                     state = State::Attack;
                     peak = pressure;
@@ -50,12 +62,13 @@ public:
                         fire (out, s);
                 }
                 break;
+            }
 
             case State::Attack:
                 if (pressure < off)
                 {
                     fire (out, s);
-                    release (out);
+                    release (out, nowMs);
                     break;
                 }
                 if (pressure < peak || ++reports >= s.attackReports)
@@ -70,9 +83,12 @@ public:
             case State::Held:
                 if (pressure < off)
                 {
-                    release (out);
+                    if (++lowReports >= std::max (1, s.releaseReports))
+                        release (out, nowMs);
+                    break;
                 }
-                else if (s.aftertouch)
+                lowReports = 0;
+                if (s.aftertouch)
                 {
                     const int at = toMidi (pressure - s.onThreshold, s.fullScale - s.onThreshold, 1.0f);
                     if (std::abs (at - lastPressure) >= 2)
@@ -88,7 +104,7 @@ public:
 
     bool isHeld() const noexcept    { return state == State::Held; }
     uint8_t velocity() const noexcept { return lastVelocity; }
-    void reset() noexcept             { state = State::Idle; }
+    void reset() noexcept             { state = State::Idle; lowReports = 0; releasedAt = -1.0e9; }
 
     static int velocityFor (int peakPressure, const PadSettings& s) noexcept
     {
@@ -111,18 +127,21 @@ private:
     {
         lastVelocity = uint8_t (velocityFor (peak, s));
         lastPressure = -1;
+        lowReports = 0;
         state = State::Held;
         out.add ({ PadEvent::NoteOn, lastVelocity });
     }
 
-    void release (Events& out) noexcept
+    void release (Events& out, double nowMs) noexcept
     {
         state = State::Idle;
+        releasedAt = nowMs;
         out.add ({ PadEvent::NoteOff, 0 });
     }
 
     State state = State::Idle;
-    int peak = 0, reports = 0, lastPressure = -1;
+    int peak = 0, reports = 0, lastPressure = -1, lowReports = 0;
+    double releasedAt = -1.0e9;
     uint8_t lastVelocity = 0;
 };
 } // namespace mikro

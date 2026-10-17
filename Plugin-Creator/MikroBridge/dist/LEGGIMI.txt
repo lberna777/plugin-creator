@@ -96,3 +96,23 @@ Una progressione "6-2-1" = pad 6, 2, 1; "4-3-2" = pad 4, 3, 2; "2-5-1" col jazz
 = pad 10, 13, 9. Il display della Mikro e la finestra mostrano il nome
 dell'accordo e il numero romano. SHIFT + pad 13/14 cambia tonalità,
 15/16 l'ottava. Rende meglio con le scale da 7 note (maggiore, minori, modi).
+
+
+ARMONIA: OGNI COMBINAZIONE SUONA BENE (tastiera)
+-----------------------------------------------
+Casella "Armonia" nella finestra, oppure SHIFT + PAD MODE sulla Mikro (in
+tastiera il display scrive ARMONIA). Dalla scala scelta si tolgono le note che
+si scontrano (semitoni e tritono), tenendo tonica, terza e quinta:
+Do maggiore -> Do Re Mi Sol La, La minore -> La Do Re Mi Sol.
+Premi quanti pad vuoi insieme: non stona mai. Più note insieme si suonano
+sempre (ogni pad la sua nota); se senti una nota sola, lo strumento di FL è
+in modo mono/legato.
+
+COLPI FANTASMA E DOPPI COLPI
+----------------------------
+- Doppi colpi: il pad si rilascia solo se la pressione resta bassa per qualche
+  millisecondo, poi non riparte per 30 ms (la gomma che rimbalza non conta).
+- Colpi fantasma: "Anti-fantasma" (35%) = un pad parte solo se ha almeno quella
+  parte della pressione del pad più premuto. Se ne senti ancora, alzalo (45-55%);
+  se gli accordi a più dita perdono note, abbassalo. Anche "Soglia colpo" più
+  alta aiuta coi pad molto sensibili.

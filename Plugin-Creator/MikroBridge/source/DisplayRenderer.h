@@ -20,12 +20,15 @@ struct DisplayState
     int lowNote = 0, highNote = 0;   // note di pad 1 e pad 16
     uint16_t held = 0;               // pad che suonano adesso
     bool aftertouch = false;
+    bool harmony = false;            // tastiera: solo note che stanno bene insieme
+
+    bool inKey (int pc) const noexcept { return harmony ? scales::inConsonant (scale, root, pc) : scales::inScale (scale, root, pc); }
 
     bool operator== (const DisplayState& o) const noexcept
     {
         return mode == o.mode && lastNote == o.lastNote && lastVelocity == o.lastVelocity && lastPad == o.lastPad
             && root == o.root && scale == o.scale && channel == o.channel && curve == o.curve
-            && lowNote == o.lowNote && highNote == o.highNote && held == o.held && aftertouch == o.aftertouch;
+            && lowNote == o.lowNote && highNote == o.highNote && held == o.held && aftertouch == o.aftertouch && harmony == o.harmony;
     }
     bool operator!= (const DisplayState& o) const noexcept { return ! (*this == o); }
 };
@@ -292,8 +295,10 @@ private:
         const auto big = fitted (noteName (s.lastNote), 28.0f, 62.0f);
         text (gi, noteName (s.lastNote), 0.0f, 38.0f, big);
 
-        const juce::String sc = juce::String (scales::kRootNames[scales::mod (s.root, 12)]) + " " + scales::get (s.scale).name;
-        pixelText (gi, (pixelWidth (sc) <= 82 ? sc : juce::String (scales::kRootNames[scales::mod (s.root, 12)]) + " " + scales::get (s.scale).shortName).toUpperCase(), 0, 43);
+        const juce::String rootName (scales::kRootNames[scales::mod (s.root, 12)]);
+        const juce::String sc = s.harmony ? rootName + " " + scales::get (s.scale).shortName + " ARMONIA"
+                                          : rootName + " " + scales::get (s.scale).name;
+        pixelText (gi, (pixelWidth (sc) <= 82 ? sc : rootName + " " + scales::get (s.scale).shortName + (s.harmony ? " ARM" : "")).toUpperCase(), 0, 43);
 
         // Ottava di pianoforte: tasti della scala marcati, ultima nota piena
         const int x0 = 86, y0 = 15, kw = 6, kh = 32;
@@ -310,7 +315,7 @@ private:
             else
             {
                 gi.drawRect (r, 1);
-                if (scales::inScale (s.scale, s.root, pc))
+                if (s.inKey (pc))
                     gi.fillRect (r.getX() + 2, r.getBottom() - 5, kw - 3, 3);
             }
         }
@@ -323,7 +328,7 @@ private:
             gi.setColour (juce::Colours::black);   // copre i bordi dei tasti bianchi
             gi.fillRect (r);
             gi.setColour (juce::Colours::white);
-            if (pc == lastPc || scales::inScale (s.scale, s.root, pc))
+            if (pc == lastPc || s.inKey (pc))
             {
                 gi.fillRect (r.reduced (pc == lastPc ? 0 : 1, 0));
                 if (pc != lastPc)

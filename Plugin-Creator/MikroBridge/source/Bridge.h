@@ -34,6 +34,8 @@ public:
         std::atomic<int> ctrlChannel { 16 };
         std::atomic<int> curve { int (mikro::VelocityCurve::Linear) };
         std::atomic<int> threshold { 250 };
+        std::atomic<int> crosstalk { 35 };  // anti-fantasma: % della pressione del pad più premuto (0 = spento)
+        std::atomic<bool> harmony { false };// modo Keys: solo le note della scala che stanno bene tutte insieme
         std::atomic<bool> aftertouch { false };
         std::atomic<bool> flippedPads { false };
     };
@@ -78,7 +80,7 @@ private:
     void closeDevice();
     void handleReport (const uint8_t* data, int len);
     void handleButtons (const mikro::ButtonState& now);
-    void handlePad (int pad, int pressure);
+    void handlePad (int pad, int pressure, int othersMax, double nowMs);
     void localPadFunction (int pad);
     void releaseAllNotes();
     void send (const juce::MidiMessage& m);
