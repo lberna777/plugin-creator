@@ -847,3 +847,81 @@ Resta quello dichiarato ai tre giri precedenti, e adesso ha una riga in più:
 - la risposta è sempre la stessa: quando (F3) esisterà l'analisi del segnale, `work_peak` smetterà di
   essere una stima e queste stesse formule diventeranno esatte. Fino ad allora la cosa onesta è
   dirlo, non abbassare soglie e range fino a far lavorare i moduli sul rumore.
+
+---
+
+# Quinto giro — uscita a volume pareggiato e trim misurato
+
+## 1. Il difetto: il plugin acceso suonava sempre più forte di quello spento
+
+`outGain` portava la voce verso il **target di loudness del master** (−9 LUFS sulla trap). È il
+volume di un pezzo finito, non di una traccia vocale: acceso, VOCAL FORGE alzava sempre, e più
+forte sembra sempre meglio. Non si poteva giudicare se la catena migliorava la voce o la alzava
+soltanto.
+
+Misura con `vocalforge_loudness_probe`: 12 s di take sintetica (`plugin/tools/TestVoice.h`: frasi
+a livelli diversi, sillabe, esse, rumore di stanza), loudness integrata BS.1770 dentro e fuori.
+Differenza in LU, uscita meno ingresso:
+
+| preset | ingresso | build **installata** (24/8, `033a62d`) | `main` prima del giro (`a178432`) | **adesso** |
+|---|---|---|---|---|
+| voce trap aggressiva | −24 dBFS | +11,83 | +1,68 | +0,18 |
+| | −12 dBFS | +6,46 | +1,51 | +0,19 |
+| | −6 dBFS | +1,63 | −0,56 | −0,40 |
+| sfera ebbasta | −24 / −12 / −6 | +11,14 / +5,93 / +1,20 | +0,80 / +0,67 / −1,11 | +0,52 / +0,59 / +0,05 |
+| shiva | −24 / −12 / −6 | +12,34 / +7,12 / +2,34 | +1,72 / +1,27 / −0,61 | +0,22 / +0,33 / −0,18 |
+| tony boy | −24 / −12 / −6 | +10,32 / +5,87 / +0,98 | +0,81 / +0,71 / −0,85 | +0,24 / +0,30 / −0,11 |
+| glockyy | −24 / −12 / −6 | +12,48 / +7,37 / +2,60 | +2,22 / +1,27 / −0,63 | −0,08 / +0,14 / −0,44 |
+| capo plaza | −24 / −12 / −6 | +12,04 / +6,44 / +1,64 | +1,58 / +1,43 / −0,51 | +0,45 / +0,43 / −0,11 |
+
+Il limiter: 0,00 dB di riduzione in tutti i 18 casi, prima e dopo. Picco d'uscita adesso da −3,0
+a −21,9 dBFS: segue l'ingresso, come deve.
+
+La build installata su questo Mac (24 agosto) ha ancora `outGain = loudness_target + 14`: +5 dB fissi
+sulla trap, più tutti i difetti della revisione ostile. È lì il "suona tutto fortissimo": +6÷7 LU a
+gain normale, +10÷12 LU a gain basso. `main` aveva già ridotto il problema a ±2 LU, ma ancora con un
+target di master applicato alla voce e una differenza che dipendeva dal gain d'ingresso.
+
+## 2. La correzione: level match
+
+- `outGain` nelle regole è `0`: un ritocco **relativo**. Il target di loudness resta nel preset solo
+  come riferimento per il master (e nella ricetta Logic, che lo dice).
+- Nuovo parametro `autoGain` ("Level Match", acceso di default; id nuovo, nessun id rinominato).
+- Il DSP pesa con la pesatura K sia l'**ingresso grezzo** (prima del trim: è quello che si sente col
+  plugin in bypass) sia l'uscita della catena, e chiude blocchi da 400 ms ogni 100 ms con **i due gate
+  della norma** (assoluto e relativo a −10 LU), separatamente per ingresso e uscita: due meter
+  BS.1770, con memoria esponenziale di `window_s` secondi. Il guadagno è la radice del rapporto, a
+  rampa moltiplicativa, entro ±`max_gain_db`. Sta prima del limiter, che resta l'ultimo stadio.
+- Numeri in `rules.json` → `io_defaults.level_match`. Le costanti della norma (400/100 ms, −10 LU,
+  −0,691 dB, coefficienti K) stanno in `plugin/source/KWeighting.h`.
+
+Due tentativi scartati, misurati:
+1. **media di potenza semplice** sui blocchi in cui l'ingresso supera il gate: glockyy a −24 dBFS
+   finiva a +1,67 LU. Il gate della catena abbassa le code delle frasi; la norma le esclude dalla
+   misura, una media di potenza no. Pareggiare un numero diverso da quello che legge un meter non serve.
+2. **agganciare il primo blocco** senza rampa: il gate parte chiuso (quarto giro), quindi il primo blocco
+   esce quasi muto e da solo chiede +18 dB. Il limiter arrivava a 5,2 dB. Adesso il guadagno resta a
+   0 dB per i primi `warmup_s` di segnale.
+
+## 3. ASCOLTA: il trim misurato
+
+`inTrim = clamp(target_peak − input_peak, −24, 24)`. `input_peak` è il picco **misurato** se c'è una
+misura, altrimenti `assumed_peak` del profilo, e il `why` dice quale dei due ("picchi misurati su 6 s
+della tua voce" / "stimati dal profilo"). È la regola di CLAUDE.md: le misure sovrascrivono le stime.
+
+Il thread audio raccoglie finestre da 50 ms sul segnale grezzo. Contano solo quelle con RMS sopra
+`gate_dbfs`, cioè il silenzio non conta. Il picco di lavoro è il **95° percentile** dei picchi di
+finestra, non il massimo, così una plosiva isolata non decide. Tutto è preallocato. La misura si salva
+nello stato del plugin e ogni FORGE successivo la usa. Applicata da sola cambia **solo** il trim: le
+soglie della catena sono riferite al livello di lavoro, che il trim ristabilisce, e i ritocchi a mano
+restano.
+
+Self-test su una take registrata bassa (picco vero −24 dBFS): picco di lavoro misurato −25,7 dBFS,
+trim da −6,0 (presunto: la take veniva **abbassata** di altri 6 dB) a +13,7 dB.
+
+## 4. Il limite residuo, aggiornato
+
+Il limite del §6 del quarto giro (a −18 dBFS de-esser e room tamer non agganciano perché `work_peak`
+è una stima) adesso ha una risposta: con ASCOLTA il trim porta la voce vera al livello di lavoro e le
+soglie tornano esatte. Senza ASCOLTA resta tutto come prima. Il level match non lo risolve: pareggia
+il volume, non il livello a cui lavorano le soglie.

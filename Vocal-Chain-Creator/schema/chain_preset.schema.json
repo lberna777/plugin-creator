@@ -73,8 +73,18 @@
       "type": "object",
       "required": ["loudness_target_lufs", "true_peak_ceiling_dbfs"],
       "properties": {
-        "loudness_target_lufs":   { "type": "number" },
+        "loudness_target_lufs":   { "type": "number", "description": "Target del MASTER, solo riferimento: la voce esce a volume pareggiato." },
         "true_peak_ceiling_dbfs": { "type": "number" }
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "description": "Presente solo se il trim è stato MISURATO con ASCOLTA: sostituisce il picco presunto dal profilo.",
+      "required": ["peak_dbfs", "rms_dbfs", "seconds"],
+      "properties": {
+        "peak_dbfs": { "type": "number" },
+        "rms_dbfs":  { "type": ["number", "null"] },
+        "seconds":   { "type": "number" }
       }
     },
     "sends": {

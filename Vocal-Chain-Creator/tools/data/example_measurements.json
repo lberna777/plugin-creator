@@ -1,0 +1,7 @@
+{
+  "notes": "Preset d'esempio con il trim MISURATO (ASCOLTA nel plugin): la parità Python ↔ C++ deve valere anche quando la misura sostituisce il picco presunto dal profilo. Sono i numeri di una take registrata a gain basso. Dati di esempio, non regole: per questo non stanno in rules.json.",
+  "examples": [
+    { "prompt": "voce trap aggressiva ma non stridula",
+      "measurement": { "peak_dbfs": -21.4, "rms_dbfs": -35.2, "seconds": 6.0 } }
+  ]
+}

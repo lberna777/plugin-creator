@@ -45,6 +45,9 @@ APVTS::ParameterLayout VocalForgeProcessor::createLayout()
                 boolParam  ("polarity", "Polarity", false),
                 floatParam ("outGain", "Output", -24.0f, 12.0f, 0.0f, "dB"),
                 floatParam ("mix",     "Mix", 0.0f, 100.0f, 100.0f, "%"));
+    // AGGIUNTO dopo la 1.0: id nuovo, nessun id esistente rinominato (le sessioni salvate restano valide).
+    // Acceso: la voce esce alla loudness con cui è entrata, e outGain diventa un ritocco relativo.
+    layout.add (boolParam ("autoGain", "Level Match", true));
 
     // gate
     layout.add (boolParam ("gateOn", "Gate", true),
@@ -197,6 +200,9 @@ VocalForgeProcessor::VocalForgeProcessor()
       apvts (*this, nullptr, "VOCAL_FORGE", createLayout())
 {
     rulesEngine.loadFromJson (juce::String::fromUTF8 (BinaryData::rules_json, BinaryData::rules_jsonSize));
+    levelMatch     = rulesEngine.getLevelMatch();
+    listenSettings = rulesEngine.getListen();
+    listenWindowPeaks.assign (static_cast<size_t> (juce::jmax (1, listenSettings.maxWindows)), 0.0f);
 
     promptState.setProperty (promptProperty, "", nullptr);
     promptState.setProperty (profileProperty, vf::RulesEngine::defaultProfileId(), nullptr);
@@ -265,6 +271,12 @@ vf::ChainSettings VocalForgeProcessor::currentSettings() const
     vf::ChainSettings s;
     s.inTrim = value ("inTrim");  s.polarity = flag ("polarity");
     s.outGain = value ("outGain"); s.mix = value ("mix");
+    s.autoGain = flag ("autoGain");
+    s.levelMatchWindowS  = static_cast<float> (levelMatch.windowSeconds);
+    s.levelMatchGateLufs = static_cast<float> (levelMatch.gateLufs);
+    s.levelMatchMaxDb    = static_cast<float> (levelMatch.maxGainDb);
+    s.levelMatchRampMs   = static_cast<float> (levelMatch.rampMs);
+    s.levelMatchWarmupS  = static_cast<float> (levelMatch.warmupSeconds);
 
     s.gateOn = flag ("gateOn");
     s.gateThresh = value ("gateThresh"); s.gateRange = value ("gateRange");
@@ -353,6 +365,8 @@ void VocalForgeProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::
 
     if (settingsDirty.exchange (false))
         chain.setSettings (currentSettings());
+
+    listen (buffer);                         // ASCOLTA guarda il segnale GREZZO, prima del trim
 
     double bpm = 120.0;
     if (auto* playHead = getPlayHead())
@@ -511,7 +525,7 @@ void VocalForgeProcessor::applyPrompt (const juce::String& prompt, const juce::S
     promptState.setProperty (promptProperty, prompt, nullptr);
     promptState.setProperty (profileProperty, profileId, nullptr);
 
-    lastPreset = rulesEngine.compile (prompt, profileId);
+    lastPreset = rulesEngine.compile (prompt, profileId, getMeasurement());
     writePresetToParameters (lastPreset);
     chainGenerated.store (true);
     touchedByHand.store (false);
@@ -575,13 +589,163 @@ void VocalForgeProcessor::setStateInformation (const void* data, int sizeInBytes
             state.removeChild (storedPrompt, nullptr);
             chainGenerated.store (getPrompt().isNotEmpty());
             if (chainGenerated.load() && rulesEngine.isLoaded())
-                lastPreset = rulesEngine.compile (getPrompt(), getProfileId());
+                lastPreset = rulesEngine.compile (getPrompt(), getProfileId(), getMeasurement());
         }
 
         apvts.replaceState (state);
         settingsDirty.store (true);
         presetRevision.fetch_add (1);
     }
+}
+
+//==============================================================================
+namespace
+{
+    const juce::Identifier measuredPeakProperty    { "measuredPeakDbfs" };
+    const juce::Identifier measuredRmsProperty     { "measuredRmsDbfs" };
+    const juce::Identifier measuredSecondsProperty { "measuredSeconds" };
+}
+
+bool VocalForgeProcessor::startListening()
+{
+    if (listenState.load() != static_cast<int> (ListenState::idle)) return false;
+
+    // il thread audio non tocca questi campi finché lo stato non diventa "listening"
+    const auto sampleRate = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+    listenWindowLength  = juce::jmax (1, static_cast<int> (sampleRate * listenSettings.windowMs * 0.001));
+    listenNeededWindows = juce::jlimit (1, static_cast<int> (listenWindowPeaks.size()),
+                                        juce::roundToInt (listenSettings.seconds * 1000.0 / listenSettings.windowMs));
+    listenWindowFill = 0;
+    listenWindowSumSquares = listenVoicedSumSquares = 0.0;
+    listenWindowPeak = 0.0f;
+    listenVoicedSamples = 0;
+    listenWindows.store (0);
+    listenState.store (static_cast<int> (ListenState::listening), std::memory_order_release);
+    return true;
+}
+
+void VocalForgeProcessor::cancelListening()
+{
+    auto expected = static_cast<int> (ListenState::listening);
+    // il thread audio chiude l'ascolto al blocco successivo: così non scrive mentre qui si azzera
+    if (! listenState.compare_exchange_strong (expected, static_cast<int> (ListenState::cancelRequested)))
+    {
+        expected = static_cast<int> (ListenState::done);
+        listenState.compare_exchange_strong (expected, static_cast<int> (ListenState::idle));
+    }
+}
+
+float VocalForgeProcessor::getListenProgress() const noexcept
+{
+    return listenNeededWindows > 0 ? juce::jlimit (0.0f, 1.0f, listenWindows.load() / static_cast<float> (listenNeededWindows))
+                                   : 0.0f;
+}
+
+void VocalForgeProcessor::listen (const juce::AudioBuffer<float>& rawInput) noexcept
+{
+    const auto state = listenState.load (std::memory_order_acquire);
+    if (state == static_cast<int> (ListenState::cancelRequested))
+    {
+        listenState.store (static_cast<int> (ListenState::idle));
+        return;
+    }
+    if (state != static_cast<int> (ListenState::listening)) return;
+
+    const auto channels = juce::jmax (1, getTotalNumInputChannels());
+    const auto gate = juce::Decibels::decibelsToGain (static_cast<float> (listenSettings.gateDbfs));
+
+    for (int sample = 0; sample < rawInput.getNumSamples(); ++sample)
+    {
+        float peak = 0.0f;
+        double square = 0.0;
+        for (int ch = 0; ch < juce::jmin (channels, rawInput.getNumChannels()); ++ch)
+        {
+            const auto x = rawInput.getSample (ch, sample);
+            peak = juce::jmax (peak, std::abs (x));
+            square = juce::jmax (square, static_cast<double> (x) * x);
+        }
+        listenWindowPeak = juce::jmax (listenWindowPeak, peak);
+        listenWindowSumSquares += square;
+
+        if (++listenWindowFill < listenWindowLength) continue;
+
+        // finestra chiusa: conta solo se è voce (RMS sopra il gate), il silenzio non decide il trim
+        const auto rms = std::sqrt (listenWindowSumSquares / listenWindowLength);
+        if (rms > gate)
+        {
+            const auto index = listenWindows.load();
+            listenWindowPeaks[static_cast<size_t> (index)] = listenWindowPeak;
+            listenVoicedSumSquares += listenWindowSumSquares;
+            listenVoicedSamples += listenWindowLength;
+            listenWindows.store (index + 1);
+            if (index + 1 >= listenNeededWindows)
+            {
+                listenState.store (static_cast<int> (ListenState::done), std::memory_order_release);
+                return;
+            }
+        }
+        listenWindowFill = 0;
+        listenWindowSumSquares = 0.0;
+        listenWindowPeak = 0.0f;
+    }
+}
+
+bool VocalForgeProcessor::finishListeningIfReady()
+{
+    if (listenState.load (std::memory_order_acquire) != static_cast<int> (ListenState::done)) return false;
+
+    // percentile dei picchi di finestra: una plosiva isolata non deve decidere il trim
+    std::vector<float> peaks (listenWindowPeaks.begin(), listenWindowPeaks.begin() + listenWindows.load());
+    const auto rank = static_cast<size_t> (std::floor (listenSettings.peakPercentile * 0.01 * (peaks.size() - 1)));
+    std::nth_element (peaks.begin(), peaks.begin() + static_cast<std::ptrdiff_t> (rank), peaks.end());
+
+    vf::Measurement measurement;
+    measurement.valid    = true;
+    measurement.peakDbfs = juce::Decibels::gainToDecibels (peaks[rank], -100.0f);
+    measurement.rmsDbfs  = juce::Decibels::gainToDecibels (
+        static_cast<float> (std::sqrt (listenVoicedSumSquares / juce::jmax<juce::int64> (1, listenVoicedSamples))), -100.0f);
+    measurement.seconds  = static_cast<double> (listenVoicedSamples) / juce::jmax (1.0, getSampleRate());
+    listenState.store (static_cast<int> (ListenState::idle));
+
+    // arrotondata come la scriverebbe il JSON: lo stato salvato ricompila uguale
+    measurement.peakDbfs = std::round (measurement.peakDbfs * 10.0) / 10.0;
+    measurement.rmsDbfs  = std::round (measurement.rmsDbfs * 10.0) / 10.0;
+    measurement.seconds  = std::round (measurement.seconds * 10.0) / 10.0;
+
+    promptState.setProperty (measuredPeakProperty, measurement.peakDbfs, nullptr);
+    promptState.setProperty (measuredRmsProperty, measurement.rmsDbfs, nullptr);
+    promptState.setProperty (measuredSecondsProperty, measurement.seconds, nullptr);
+
+    // Solo il trim cambia: le soglie della catena sono riferite al livello di lavoro, che il trim
+    // ristabilisce. Il resto dei parametri (anche quelli ritoccati a mano) resta com'è.
+    const auto compiled = rulesEngine.compile (getPrompt(), getProfileId(), measurement);
+    if (const auto* trim = compiled.find ("trim"))
+        if (const auto* inTrim = trim->find ("inTrim"))
+            if (auto* parameter = apvts.getParameter ("inTrim"))
+            {
+                const auto wasWriting = writingPreset.exchange (true);   // non è un ritocco a mano
+                parameter->beginChangeGesture();
+                parameter->setValueNotifyingHost (parameter->convertTo0to1 (static_cast<float> (inTrim->asDouble())));
+                parameter->endChangeGesture();
+                writingPreset.store (wasWriting);
+            }
+
+    if (chainGenerated.load()) lastPreset = compiled;     // il why del trim ora dice "misurati"
+    presetRevision.fetch_add (1);
+    return true;
+}
+
+vf::Measurement VocalForgeProcessor::getMeasurement() const
+{
+    vf::Measurement measurement;
+    if (promptState.hasProperty (measuredPeakProperty))
+    {
+        measurement.valid    = true;
+        measurement.peakDbfs = static_cast<double> (promptState.getProperty (measuredPeakProperty));
+        measurement.rmsDbfs  = static_cast<double> (promptState.getProperty (measuredRmsProperty, 0.0));
+        measurement.seconds  = static_cast<double> (promptState.getProperty (measuredSecondsProperty, 0.0));
+    }
+    return measurement;
 }
 
 juce::AudioProcessorEditor* VocalForgeProcessor::createEditor()

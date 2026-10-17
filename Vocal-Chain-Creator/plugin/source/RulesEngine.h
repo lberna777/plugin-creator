@@ -52,6 +52,13 @@ struct Intent
     std::set<juce::String> integerAxes;      // assi finiti su un estremo intero del range
 };
 
+/** Quello che ASCOLTA ha misurato sulla voce vera. Se c'è, sostituisce il picco presunto dal profilo. */
+struct Measurement
+{
+    bool   valid = false;
+    double peakDbfs = 0.0, rmsDbfs = 0.0, seconds = 0.0;
+};
+
 struct Preset
 {
     juce::String prompt, profileId, rulesVersion, artist, artistSound;
@@ -61,6 +68,7 @@ struct Preset
     juce::StringArray   warnings;
     double loudnessTargetLufs = 0.0, truePeakCeilingDb = 0.0, declaredLatencyMs = 0.0;
     bool   stereoIsDualMono = true;
+    Measurement measurement;                  // valid == false: trim stimato dal profilo
 
     const Module* find (juce::StringRef moduleId) const;
     const Send*   sendOfGroup (juce::StringRef group) const;
@@ -96,9 +104,18 @@ public:
     /** testo → assi. Deterministico: stesso testo, stesso intento. */
     Intent parseIntent (const juce::String& prompt) const;
 
-    /** testo + profilo → preset completo di catena e mandate. */
+    /** testo + profilo (+ misura di ASCOLTA, se c'è) → preset completo di catena e mandate. */
     Preset compile (const juce::String& prompt,
-                    const juce::String& profileId = defaultProfileId()) const;
+                    const juce::String& profileId = defaultProfileId(),
+                    const Measurement& measurement = {}) const;
+
+    /** Il level match dell'uscita (rules.json → io_defaults.level_match). */
+    struct LevelMatchSettings { double windowSeconds = 0.0, gateLufs = 0.0, maxGainDb = 0.0, rampMs = 0.0, warmupSeconds = 0.0; };
+    LevelMatchSettings getLevelMatch() const;
+
+    /** ASCOLTA (rules.json → io_defaults.listen). */
+    struct ListenSettings { double seconds = 0.0, windowMs = 0.0, gateDbfs = 0.0, peakPercentile = 0.0; int maxWindows = 0; };
+    ListenSettings getListen() const;
 
 private:
     juce::var rules;
@@ -111,7 +128,7 @@ private:
         double get (juce::StringRef name, bool& found) const;
     };
 
-    Context buildContext (const Intent&, const juce::var& profile) const;
+    Context buildContext (const Intent&, const juce::var& profile, const Measurement&) const;
     Param   resolveParam (const juce::String& id, const juce::var& spec, const Context&,
                           juce::StringArray& errors) const;
     juce::String formatWhy (const juce::String& tmpl, const Context&) const;

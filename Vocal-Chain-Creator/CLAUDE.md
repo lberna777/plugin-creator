@@ -28,8 +28,10 @@ In caso di conflitto vince la regola **più restrittiva**.
 - **Room-tamer**: massimo 3 notch, Q stretti, **attenuazione dinamica** (agiscono solo quando la risonanza supera
   la soglia), guadagno complessivo mai oltre −8 dB su una singola banda.
 - **Compressione in due stadi**: nessuno stadio da solo può superare **6 dB** di riduzione.
-- **Gain staging esplicito**: input trim porta al target di lavoro, output porta al target di loudness dichiarato
-  nel preset. Nessuno stadio interno può clippare con ingresso a −6 dBFS di picco.
+- **Gain staging esplicito**: input trim porta al target di lavoro (misurato con ASCOLTA quando c'è, stimato dal
+  profilo altrimenti). L'uscita è **a volume pareggiato**: catena accesa e spenta hanno la stessa loudness (±1 LU).
+  Il target di loudness è del master, **mai** della traccia vocale: nessuna regola lo applica alla voce.
+  Nessuno stadio interno può clippare con ingresso a −6 dBFS di picco.
 - Il **riverbero/delay non è mai in serie**: la voce esce asciutta dalla catena e gli effetti di ambiente
   vivono su **due bus paralleli** (uno reverb, uno delay), ognuno filtrato HP+LP e duckato dalla voce.
   Un send non può superare −6 dB. Il gruppo sceglie **una sola** variante, per priorità, in modo deterministico.
@@ -61,4 +63,4 @@ In caso di conflitto vince la regola **più restrittiva**.
 
 ## Test — prima di dire "funziona"
 Oltre alla `CHECKLIST.md` del padre: null-test con tutti i moduli off, sibilanti, plosive, gate sul noise
-floor reale della stanza, parità Python↔C++, target loudness ±1 LU. Dettaglio in `CHECKLIST.md`.
+floor reale della stanza, parità Python↔C++, catena accesa ≈ spenta ±1 LU (level match). Dettaglio in `CHECKLIST.md`.

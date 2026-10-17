@@ -38,6 +38,8 @@ dalla catena e l'ambiente (riverbero/delay) si aggiunge dopo, in mandata. Vedi `
      Il preset dichiara `io.stereo_is_dual_mono: true`.
 - Livello di lavoro consigliato in registrazione: picchi **−12 dBFS**, medio ~−18 dBFS.
   L'`inTrim` della chain porta il segnale reale a quel target; il target è nel preset, non nel codice.
+  Con **ASCOLTA** il picco del segnale reale si misura (qualche secondo di voce) invece di presumerlo
+  da `assumed_peak_dbfs`: la misura vince sulla stima, e il `why` del trim dice quale delle due ha deciso.
 
 ## 4. Codifica nel preset
 ```json

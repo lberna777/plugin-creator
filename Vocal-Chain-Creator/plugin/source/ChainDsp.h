@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_dsp/juce_dsp.h>
 #include <atomic>
+#include "KWeighting.h"
 
 /*  VOCAL FORGE — la catena audio.
 
@@ -21,6 +22,13 @@ struct ChainSettings
     // globali
     float inTrim = 0.0f, outGain = 0.0f, mix = 100.0f;
     bool  polarity = false;
+
+    /*  Level match: l'uscita torna alla loudness dell'ingresso GREZZO (prima del trim), così
+        catena accesa e spenta si confrontano a pari volume. outGain resta un ritocco relativo
+        sopra questo. I tempi vengono da rules.json (io_defaults.level_match). */
+    bool  autoGain = true;
+    float levelMatchWindowS = 6.0f, levelMatchGateLufs = -55.0f, levelMatchMaxDb = 18.0f, levelMatchRampMs = 250.0f,
+          levelMatchWarmupS = 0.4f;
 
     // gate
     bool  gateOn = true;
@@ -90,6 +98,8 @@ struct ChainMeters
     std::atomic<float> inPeak { 0.0f }, outPeak { 0.0f };
     std::atomic<float> gateGr { 0.0f }, ds1Gr { 0.0f }, comp1Gr { 0.0f },
                        comp2Gr { 0.0f }, ds2Gr { 0.0f }, limGr { 0.0f };
+    /** Correzione applicata dal level match, in dB (negativa = la catena alzava e il plugin riabbassa). */
+    std::atomic<float> levelMatchDb { 0.0f };
 };
 
 class ChainDsp
@@ -187,6 +197,11 @@ private:
     void refreshTiltCoefficients();
     float syncedDelayMs() const noexcept;
     void processLimiter (juce::AudioBuffer<float>&, int numSamples);
+    /** Potenza pesata K per campione (somma dei canali) del segnale GREZZO, in levelScratch. */
+    void measureInput (const juce::AudioBuffer<float>&, int numSamples) noexcept;
+    /** Pesa l'uscita, chiude i blocchi da 400 ms e aggiorna il guadagno del level match. */
+    void updateLevelMatch (const juce::AudioBuffer<float>&, int numSamples) noexcept;
+    void resetLevelMatchState() noexcept;
     /** Un tratto lungo al massimo quanto il blocco dichiarato in prepare. */
     void processChunk (juce::AudioBuffer<float>&, int startSample, int numSamples, double bpm);
     void processSends (const juce::AudioBuffer<float>& source, juce::AudioBuffer<float>& destination,
@@ -245,7 +260,15 @@ private:
     Envelope duckEnv;
     float delayFeedbackState[2] { 0.0f, 0.0f };
 
-    juce::dsp::BallisticsFilter<float> loudnessFollower;
+    // level match: stessa pesatura K sull'ingresso grezzo e sull'uscita della catena
+    kweighting::Filter kInput[kChannels], kOutput[kChannels];
+    kweighting::GatedLoudness loudnessIn, loudnessOut;
+    juce::AudioBuffer<float> levelScratch;          // potenza d'ingresso per campione, preallocata
+    double hopIn[kweighting::kHopsPerBlock] {}, hopOut[kweighting::kHopsPerBlock] {};
+    double hopSumIn = 0.0, hopSumOut = 0.0;
+    int    hopLength = 1, hopFill = 0, hopIndex = 0, hopsSeen = 0;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> levelMatchGain;
+    float levelMatchRampMs = -1.0f;            // la rampa si ridimensiona solo se le regole la cambiano
     bool prepared = false;
     /*  Alla partenza i valori smussati devono trovarsi GIÀ sul loro obiettivo: altrimenti il primo
         blocco rampa da un residuo del render precedente, e due render identici non coincidono. */

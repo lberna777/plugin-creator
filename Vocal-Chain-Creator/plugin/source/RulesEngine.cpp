@@ -328,6 +328,30 @@ juce::String RulesEngine::getRulesVersion() const
     return rules.getProperty ("version", juce::String()).toString();
 }
 
+RulesEngine::LevelMatchSettings RulesEngine::getLevelMatch() const
+{
+    const auto node = rules.getProperty ("io_defaults", {}).getProperty ("level_match", {});
+    LevelMatchSettings s;
+    s.windowSeconds = static_cast<double> (node.getProperty ("window_s", 0.0));
+    s.gateLufs      = static_cast<double> (node.getProperty ("gate_lufs", 0.0));
+    s.maxGainDb     = static_cast<double> (node.getProperty ("max_gain_db", 0.0));
+    s.rampMs        = static_cast<double> (node.getProperty ("ramp_ms", 0.0));
+    s.warmupSeconds = static_cast<double> (node.getProperty ("warmup_s", 0.0));
+    return s;
+}
+
+RulesEngine::ListenSettings RulesEngine::getListen() const
+{
+    const auto node = rules.getProperty ("io_defaults", {}).getProperty ("listen", {});
+    ListenSettings s;
+    s.seconds        = static_cast<double> (node.getProperty ("seconds", 0.0));
+    s.windowMs       = static_cast<double> (node.getProperty ("window_ms", 0.0));
+    s.gateDbfs       = static_cast<double> (node.getProperty ("gate_dbfs", 0.0));
+    s.peakPercentile = static_cast<double> (node.getProperty ("peak_percentile", 0.0));
+    s.maxWindows     = static_cast<int>    (node.getProperty ("max_windows", 0));
+    return s;
+}
+
 juce::StringArray RulesEngine::getProfileIds() const
 {
     juce::StringArray ids;
@@ -595,7 +619,8 @@ double RulesEngine::Context::get (juce::StringRef name, bool& found) const
     return found ? it->second : 0.0;
 }
 
-RulesEngine::Context RulesEngine::buildContext (const Intent& intent, const juce::var& profile) const
+RulesEngine::Context RulesEngine::buildContext (const Intent& intent, const juce::var& profile,
+                                                const Measurement& measurement) const
 {
     Context ctx;
     for (auto& axis : intent.axes)
@@ -637,6 +662,17 @@ RulesEngine::Context RulesEngine::buildContext (const Intent& intent, const juce
     number ("presence_peak", mic.getProperty ("presence_peak", 0));
     number ("target_peak", iface.getProperty ("target_peak_dbfs", 0));
     number ("assumed_peak", iface.getProperty ("assumed_peak_dbfs", 0));
+    // la misura di ASCOLTA, se c'è, sostituisce il picco presunto (stessa scelta di chain_compiler.py)
+    ctx.vars["measured"] = measurement.valid ? 1.0 : 0.0;
+    if (measurement.valid)
+    {
+        ctx.vars["input_peak"] = measurement.peakDbfs;
+        ctx.floatVars.insert ("input_peak");
+    }
+    else
+    {
+        number ("input_peak", iface.getProperty ("assumed_peak_dbfs", 0));
+    }
 
     const juce::StringArray rhythmic { "trap", "rap", "edm", "metal" };
     ctx.vars["genre_is_rhythmic"] = rhythmic.contains (intent.genre) ? 1.0 : 0.0;
@@ -658,6 +694,9 @@ RulesEngine::Context RulesEngine::buildContext (const Intent& intent, const juce
     ctx.text["pitch_class"] = intent.pitchClass;
     ctx.text["delivery"]    = intent.delivery;
     ctx.text["genre"]       = intent.genre;
+    ctx.text["trim_source"] = measurement.valid
+        ? "misurati su " + juce::String (juce::roundToInt (measurement.seconds)) + " s della tua voce"
+        : juce::String ("stimati dal profilo");
     return ctx;
 }
 
@@ -770,7 +809,8 @@ namespace
     }
 }
 
-Preset RulesEngine::compile (const juce::String& prompt, const juce::String& profileId) const
+Preset RulesEngine::compile (const juce::String& prompt, const juce::String& profileId,
+                             const Measurement& measurement) const
 {
     juce::StringArray expressionErrors;
     auto evaluateChecked = [&expressionErrors] (const juce::String& expression,
@@ -790,7 +830,8 @@ Preset RulesEngine::compile (const juce::String& prompt, const juce::String& pro
     preset.intent = parseIntent (prompt);
     preset.artist      = preset.intent.artist;
     preset.artistSound = preset.intent.artistSound;
-    const auto ctx = buildContext (preset.intent, profile);
+    preset.measurement = measurement;
+    const auto ctx = buildContext (preset.intent, profile, measurement);
 
     if (auto* chain = rules.getProperty ("chain", {}).getArray())
         for (auto& spec : *chain)

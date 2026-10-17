@@ -51,6 +51,9 @@ private:
 
     juce::TextEditor   promptBox;
     juce::TextButton   forgeButton { "FORGE" };
+    juce::TextButton   listenButton { "ASCOLTA" };      // trim misurato sulla voce vera
+    void toggleListening();
+    void refreshListenButton();
     juce::ComboBox     profileBox, sendsModeBox, artistBox;
     juce::Label        titleLabel, statusLabel, whyTitle, whyLabel, sendsLabel, artistLabel;
     juce::TextEditor   whyBox, sendsBox;
@@ -73,7 +76,7 @@ private:
 
     int lastPresetRevision = -1;           // la UI segue il contatore del processore (R5, R11)
     int selectedModule = 6;                       // Comp 1: il modulo che si guarda per primo
-    float inLevel = 0.0f, outLevel = 0.0f;
+    float inLevel = 0.0f, outLevel = 0.0f, levelMatchDb = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VocalForgeEditor)
 };

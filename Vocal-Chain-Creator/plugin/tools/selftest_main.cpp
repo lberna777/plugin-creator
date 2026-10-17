@@ -9,6 +9,8 @@
       · stato salvato e riletto: prompt e parametri tornano uguali
 */
 #include "../source/PluginProcessor.h"
+#include "LoudnessMeter.h"
+#include "TestVoice.h"
 #include <iostream>
 #include <random>
 #include <atomic>
@@ -290,6 +292,16 @@ namespace
                 worst = juce::jmax (worst, std::abs (data[sample] - data[sample - 1]));
         }
         return worst;
+    }
+
+    /*  Le misure di STADIO (acceso contro spento, wet isolato per sottrazione) vogliono il guadagno
+        d'uscita fermo. Il level match sta a valle di tutto e compensa proprio l'energia che lo stadio
+        toglie o aggiunge: con lui acceso il room tamer sembrerebbe non tagliare e il wet di una mandata
+        non si isolerebbe più per differenza. Si spegne qui, come si spengono i moduli a valle; la
+        sezione che misura il level match lo riaccende. */
+    void freezeLevelMatch (VocalForgeProcessor& processor)
+    {
+        if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (0.0f);
     }
 
     void setAllModules (VocalForgeProcessor& processor, bool on)
@@ -665,6 +677,7 @@ int main()
             processor.setRateAndBufferSizeDetails (sampleRate, span);
             processor.prepareToPlay (sampleRate, span);
             processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+            freezeLevelMatch (processor);
 
             for (auto* id : { "revOn", "dlyOn", "fxOn" })
                 if (auto* p = processor.apvts.getParameter (id))
@@ -767,6 +780,7 @@ int main()
             for (auto* id : { "eqSubOn", "ds1On", "c1On", "c2On", "satOn", "eqToneOn", "ds2On",
                               "limOn", "revOn", "dlyOn", "fxOn" })
                 if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (0.0f);
+            freezeLevelMatch (processor);
             for (auto* id : { "outGain", "satTilt" })
                 if (auto* p = processor.apvts.getParameter (id)) p->setValueNotifyingHost (p->convertTo0to1 (0.0f));
             if (auto* p = processor.apvts.getParameter ("mix")) p->setValueNotifyingHost (p->convertTo0to1 (100.0f));
@@ -869,6 +883,7 @@ int main()
             processor.setRateAndBufferSizeDetails (sampleRate, span);
             processor.prepareToPlay (sampleRate, span);
             processor.applyPrompt (juce::String (artist), vf::RulesEngine::defaultProfileId());
+            freezeLevelMatch (processor);
             if (mixOverride > 0.0f)
                 if (auto* p = processor.apvts.getParameter ("mix"))
                     p->setValueNotifyingHost (p->convertTo0to1 (mixOverride));
@@ -1349,6 +1364,9 @@ int main()
         const double sampleRate = 48000.0;
         prepare (sampleRate);
         processor.applyPrompt ("voce tipo sfera ebbasta", vf::RulesEngine::defaultProfileId());
+        // il level match (blocchi da 400 ms) e ASCOLTA girano nel thread audio: devono esserci dentro
+        if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (1.0f);
+        processor.startListening();
 
         juce::AudioBuffer<float> buffer (2, blockSize);
         fillVoiceLike (buffer, sampleRate, 0.4f);
@@ -1357,14 +1375,14 @@ int main()
         vfalloc::count.store (0);
         vfalloc::armed.store (true);
         const auto heapBefore = heapInUse();
-        for (int i = 0; i < 10; ++i) processor.processBlock (buffer, midi);
+        for (int i = 0; i < 60; ++i) processor.processBlock (buffer, midi);   // > 600 ms: blocchi di loudness chiusi
         const auto heapAfter = heapInUse();
         vfalloc::armed.store (false);
         const auto steady = vfalloc::count.load();
         check (steady == 0 && heapBefore == heapAfter, "processBlock non alloca (regime)",
                juce::String (steady) + " new, heap "
                + juce::String (static_cast<juce::int64> (heapAfter) - static_cast<juce::int64> (heapBefore))
-               + " byte in 10 blocchi");
+               + " byte in 60 blocchi (level match e ASCOLTA attivi)");
 
         if (auto* p = processor.apvts.getParameter ("c1Thresh"))
             p->setValueNotifyingHost (p->convertTo0to1 (-18.0f));
@@ -1375,6 +1393,8 @@ int main()
         const auto moved = vfalloc::count.load();
         check (moved == 0, "processBlock non alloca dopo un movimento di automazione",
                juce::String (moved) + " allocazioni");
+        processor.cancelListening();
+        processor.processBlock (buffer, midi);           // il thread audio chiude l'ascolto annullato
     }
 
     // ---- il limiter e' un tetto: niente puo' stargli dopo
@@ -1767,6 +1787,208 @@ int main()
         check (processor.getPrompt() == "r&b intimo, voce calda e morbida", "il prompt torna dallo stato salvato");
         check (std::abs (processor.apvts.getRawParameterValue ("c1Thresh")->load() - beforeThresh) < 1.0e-4f,
                "i parametri tornano dallo stato salvato");
+    }
+
+    /*  ---- QUINTO GIRO: USCITA A VOLUME PAREGGIATO (knowledge/TUNING.md, "Quinto giro").
+
+        Il difetto: la catena portava la voce verso il target di loudness del MASTER (-9 LUFS per la
+        trap). Acceso, il plugin suonava sempre più forte che spento (+6/+12 LU sulla build installata),
+        e più forte sembra sempre meglio: non si poteva giudicare la catena. Adesso l'uscita deve avere
+        la loudness dell'ingresso grezzo, misurata come un meter BS.1770 la leggerebbe (loudness
+        integrata su 12 s di take), a qualunque gain d'ingresso. E il limiter resta un tetto.
+        Se il level match si rompe, o se qualcuno rimette un target di loudness sulla voce, qui si vede. */
+    {
+        const double sampleRate = 48000.0;
+        const int seconds = 12;
+        const float maxDifferenceLu = 1.0f;     // il compito: acceso ≈ spento, entro ±1 LU
+        const float maxLimiterGrDb  = 3.0f;     // CHAIN_ARCHITECTURE: il limiter è un tetto, non un effetto
+        const char* const trapPrompts[] { "voce trap aggressiva ma non stridula", "sfera ebbasta", "shiva",
+                                          "tony boy", "glockyy", "capo plaza" };
+
+        std::cout << "  --- level match: loudness integrata dentro/fuori, preset trap, tre gain d'ingresso" << std::endl;
+        for (auto* prompt : trapPrompts)
+            for (float peak : { -24.0f, -12.0f, -6.0f })
+            {
+                prepare (sampleRate);
+                processor.applyPrompt (prompt, vf::RulesEngine::defaultProfileId());
+                if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (1.0f);
+                processor.reset();
+
+                const int total = static_cast<int> (sampleRate) * seconds;
+                juce::AudioBuffer<float> input (2, total), output (2, total);
+                vftest::fillTake (input, sampleRate, peak);
+                output.makeCopyOf (input);
+
+                float limiterMax = 0.0f;
+                for (int start = 0; start < total; start += blockSize)
+                {
+                    float* pointers[2] { output.getWritePointer (0) + start, output.getWritePointer (1) + start };
+                    juce::AudioBuffer<float> view (pointers, 2, juce::jmin (blockSize, total - start));
+                    processor.processBlock (view, midi);
+                    limiterMax = juce::jmax (limiterMax, processor.getMeters().limGr.load());
+                }
+
+                const auto inLufs  = vftest::integratedLufs (input.getArrayOfReadPointers(), 2, total, sampleRate);
+                const auto outLufs = vftest::integratedLufs (output.getArrayOfReadPointers(), 2, total, sampleRate);
+                const auto outPeak = output.getMagnitude (0, total);
+                const juce::String label (juce::String (prompt) + " @ " + juce::String (peak, 0) + " dBFS");
+                const juce::String detail ("in " + juce::String (inLufs, 2) + " LUFS, out " + juce::String (outLufs, 2)
+                                           + " LUFS, differenza " + juce::String (outLufs - inLufs, 2) + " LU, limiter "
+                                           + juce::String (limiterMax, 2) + " dB, picco "
+                                           + juce::String (juce::Decibels::gainToDecibels (outPeak), 1) + " dBFS");
+                std::cout << "        " << label << ": " << detail << std::endl;
+
+                check (std::abs (outLufs - inLufs) <= maxDifferenceLu,
+                       label + ": acceso suona forte quanto spento (+/-1 LU)", detail);
+                check (limiterMax <= maxLimiterGrDb, label + ": il limiter resta un tetto (<= 3 dB)", detail);
+                check (outPeak <= 1.0f, label + ": nessun clipping", detail);
+            }
+
+        // Il target di loudness del master NON deve più arrivare alla voce: nessun preset spinge outGain.
+        for (auto* prompt : trapPrompts)
+        {
+            processor.applyPrompt (prompt, vf::RulesEngine::defaultProfileId());
+            const auto outGain = processor.apvts.getRawParameterValue ("outGain")->load();
+            check (std::abs (outGain) < 1.0e-4f, juce::String (prompt) + ": outGain del preset a 0 dB (niente target del master)",
+                   juce::String (outGain, 2) + " dB");
+        }
+
+        // Spento, il level match deve davvero spegnersi: è un interruttore, non un'etichetta.
+        {
+            prepare (sampleRate);
+            processor.applyPrompt ("glockyy", vf::RulesEngine::defaultProfileId());
+            if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (0.0f);
+            processor.reset();
+            juce::AudioBuffer<float> take (2, static_cast<int> (sampleRate) * 4);
+            vftest::fillTake (take, sampleRate, -24.0f);
+            for (int start = 0; start < take.getNumSamples(); start += blockSize)
+            {
+                float* pointers[2] { take.getWritePointer (0) + start, take.getWritePointer (1) + start };
+                juce::AudioBuffer<float> view (pointers, 2, juce::jmin (blockSize, take.getNumSamples() - start));
+                processor.processBlock (view, midi);
+            }
+            check (std::abs (processor.getMeters().levelMatchDb.load()) < 1.0e-3f,
+                   "level match spento: nessuna correzione applicata",
+                   juce::String (processor.getMeters().levelMatchDb.load(), 2) + " dB");
+            if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (1.0f);
+        }
+
+        // Accenderlo e spegnerlo mentre suona non deve schioccare: il guadagno si muove a rampa.
+        {
+            prepare (sampleRate);
+            processor.applyPrompt ("shiva", vf::RulesEngine::defaultProfileId());
+            if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (1.0f);
+            processor.reset();
+            const int total = static_cast<int> (sampleRate) * 3;
+            juce::AudioBuffer<float> steady (2, total), toggled (2, total);
+            for (auto* target : { &steady, &toggled })
+            {
+                prepare (sampleRate);
+                if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (1.0f);
+                processor.reset();
+                for (int start = 0, block = 0; start < total; start += blockSize, ++block)
+                {
+                    const auto count = juce::jmin (blockSize, total - start);
+                    for (int i = 0; i < count; ++i)      // sinusoide ferma: ogni discontinuità salta fuori
+                    {
+                        const auto value = 0.25f * static_cast<float> (std::sin (juce::MathConstants<double>::twoPi
+                                                                                 * 220.0 * (start + i) / sampleRate));
+                        target->setSample (0, start + i, value);
+                        target->setSample (1, start + i, value);
+                    }
+                    if (target == &toggled && block == 150)
+                        if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (0.0f);
+                    float* pointers[2] { target->getWritePointer (0) + start, target->getWritePointer (1) + start };
+                    juce::AudioBuffer<float> view (pointers, 2, count);
+                    processor.processBlock (view, midi);
+                }
+            }
+            const auto jumpSteady = maxJump (steady), jumpToggled = maxJump (toggled);
+            check (jumpToggled <= jumpSteady * 1.5f + 1.0e-4f, "spegnere il level match in corsa non produce click",
+                   "fermo " + juce::String (jumpSteady, 4) + ", con il cambio " + juce::String (jumpToggled, 4));
+            if (auto* p = processor.apvts.getParameter ("autoGain")) p->setValueNotifyingHost (1.0f);
+        }
+    }
+
+    /*  ---- ASCOLTA: il trim si misura sulla voce vera invece di presumere il picco dal profilo.
+        Prima l'inTrim usava assumed_peak (-6 dBFS per la Scarlett): con una take registrata a -24
+        il trim la abbassava di altri 6 dB e tutte le soglie della catena finivano sopra la voce. */
+    {
+        const double sampleRate = 48000.0;
+        prepare (sampleRate);
+        processor.applyPrompt ("voce trap aggressiva ma non stridula", vf::RulesEngine::defaultProfileId());
+        const auto presumedTrim = processor.apvts.getRawParameterValue ("inTrim")->load();
+
+        check (processor.startListening(), "ASCOLTA parte");
+        check (! processor.startListening(), "ASCOLTA non si avvia due volte");
+
+        // prima 3 s di silenzio di stanza: non devono contare (il silenzio non decide il trim)
+        juce::AudioBuffer<float> buffer (2, blockSize);
+        juce::Random noise (7);
+        for (int i = 0; i < static_cast<int> (3.0 * sampleRate / blockSize); ++i)
+        {
+            for (int ch = 0; ch < 2; ++ch)
+                for (int s = 0; s < blockSize; ++s) buffer.setSample (ch, s, 0.0003f * (noise.nextFloat() * 2.0f - 1.0f));
+            processor.processBlock (buffer, midi);
+        }
+        check (processor.getListenProgress() == 0.0f, "ASCOLTA: il rumore di stanza non conta come voce",
+               juce::String (processor.getListenProgress() * 100.0f, 0) + " %");
+
+        // poi la voce, registrata bassa: picco -24 dBFS
+        const float takePeakDb = -24.0f;
+        juce::AudioBuffer<float> take (2, static_cast<int> (sampleRate) * 20);
+        vftest::fillTake (take, sampleRate, takePeakDb, 31);
+        for (int start = 0; start < take.getNumSamples()
+                            && processor.getListenState() == VocalForgeProcessor::ListenState::listening; start += blockSize)
+        {
+            juce::AudioBuffer<float> chunk (2, juce::jmin (blockSize, take.getNumSamples() - start));
+            for (int ch = 0; ch < 2; ++ch) chunk.copyFrom (ch, 0, take, ch, start, chunk.getNumSamples());
+            processor.processBlock (chunk, midi);
+        }
+        check (processor.getListenState() == VocalForgeProcessor::ListenState::done, "ASCOLTA finisce da solo");
+        check (processor.finishListeningIfReady(), "ASCOLTA: la misura si applica sul message thread");
+
+        const auto measurement = processor.getMeasurement();
+        const auto measuredTrim = processor.apvts.getRawParameterValue ("inTrim")->load();
+        const juce::String detail ("picco misurato " + juce::String (measurement.peakDbfs, 1) + " dBFS (vero "
+                                   + juce::String (takePeakDb, 1) + "), RMS " + juce::String (measurement.rmsDbfs, 1)
+                                   + " dBFS su " + juce::String (measurement.seconds, 1) + " s; trim "
+                                   + juce::String (presumedTrim, 1) + " -> " + juce::String (measuredTrim, 1) + " dB");
+        std::cout << "        " << detail << std::endl;
+        // il percentile sta un po' sotto il picco assoluto (è fatto apposta: le plosive non decidono)
+        check (measurement.valid && measurement.peakDbfs <= takePeakDb + 0.1f && measurement.peakDbfs >= takePeakDb - 3.0f,
+               "ASCOLTA: il picco di lavoro misurato e' quello della take (entro 3 dB sotto il massimo)", detail);
+        check (measurement.seconds >= 5.5 && measurement.seconds <= 6.5, "ASCOLTA: ascolta i secondi dichiarati di voce", detail);
+
+        // il trim viene dalle regole, con il picco misurato al posto di quello presunto
+        const auto expected = processor.rulesEngine.compile (processor.getPrompt(), processor.getProfileId(), measurement);
+        const auto expectedTrim = static_cast<float> (expected.find ("trim")->find ("inTrim")->asDouble());
+        check (std::abs (measuredTrim - expectedTrim) < 0.05f, "ASCOLTA: l'inTrim e' quello delle regole con la misura", detail);
+        check (measuredTrim > presumedTrim + 10.0f, "ASCOLTA: una take bassa viene alzata, non abbassata come prima", detail);
+        check (expected.find ("trim")->find ("inTrim")->why.contains ("misurati"),
+               "ASCOLTA: la motivazione del trim dice che e' misurato", expected.find ("trim")->find ("inTrim")->why);
+        check (! processor.wasTouchedByHand(), "ASCOLTA non conta come ritocco a mano");
+
+        // un nuovo FORGE usa la misura, e la misura sopravvive al salvataggio del progetto
+        processor.applyPrompt ("shiva", vf::RulesEngine::defaultProfileId());
+        const auto trimAfterForge = processor.apvts.getRawParameterValue ("inTrim")->load();
+        juce::MemoryBlock state;
+        processor.getStateInformation (state);
+        VocalForgeProcessor reloaded;
+        reloaded.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+        const auto restored = reloaded.getMeasurement();
+        check (restored.valid && std::abs (restored.peakDbfs - measurement.peakDbfs) < 1.0e-6,
+               "ASCOLTA: la misura torna dallo stato salvato",
+               juce::String (restored.peakDbfs, 2) + " dBFS");
+        check (std::abs (reloaded.apvts.getRawParameterValue ("inTrim")->load() - trimAfterForge) < 1.0e-4f
+               && std::abs (trimAfterForge - measuredTrim) < 0.05f,
+               "ASCOLTA: FORGE dopo l'ascolto tiene il trim misurato",
+               juce::String (trimAfterForge, 2) + " dB");
+
+        // con il trim misurato la take arriva al livello di lavoro: picchi a -12 dBFS dopo il trim
+        const auto workPeak = takePeakDb + measuredTrim;
+        check (std::abs (workPeak - (-12.0f)) <= 3.0f, "ASCOLTA: dopo il trim la voce sta al livello di lavoro",
+               juce::String (workPeak, 1) + " dBFS di picco");
     }
 
     // ---- latenza dichiarata

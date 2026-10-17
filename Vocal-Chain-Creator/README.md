@@ -24,6 +24,8 @@ Senza compilare niente: le ricette con i soli plugin stock di Logic sono già in
    python3 tools/chain_compiler.py --examples          # rigenera examples/
    python3 -m unittest discover -s tools/tests -v      # test delle regole
    ```
+   Dopo la build, `vocalforge_selftest` controlla il DSP e `vocalforge_loudness_probe` stampa quanto la
+   catena alza o abbassa (LUFS dentro/fuori, lavoro del limiter) sui preset trap.
 4. Costruisci il plugin seguendo il loop obbligatorio: **DSP → validazione → UI da `layout.json` → render headless**.
 5. Valida con `CHECKLIST.md` (che estende quella del padre con i test specifici della voce).
 

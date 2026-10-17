@@ -20,7 +20,9 @@ Include **integralmente** `../Plugin-Creator/CHECKLIST.md`. Qui sotto solo le vo
 - [x] **null-test**: tutti i moduli off, trim 0, mix 100 → diff < −120 dBFS
 - [ ] nessuno stadio di compressione supera **6 dB** di GR sul materiale di test
 - [x] nessun clipping interno con ingresso a **−6 dBFS** di picco (check su tutti i punti di misura)
-- [ ] target loudness del preset rispettato **±1 LU** (misura integrata sul frammento di test)
+- [x] **level match**: catena accesa ≈ spenta **±1 LU** (loudness integrata BS.1770 su 12 s di take, 6 preset trap,
+      ingresso a −24 / −12 / −6 dBFS) e limiter ≤ 3 dB — `vocalforge_selftest`, numeri con `vocalforge_loudness_probe`
+- [x] **ASCOLTA**: il trim misurato sostituisce il picco presunto, il silenzio non conta, la misura torna dallo stato salvato
 - [ ] **sibilanti**: frasi con molte "s" — nessun lisp, nessuna sibilante non trattata dopo la saturazione
 - [ ] **plosive**: "p"/"b" ravvicinate — HPF e gate non producono pompaggio
 - [ ] **gate** sul noise floor reale della stanza: non taglia le code di parola, non apre sul rumore

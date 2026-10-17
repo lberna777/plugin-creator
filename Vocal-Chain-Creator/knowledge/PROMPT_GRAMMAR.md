@@ -20,7 +20,7 @@ il modello e come si estende. Lingue supportate: **italiano e inglese**, mescola
 | `pitch_class` | low/mid/high | registro della voce | tutte le frequenze centrali si spostano |
 | `delivery` | spoken/rapped/sung/screamed/whispered | tipo di esecuzione | gate, compressione, HPF |
 | `genre` | (lista) | preset di partenza degli assi | sposta tutti gli assi in blocco, poi gli aggettivi correggono |
-| `loudness_target` | LUFS | destinazione | output gain e limiter |
+| `loudness_target` | LUFS | destinazione del **master** | solo riferimento nel preset e nella ricetta: la voce esce a volume pareggiato, il target non le si applica |
 
 ## Come si compone un intento
 0. **Artista** (se riconosciuto): applica il suo vettore di assi, esecuzione, registro, target e mandate

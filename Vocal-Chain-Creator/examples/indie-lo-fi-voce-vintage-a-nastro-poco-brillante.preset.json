@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0.0",
-  "rules_version": "1.0.0",
+  "rules_version": "1.1.0",
   "artist": null,
   "artist_sound": "",
   "production_notes": [],
@@ -127,7 +127,7 @@
       "params": {
         "inTrim": {
           "value": -6.0,
-          "why": "porta i picchi stimati (-6 dBFS) al target di lavoro (-12 dBFS)",
+          "why": "porta i picchi stimati dal profilo (-6 dBFS) al target di lavoro (-12 dBFS)",
           "unit": "dB"
         },
         "polarity": {
@@ -539,11 +539,11 @@
       "id": "out",
       "label": "Output / Mix",
       "enabled": true,
-      "why": "Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
+      "why": "La voce esce allo STESSO volume percepito con cui è entrata (level match): così si confronta il suono, non il volume. Il target di loudness è del master, non della traccia vocale. Il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
       "params": {
         "outGain": {
-          "value": 4.0,
-          "why": "quanto manca davvero dal livello stimato in uscita dalla catena (-19.93 dBFS) al target di -13.0 LUFS, con tetto a 4 dB: questo stadio sta PRIMA del limiter, quindi tutto quello che chiede in più se lo mangia il limiter — e un limiter che lavora non è gain staging, è un effetto. Il resto lo fa il meter di loudness",
+          "value": 0.0,
+          "why": "ritocco RELATIVO sopra il level match: a 0 dB la voce accesa ha la stessa loudness della voce spenta. Prima qui si spingeva la voce verso -13.0 LUFS, che è il volume di un master finito: il plugin acceso suonava più forte, e più forte sembra sempre meglio",
           "unit": "dB"
         },
         "mix": {
