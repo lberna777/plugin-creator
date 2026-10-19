@@ -8,7 +8,7 @@ area lavoro): qui si opera.
   `RSU10`, `MikroBridge`) e `Vocal-Chain-Creator/` (VOCAL FORGE).
 - **Figlie** (repo storiche, si consultano e non ci si lavora): `NEMO-StereoCompressor` (le regole
   di `Plugin-Creator/CLAUDE.md` nascono dalla sua autopsia), `StereoCompressor`, `FreakFM`,
-  `acidmoog-synth`, `mixer` (vuota). Un plugin nuovo nasce qui dentro, non in una repo a parte.
+  `acidmoog-synth`. Un plugin nuovo nasce qui dentro, non in una repo a parte.
 - Mappa completa di tutte le repo: `CLAUDE.md` di `lberna777/cockpit`, sezione «Famiglia delle
   repository».
 
