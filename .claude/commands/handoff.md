@@ -33,7 +33,8 @@ l'ha lanciato l'hook del contesto). Non iniziare altro lavoro.
      > Questa chat sostituisce la sessione `<id vecchia>`, chiusa al 50% del contesto. Leggi
      > `<percorso handoff>` e i file che indica, poi riassumimi in cinque righe dove eravamo e il
      > prossimo passo, e aspetta il mio via. Come ultima azione di questo primo turno archivia la
-     > sessione `<id vecchia>` con `archive_session`.
+     > sessione `<id vecchia>` con `archive_session` e, se c'è `ArtifactData`, metti
+     > `archiviata_vecchia: true` sul documento `handoff/…` della Plancia che nomina questa sessione.
    - Se la repo dà un ruolo a ogni chat (Developing: `/principale`, `/noone`, `/portfolio`…), il
      `prompt` comincia con il comando del ruolo di questa chat, seguito dal testo sopra.
    - L'archiviazione la fa la sessione nuova, non questa: così la vecchia chiude il turno prima.
@@ -45,3 +46,9 @@ l'ha lanciato l'hook del contesto). Non iniziare altro lavoro.
 
 Se la repo ha una Plancia o un registro di giornata da aggiornare (studio in cockpit: `Vault/UniCode/stato/giornata.md`),
 l'handoff è un evento da registrare lì.
+
+**Plancia** (se c'è `ArtifactData`; prima del messaggio del punto 4): un documento
+`handoff/<AAAA-MM-GG>-<id nuova senza "session_">` con `data` (`AAAA-MM-GG`), `vecchia` e `nuova`
+(id delle sessioni), `titolo` (della nuova), `gruppo`, `repo`, `ramo`, `file` (percorso dell'handoff),
+`archiviata_vecchia: false` (lo mette a `true` la sessione nuova quando archivia la vecchia). La
+sezione Claude della Plancia mostra da lì la catena dei passaggi. Schema completo in `meta/protocollo`.
