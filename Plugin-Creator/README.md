@@ -40,6 +40,15 @@ Plugin-Creator/
 - [`MikroBridge/`](MikroBridge/) — **Mikro Bridge**: la Maschine Mikro MK2 come controller MIDI
   per qualunque DAW, senza il software Native Instruments (app macOS/Linux, hidapi + JUCE).
 
+- [`AtmosForge/`](AtmosForge/) — **ATMOS FORGE**: suite di ambienti sonori procedurali, tutto sintetizzato
+  in tempo reale, nessun sample (AU/VST3/Standalone).
+
+- [`MixCompass/`](MixCompass/) — **MIX COMPASS**: ultimo sul master, confronta il mix con un pezzo trap di
+  riferimento e dice in italiano dove differisce, con A/B allo stesso volume (AU/VST3/Standalone).
+
+- [`MacchinePisello/`](MacchinePisello/) — **Macchine Pisello**: synth semi-modulare ambient
+  (AU/VST3/Standalone).
+
 ## Le tre regole che evitano i cicli di NEMO
 
 1. **Sfondo inerte**: niente testo/indicatori/scale/parti mobili "cotti" nello sfondo. Se può cambiare o muoversi → è codice o asset separato.
