@@ -51,7 +51,17 @@ namespace
         const auto expected = juce::JSON::parse (file.loadFileAsString());
         const auto prompt   = expected.getProperty ("prompt", {}).toString();
         const auto profile  = expected.getProperty ("source_profile", {}).getProperty ("id", {}).toString();
-        const auto actual   = engine.compile (prompt, profile);
+        // un preset generato con il trim MISURATO porta la sua misura: si ricompila con quella
+        vf::Measurement measurement;
+        const auto measured = expected.getProperty ("measurement", {});
+        if (measured.isObject())
+        {
+            measurement.valid    = true;
+            measurement.peakDbfs = static_cast<double> (measured.getProperty ("peak_dbfs", 0.0));
+            measurement.rmsDbfs  = static_cast<double> (measured.getProperty ("rms_dbfs", 0.0));
+            measurement.seconds  = static_cast<double> (measured.getProperty ("seconds", 0.0));
+        }
+        const auto actual   = engine.compile (prompt, profile, measurement);
 
         std::cout << "· \"" << prompt << "\"" << std::endl;
 

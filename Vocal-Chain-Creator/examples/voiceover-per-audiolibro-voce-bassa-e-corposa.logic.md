@@ -1,9 +1,9 @@
 # Ricetta Logic — "voiceover per audiolibro, voce bassa e corposa"
 
-Generata da `chain_compiler.py` (regole v1.0.0) sul profilo `untreated_room_focusrite_scarlett`.
+Generata da `chain_compiler.py` (regole v1.1.0) sul profilo `untreated_room_focusrite_scarlett`.
 Solo plugin **stock** di Logic Pro, nella strip della traccia vocale, in quest'ordine.
 
-Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
+Ceiling **-1.0 dBFS**. La voce deve uscire allo **stesso volume percepito** con cui entra: confronta sempre la strip accesa e in bypass a pari volume (il plugin lo fa da solo, in Logic lo fai col Gain finale). Il target di -18.0 LUFS è del **master**, non della traccia vocale.
 
 ## 1. Gain — Input Trim / Polarity
 *Il gain della Scarlett viene quasi sempre impostato a occhio: porto il segnale al livello di lavoro prima che qualunque soglia in dB abbia senso.*
@@ -12,7 +12,7 @@ Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
 
 | parametro | valore | perché |
 |---|---|---|
-| `inTrim` | -6.0 dB | porta i picchi stimati (-6 dBFS) al target di lavoro (-12 dBFS) |
+| `inTrim` | -6.0 dB | porta i picchi stimati dal profilo (-6 dBFS) al target di lavoro (-12 dBFS) |
 | `polarity` | off  | nessun secondo microfono da allineare: la polarità resta dritta |
 
 ## 2. Noise Gate — Gate (key-filtered)
@@ -157,13 +157,13 @@ Target: **-18.0 LUFS**, ceiling **-1.0 dBFS**.
 | `ds2Mode` | split  | modo split: da quando il crossover e' vero, il modo wide abbasserebbe TUTTA la voce a ogni 's' — un pompaggio a banda larga, non una de-essatura |
 
 ## 12. Gain — Output / Mix
-*Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.*
+*La voce esce allo STESSO volume percepito con cui è entrata (level match): così si confronta il suono, non il volume. Il target di loudness è del master, non della traccia vocale. Il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.*
 
 > Gain = outGain, PRIMA del limiter (il MIX non ha equivalente stock: usa un bus parallelo)
 
 | parametro | valore | perché |
 |---|---|---|
-| `outGain` | 2.4 dB | quanto manca davvero dal livello stimato in uscita dalla catena (-20.4 dBFS) al target di -18.0 LUFS, con tetto a 4 dB: questo stadio sta PRIMA del limiter, quindi tutto quello che chiede in più se lo mangia il limiter — e un limiter che lavora non è gain staging, è un effetto. Il resto lo fa il meter di loudness |
+| `outGain` | 0.0 dB | ritocco RELATIVO sopra il level match: a 0 dB la voce accesa ha la stessa loudness della voce spenta. Prima qui si spingeva la voce verso -18.0 LUFS, che è il volume di un master finito: il plugin acceso suonava più forte, e più forte sembra sempre meglio |
 | `mix` | 78 % | compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%) |
 
 ## 13. Limiter — Limiter

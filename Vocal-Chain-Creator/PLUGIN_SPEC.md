@@ -26,7 +26,8 @@
 |----|---------|------|-------|------|---------|-------|----------|
 | inTrim | Input Trim | float | −24…+24 | – | 0 | dB | sì |
 | polarity | Polarity | bool | on/off | – | off | – | – |
-| outGain | Output | float | −24…+12 | – | 0 | dB | sì |
+| outGain | Output | float | −24…+12 | – | 0 | dB | sì (ritocco relativo sopra il level match) |
+| autoGain | Level Match | bool | on/off | – | on | – | rampa (aggiunto dopo la 1.0: id nuovo, nessun id rinominato) |
 | mix | Mix | float | 0…100 | – | 100 | % | sì |
 | bypass | Bypass | bool | on/off | – | off | – | – |
 | intensity | Intensity | float | 0…100 | – | 60 | % | sì (scala globale dell'aggressività delle regole) |

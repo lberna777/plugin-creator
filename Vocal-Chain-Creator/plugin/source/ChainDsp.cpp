@@ -158,9 +158,18 @@ void ChainDsp::prepare (double newSampleRate, int maximumBlockSize, int channels
     revPredelayLine.setMaximumDelayInSamples (static_cast<int> (sampleRate * 0.12) + maximumBlockSize);
     revPredelayLine.reset();
 
-    loudnessFollower.prepare (spec);
-    loudnessFollower.setAttackTime (400.0f);
-    loudnessFollower.setReleaseTime (400.0f);
+    for (int ch = 0; ch < kChannels; ++ch)
+    {
+        kInput[ch].prepare (sampleRate);
+        kOutput[ch].prepare (sampleRate);
+    }
+    levelScratch.setSize (1, maximumBlockSize, false, false, true);
+    hopLength = juce::jmax (1, juce::roundToInt (sampleRate * kweighting::kHopSeconds));
+    resetLevelMatchState();
+    levelMatchRampMs = settings.levelMatchRampMs;
+    levelMatchGain.reset (sampleRate, settings.levelMatchRampMs * 0.001);
+    levelMatchGain.setCurrentAndTargetValue (1.0f);
+    meters.levelMatchDb.store (0.0f);
 
     // scratch preallocati: in processBlock non si alloca
     dryScratch.setSize (numChannels, maximumBlockSize, false, false, true);
@@ -227,6 +236,11 @@ void ChainDsp::reset()
     duckEnv.reset();
     delayFeedbackState[0] = delayFeedbackState[1] = 0.0f;
 
+    // il level match riparte da zero: la stima della take precedente non vale per la prossima
+    resetLevelMatchState();
+    levelMatchGain.setCurrentAndTargetValue (1.0f);
+    meters.levelMatchDb.store (0.0f);
+
     // B24: anche gli stati che prima sopravvivevano al reset
     roomCoeffCountdown = 0;
     subCoeffCountdown = toneCoeffCountdown = tiltCoeffCountdown = 0;
@@ -245,6 +259,14 @@ void ChainDsp::reset()
 void ChainDsp::setSettings (const ChainSettings& newSettings)
 {
     settings = newSettings;
+    if (prepared && settings.levelMatchRampMs != levelMatchRampMs)
+    {
+        // reset() della SmoothedValue la ferma dov'è: si riparte dal valore corrente, niente salto
+        const auto current = levelMatchGain.getCurrentValue();
+        levelMatchRampMs = settings.levelMatchRampMs;
+        levelMatchGain.reset (sampleRate, juce::jmax (0.0f, levelMatchRampMs) * 0.001);
+        levelMatchGain.setCurrentAndTargetValue (current);
+    }
     if (prepared) updateCoefficients();
 }
 
@@ -777,6 +799,9 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
         channelPointers[ch] = full.getWritePointer (ch) + startSample;
     juce::AudioBuffer<float> buffer (channelPointers, channels, numSamples);
 
+    // 0) loudness dell'ingresso GREZZO: è quello che si sente col plugin in bypass
+    measureInput (buffer, numSamples);
+
     // 1) trim + polarità
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -898,16 +923,98 @@ void ChainDsp::processChunk (juce::AudioBuffer<float>& full, int startSample, in
         processSends (dryScratch, buffer, numSamples, bpm);
     }
 
-    // 14) output gain, poi il limiter come ULTIMO stadio: così il ceiling è davvero un tetto (B4)
+    // 14) level match + output gain (ritocco relativo), poi il limiter come ULTIMO stadio:
+    //     così il ceiling è davvero un tetto (B4). Il level match riporta la voce alla loudness
+    //     con cui è entrata: acceso o spento, il volume percepito è lo stesso.
+    updateLevelMatch (buffer, numSamples);
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        const auto gain = outputGain.getNextValue();
+        const auto gain = outputGain.getNextValue() * levelMatchGain.getNextValue();
         for (int ch = 0; ch < channels; ++ch)
             buffer.setSample (ch, sample, buffer.getSample (ch, sample) * gain);
     }
 
     if (settings.limOn) processLimiter (buffer, numSamples);
     else meters.limGr.store (0.0f);
+}
+
+void ChainDsp::resetLevelMatchState() noexcept
+{
+    for (int ch = 0; ch < kChannels; ++ch) { kInput[ch].reset(); kOutput[ch].reset(); }
+    loudnessIn.reset();
+    loudnessOut.reset();
+    for (int i = 0; i < kweighting::kHopsPerBlock; ++i) hopIn[i] = hopOut[i] = 0.0;
+    hopSumIn = hopSumOut = 0.0;
+    hopFill = hopIndex = hopsSeen = 0;
+    levelScratch.clear();
+}
+
+void ChainDsp::measureInput (const juce::AudioBuffer<float>& buffer, int numSamples) noexcept
+{
+    auto* power = levelScratch.getWritePointer (0);
+    const auto count = juce::jmin (numSamples, levelScratch.getNumSamples());
+    juce::FloatVectorOperations::clear (power, count);
+
+    for (int ch = 0; ch < juce::jmin (kChannels, buffer.getNumChannels()); ++ch)
+    {
+        const auto* data = buffer.getReadPointer (ch);
+        for (int sample = 0; sample < count; ++sample)
+        {
+            const auto y = kInput[ch].process (data[sample]);
+            power[sample] += static_cast<float> (y * y);
+        }
+    }
+}
+
+void ChainDsp::updateLevelMatch (const juce::AudioBuffer<float>& buffer, int numSamples) noexcept
+{
+    const auto* inputPower = levelScratch.getReadPointer (0);
+    const auto count = juce::jmin (numSamples, levelScratch.getNumSamples());
+    const auto channels = juce::jmin (kChannels, buffer.getNumChannels());
+
+    for (int sample = 0; sample < count; ++sample)
+    {
+        double outputPower = 0.0;
+        for (int ch = 0; ch < channels; ++ch)
+        {
+            const auto y = kOutput[ch].process (buffer.getSample (ch, sample));
+            outputPower += y * y;
+        }
+        hopSumIn  += inputPower[sample];
+        hopSumOut += outputPower;
+        if (++hopFill < hopLength) continue;
+
+        // un hop da 100 ms chiuso: il blocco da 400 ms sono gli ultimi quattro hop
+        hopIn[hopIndex]  = hopSumIn  / hopLength;
+        hopOut[hopIndex] = hopSumOut / hopLength;
+        hopIndex = (hopIndex + 1) % kweighting::kHopsPerBlock;
+        hopSumIn = hopSumOut = 0.0;
+        hopFill = 0;
+        if (++hopsSeen < kweighting::kHopsPerBlock) continue;
+
+        double blockIn = 0.0, blockOut = 0.0;
+        for (int i = 0; i < kweighting::kHopsPerBlock; ++i) { blockIn += hopIn[i]; blockOut += hopOut[i]; }
+        blockIn  /= kweighting::kHopsPerBlock;
+        blockOut /= kweighting::kHopsPerBlock;
+
+        // ingresso e uscita con i LORO gate, come due meter separati: è così che li leggerebbe un meter
+        loudnessIn.addBlock (blockIn, settings.levelMatchGateLufs, settings.levelMatchWindowS);
+        loudnessOut.addBlock (blockOut, settings.levelMatchGateLufs, settings.levelMatchWindowS);
+
+        // Nel primo tratto la stima non vale ancora (il gate parte chiuso: il primo blocco esce quasi
+        // muto e da solo chiederebbe il massimo). Si resta a 0 dB finché non c'è abbastanza segnale.
+        // La stima corre anche col level match spento: riaccenderlo è subito giusto.
+        if (settings.autoGain && loudnessIn.hasValue() && loudnessOut.hasValue()
+            && loudnessIn.gatedSeconds >= settings.levelMatchWarmupS)
+        {
+            const auto limit = juce::Decibels::decibelsToGain (settings.levelMatchMaxDb);
+            levelMatchGain.setTargetValue (juce::jlimit (1.0f / limit, limit, static_cast<float> (
+                std::sqrt (loudnessIn.gatedMean / loudnessOut.gatedMean))));
+        }
+    }
+
+    if (! settings.autoGain) levelMatchGain.setTargetValue (1.0f);
+    meters.levelMatchDb.store (gainToDb (levelMatchGain.getTargetValue()));
 }
 
 float ChainDsp::syncedDelayMs() const noexcept

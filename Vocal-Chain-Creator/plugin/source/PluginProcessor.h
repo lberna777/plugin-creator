@@ -56,6 +56,27 @@ public:
     bool  wasTouchedByHand() const noexcept                  { return touchedByHand; }
     juce::String getRulesVersion() const                     { return rulesEngine.getRulesVersion(); }
 
+    //==========================================================================
+    /*  ASCOLTA — trim misurato invece che presunto.
+
+        Il thread audio registra qualche secondo di voce VERA (finestre sopra il gate) sul segnale
+        GREZZO, prima del trim. Quando ha finito, il message thread calcola il picco di lavoro
+        (percentile dei picchi di finestra) e lo passa alle regole: l'inTrim esce da rules.json
+        come sempre, ma con il picco misurato al posto di quello presunto dal profilo.
+        Tutto preallocato: nel thread audio solo somme, massimi e una scrittura in un array. */
+    enum class ListenState : int { idle = 0, listening = 1, done = 2, cancelRequested = 3 };
+
+    /** Avvia l'ascolto. false se ce n'è già uno in corso. */
+    bool  startListening();
+    void  cancelListening();
+    ListenState getListenState() const noexcept     { return static_cast<ListenState> (listenState.load()); }
+    /** 0…1: quanta voce utile è stata raccolta. */
+    float getListenProgress() const noexcept;
+    /** Message thread: se l'ascolto è finito applica il trim misurato e torna true. */
+    bool  finishListeningIfReady();
+    /** L'ultima misura (valid == false se non si è mai ascoltato). */
+    vf::Measurement getMeasurement() const;
+
     /** Testo della ricetta per i bus aux di Logic (modo sendsMode = logic). */
     juce::String getLogicSendsRecipe() const;
 
@@ -84,6 +105,17 @@ private:
     };
     ParamCache params;
     void writePresetToParameters (const vf::Preset&);
+    void listen (const juce::AudioBuffer<float>& rawInput) noexcept;
+
+    vf::RulesEngine::LevelMatchSettings levelMatch;
+    vf::RulesEngine::ListenSettings     listenSettings;
+    std::atomic<int> listenState { 0 };
+    std::vector<float> listenWindowPeaks;         // preallocato: un picco per finestra di voce
+    std::atomic<int> listenWindows { 0 };         // finestre di voce raccolte (la UI legge il progresso)
+    int    listenNeededWindows = 0, listenWindowLength = 0, listenWindowFill = 0;
+    double listenWindowSumSquares = 0.0, listenVoicedSumSquares = 0.0;
+    float  listenWindowPeak = 0.0f;
+    juce::int64 listenVoicedSamples = 0;
 
     vf::ChainDsp chain;
     vf::Preset   lastPreset;

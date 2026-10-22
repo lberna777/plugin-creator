@@ -29,6 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 RULES_PATH = os.path.join(HERE, "data", "rules.json")
 EXAMPLES_DIR = os.path.join(ROOT, "examples")
+MEASURED_EXAMPLES_PATH = os.path.join(HERE, "data", "example_measurements.json")
 SCHEMA_VERSION = "1.0.0"
 
 EXAMPLE_PROMPTS = [
@@ -51,6 +52,7 @@ EXAMPLE_PROMPTS = [
     "voce sussurrata intima per un pezzo lento",
     "edm, voce compressa e luminosa per il club",
 ]
+
 
 # --------------------------------------------------------------------------------------
 # Valutatore di espressioni (sandbox su AST): serve a tenere i numeri nel JSON, non nel codice.
@@ -307,7 +309,17 @@ def parse_intent(prompt, rules):
 RHYTHMIC_GENRES = ("trap", "rap", "edm", "metal")
 
 
-def build_context(intent, profile, rules):
+def trim_source_text(measurement):
+    """Chi ha deciso il trim: la misura (ASCOLTA) o la stima del profilo. Va nel `why`."""
+    if measurement:
+        return f'misurati su {int(round(measurement["seconds"]))} s della tua voce'
+    return "stimati dal profilo"
+
+
+def build_context(intent, profile, rules, measurement=None):
+    """`measurement`: {"peak_dbfs", "rms_dbfs", "seconds"} da ASCOLTA, oppure None.
+    Se c'è, il picco MISURATO sostituisce quello presunto dal profilo (CLAUDE.md: le misure
+    sovrascrivono le stime, e il why dice chi ha deciso)."""
     room, mic, iface = profile["room"], profile["mic"], profile["interface"]
     ctx = dict(intent["axes"])
     ctx.update({
@@ -323,6 +335,8 @@ def build_context(intent, profile, rules):
         "presence_peak": mic.get("presence_peak", 0),
         "target_peak": iface["target_peak_dbfs"],
         "assumed_peak": iface["assumed_peak_dbfs"],
+        "measured": 1 if measurement else 0,
+        "input_peak": float(measurement["peak_dbfs"]) if measurement else iface["assumed_peak_dbfs"],
         "genre_is_rhythmic": 1 if (intent["genre"] in RHYTHMIC_GENRES) else 0,
     })
     for name in ("spoken", "rapped", "sung", "screamed", "whispered"):
@@ -335,7 +349,8 @@ def build_context(intent, profile, rules):
         ctx[name] = float(evaluate(spec["expr"], ctx))
 
     # variabili solo testuali, per i template delle motivazioni
-    ctx_text = {"pitch_class": intent["pitch_class"], "delivery": intent["delivery"], "genre": intent["genre"]}
+    ctx_text = {"pitch_class": intent["pitch_class"], "delivery": intent["delivery"], "genre": intent["genre"],
+                "trim_source": trim_source_text(measurement)}
     return ctx, ctx_text
 
 
@@ -385,13 +400,13 @@ def _resolve_param(spec, ctx, ctx_text, on_error=None):
     return out
 
 
-def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules=None):
+def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules=None, measurement=None):
     rules = rules or load_rules()
     if profile_id not in rules["source_profiles"]:
         raise ValueError(f"profilo sconosciuto: {profile_id}")
     profile = rules["source_profiles"][profile_id]
     intent = parse_intent(prompt, rules)
-    ctx, ctx_text = build_context(intent, profile, rules)
+    ctx, ctx_text = build_context(intent, profile, rules, measurement)
 
     failed_expressions = []
 
@@ -453,7 +468,7 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
     production_notes = [{"id": key, "text": text}
                         for key, text in intent.get("production_notes", {}).items()]
 
-    return {
+    preset = {
         "schema_version": SCHEMA_VERSION,
         "rules_version": rules["version"],
         "artist": intent.get("artist"),
@@ -471,6 +486,9 @@ def compile_preset(prompt, profile_id="untreated_room_focusrite_scarlett", rules
         "sends": sends,
         "warnings": warnings,
     }
+    if measurement:
+        preset["measurement"] = {k: measurement[k] for k in ("peak_dbfs", "rms_dbfs", "seconds")}
+    return preset
 
 
 # --------------------------------------------------------------------------------------
@@ -483,7 +501,8 @@ def render_text(preset):
     if preset.get("artist"):
         lines += [f'ARTISTA: {preset["artist"]}  —  {preset["artist_sound"]}']
     lines += [f'Genere: {preset["intent"]["genre"] or "—"} · registro: {preset["intent"]["pitch_class"]}'
-             f' · esecuzione: {preset["intent"]["delivery"]} · target: {preset["output"]["loudness_target_lufs"]} LUFS',
+             f' · esecuzione: {preset["intent"]["delivery"]} · uscita a volume pareggiato'
+             f' (target del master: {preset["output"]["loudness_target_lufs"]} LUFS, non applicato alla voce)',
              f'Profilo sorgente: {preset["source_profile"]["id"]}',
              "Assi: " + "  ".join(f"{k}={v:+.2f}" for k, v in axes.items()), ""]
     for mod in preset["modules"]:
@@ -521,8 +540,10 @@ def render_logic_recipe(preset, rules=None):
            f'Generata da `chain_compiler.py` (regole v{preset["rules_version"]}) '
            f'sul profilo `{preset["source_profile"]["id"]}`.',
            "Solo plugin **stock** di Logic Pro, nella strip della traccia vocale, in quest'ordine.", "",
-           f'Target: **{preset["output"]["loudness_target_lufs"]} LUFS**, '
-           f'ceiling **{preset["output"]["true_peak_ceiling_dbfs"]} dBFS**.', ""]
+           f'Ceiling **{preset["output"]["true_peak_ceiling_dbfs"]} dBFS**. '
+           "La voce deve uscire allo **stesso volume percepito** con cui entra: confronta sempre "
+           "la strip accesa e in bypass a pari volume (il plugin lo fa da solo, in Logic lo fai col Gain finale). "
+           f'Il target di {preset["output"]["loudness_target_lufs"]} LUFS è del **master**, non della traccia vocale.', ""]
     step = 0
     for entry in rules["logic_recipe"]:
         mod = by_id.get(entry["module"])
@@ -598,9 +619,13 @@ def generate_examples(check=False):
     stale, index = [], ["# Esempi generati", "",
                         "Rigenerati con `python3 tools/chain_compiler.py --examples`.",
                         "Sono il riferimento per la **parità Python ↔ C++** (vedi CHECKLIST.md).", ""]
-    for prompt in EXAMPLE_PROMPTS:
-        slug = _slug(prompt)
-        preset = compile_preset(prompt, rules=rules)
+    jobs = [(p, _slug(p), None) for p in EXAMPLE_PROMPTS]
+    # preset con il trim MISURATO (ASCOLTA): i numeri della misura sono dati, stanno in tools/data/
+    with open(MEASURED_EXAMPLES_PATH, encoding="utf-8") as fh:
+        measured = json.load(fh)["examples"]
+    jobs += [(e["prompt"], _slug(e["prompt"]) + "-misurata", e["measurement"]) for e in measured]
+    for prompt, slug, measurement in jobs:
+        preset = compile_preset(prompt, rules=rules, measurement=measurement)
         artifacts = {
             f"{slug}.preset.json": json.dumps(preset, indent=2, ensure_ascii=False, sort_keys=False) + "\n",
             f"{slug}.logic.md": render_logic_recipe(preset, rules) + "\n",
@@ -614,7 +639,7 @@ def generate_examples(check=False):
             else:
                 with open(path, "w", encoding="utf-8") as fh:
                     fh.write(content)
-        index.append(f'- `{slug}` — "{prompt}"')
+        index.append(f'- `{slug}` — "{prompt}"' + (" (trim misurato con ASCOLTA)" if measurement else ""))
     fixture_path = os.path.join(EXAMPLES_DIR, "expression_fixtures.json")
     if not check:
         write_expression_fixtures(fixture_path)
@@ -628,11 +653,11 @@ def generate_examples(check=False):
         if stale:
             print("examples/ non allineati:\n  " + "\n  ".join(stale), file=sys.stderr)
             return 1
-        print(f"examples/ allineati ({len(EXAMPLE_PROMPTS)} prompt).")
+        print(f"examples/ allineati ({len(jobs)} preset).")
         return 0
     with open(index_path, "w", encoding="utf-8") as fh:
         fh.write(index_content)
-    print(f"Generati {len(EXAMPLE_PROMPTS)} esempi in {EXAMPLES_DIR}")
+    print(f"Generati {len(jobs)} esempi in {EXAMPLES_DIR}")
     return 0
 
 
@@ -644,6 +669,8 @@ def main(argv=None):
     ap.add_argument("--format", choices=["text", "json", "recipe", "intent"], default="text")
     ap.add_argument("--examples", action="store_true", help="(ri)genera examples/")
     ap.add_argument("--check", action="store_true", help="con --examples: verifica senza scrivere")
+    ap.add_argument("--measured-peak", type=float, metavar="DBFS",
+                    help="picco misurato della tua voce (come ASCOLTA nel plugin): sostituisce la stima del profilo")
     args = ap.parse_args(argv)
 
     if args.examples:
@@ -652,7 +679,11 @@ def main(argv=None):
         ap.error("serve un prompt (oppure --examples)")
 
     rules = load_rules()
-    preset = compile_preset(args.prompt, args.profile, rules)
+    measurement = None
+    if args.measured_peak is not None:
+        measurement = {"peak_dbfs": args.measured_peak, "rms_dbfs": None,
+                       "seconds": rules["io_defaults"]["listen"]["seconds"]}
+    preset = compile_preset(args.prompt, args.profile, rules, measurement)
     if args.format == "json":
         print(json.dumps(preset, indent=2, ensure_ascii=False))
     elif args.format == "intent":

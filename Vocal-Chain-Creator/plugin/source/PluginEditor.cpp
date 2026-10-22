@@ -37,7 +37,7 @@ namespace
                        "tone3Freq", "tone3Q", "tone3Gain", "airOn", "airGain" } },
         { "ds2",     { "ds2On", "ds2Freq", "ds2Thresh", "ds2Range", "ds2Mode" } },
         { "limiter", { "limOn", "limCeiling", "limRelease" } },
-        { "out",     { "outGain", "mix" } }
+        { "out",     { "autoGain", "outGain", "mix" } }
     };
 
     void drawPlate (juce::Graphics& g, juce::Rectangle<int> area, juce::Colour base, float corner = 6.0f)
@@ -163,6 +163,12 @@ VocalForgeEditor::VocalForgeEditor (VocalForgeProcessor& p)
     artistBox.onChange = [this] { forgeFromArtist (artistBox.getSelectedId()); };
     addAndMakeVisible (artistBox);
 
+    listenButton.setTooltip ("Canta o parla qualche secondo: misuro il livello vero della tua voce "
+                             "e imposto l'Input Trim su quello, invece di indovinarlo dal profilo.");
+    listenButton.setColour (juce::TextButton::buttonColourId, accentCold.darker (0.4f));
+    listenButton.onClick = [this] { toggleListening(); };
+    addAndMakeVisible (listenButton);
+
     statusLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
     statusLabel.setColour (juce::Label::textColourId, inkDim);
     addAndMakeVisible (statusLabel);
@@ -228,6 +234,28 @@ void VocalForgeEditor::forgeFromArtist (int menuIndex)
     // il riferimento riempie il prompt: resta testo, quindi lo puoi correggere a parole
     promptBox.setText (artists[index].prompt, juce::dontSendNotification);
     forgeFromPrompt();
+}
+
+void VocalForgeEditor::toggleListening()
+{
+    if (processor.getListenState() == VocalForgeProcessor::ListenState::idle)
+        processor.startListening();
+    else
+        processor.cancelListening();
+    refreshListenButton();
+}
+
+void VocalForgeEditor::refreshListenButton()
+{
+    using State = VocalForgeProcessor::ListenState;
+    const auto state = processor.getListenState();
+    if (state == State::listening)
+        listenButton.setButtonText ("ASCOLTO " + juce::String (juce::roundToInt (processor.getListenProgress() * 100.0f))
+                                    + "%  ·  annulla");
+    else if (state == State::cancelRequested)
+        listenButton.setButtonText ("annullo...");
+    else
+        listenButton.setButtonText (processor.getMeasurement().valid ? "RIASCOLTA" : "ASCOLTA");
 }
 
 void VocalForgeEditor::selectModule (int index)
@@ -307,8 +335,13 @@ void VocalForgeEditor::rebuildControls()
 juce::String VocalForgeEditor::statusText() const
 {
     const auto& preset = processor.getLastPreset();
+    const auto measurement = processor.getMeasurement();
+    const juce::String trim = measurement.valid
+        ? "trim misurato (picco " + juce::String (measurement.peakDbfs, 1) + " dBFS)"
+        : juce::String ("trim stimato — premi ASCOLTA e canta qualche secondo");
+
     if (! processor.hasGeneratedChain())
-        return "nessuna catena generata — scrivi una richiesta e premi FORGE";
+        return "nessuna catena generata — scrivi una richiesta e premi FORGE   ·   " + trim;
 
     juce::String text;
     if (preset.artist.isNotEmpty())
@@ -316,8 +349,9 @@ juce::String VocalForgeEditor::statusText() const
     text << "genere: " << (preset.intent.genre.isNotEmpty() ? preset.intent.genre : juce::String ("—"))
          << "   ·   registro: " << preset.intent.pitchClass
          << "   ·   esecuzione: " << preset.intent.delivery
-         << "   ·   target: " << juce::String (preset.loudnessTargetLufs, 1) << " LUFS"
+         << "   ·   uscita a volume pareggiato"
          << "   ·   regole v" << processor.getRulesVersion();
+    text << "   ·   " << trim;
     if (processor.wasTouchedByHand()) text << "   ·   [ MODIFICATO A MANO ]";
     return text;
 }
@@ -411,6 +445,9 @@ void VocalForgeEditor::timerCallback()
 {
     // il preset puo' cambiare da un altro thread (setStateInformation): la UI se ne accorge qui,
     // sul message thread, invece di farsi chiamare da dove capita
+    processor.finishListeningIfReady();     // se ASCOLTA ha finito, il trim misurato si applica qui
+    refreshListenButton();
+
     const auto revision = processor.presetRevision.load();
     if (revision != lastPresetRevision)
     {
@@ -423,6 +460,7 @@ void VocalForgeEditor::timerCallback()
 
     inLevel  = smooth (inLevel,  juce::Decibels::gainToDecibels (meters.inPeak.load(), -60.0f));
     outLevel = smooth (outLevel, juce::Decibels::gainToDecibels (meters.outPeak.load(), -60.0f));
+    levelMatchDb = meters.levelMatchDb.load();
 
     const std::map<juce::String, float> gr {
         { "gate",  meters.gateGr.load() },  { "ds1", meters.ds1Gr.load() },
@@ -436,6 +474,8 @@ void VocalForgeEditor::timerCallback()
         card->repaint();
     }
     repaint (getLocalBounds().removeFromBottom (28));
+    if (processor.getListenState() != VocalForgeProcessor::ListenState::idle)
+        statusLabel.setText (statusText(), juce::dontSendNotification);
 }
 
 //==============================================================================
@@ -458,10 +498,17 @@ void VocalForgeEditor::paint (juce::Graphics& g)
 
     // meter di ingresso/uscita: codice, non serigrafia
     auto footer = getLocalBounds().removeFromBottom (26).reduced (16, 6);
+    auto matchArea = footer.removeFromRight (190);
     auto inArea = footer.removeFromLeft (footer.getWidth() / 2).reduced (4, 4);
     auto outArea = footer.reduced (4, 4);
     g.setColour (inkDim);
     g.setFont (juce::Font (juce::FontOptions (10.0f)));
+    // quanto il level match sta correggendo: negativo = la catena alzava, il plugin riabbassa
+    const auto* autoGain = processor.apvts.getRawParameterValue ("autoGain");
+    g.drawText (autoGain != nullptr && autoGain->load() > 0.5f
+                    ? "LEVEL MATCH " + juce::String (levelMatchDb, 1) + " dB"
+                    : juce::String ("LEVEL MATCH spento"),
+                matchArea, juce::Justification::centredRight);
     g.drawText ("IN", inArea.removeFromLeft (24), juce::Justification::centredLeft);
     g.drawText ("OUT", outArea.removeFromLeft (28), juce::Justification::centredLeft);
     drawMeterBar (g, inArea.toFloat(),  (inLevel  + 60.0f) / 60.0f, accentCold.withAlpha (0.85f));
@@ -488,6 +535,8 @@ void VocalForgeEditor::resized()
     auto artistRow = header.removeFromTop (26).reduced (8, 0);
     artistLabel.setBounds (artistRow.removeFromLeft (58));
     artistBox.setBounds (artistRow.removeFromLeft (260).reduced (0, 3));
+    artistRow.removeFromLeft (8);
+    listenButton.setBounds (artistRow.removeFromLeft (150).reduced (0, 2));
     statusLabel.setBounds (artistRow.withTrimmedLeft (12));
 
     auto body = area.withTrimmedTop (8);

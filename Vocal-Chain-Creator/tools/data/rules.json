@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "notes": "TUTTI i numeri del dominio stanno qui. Il codice non contiene valori DSP. Le espressioni sono valutate su un contesto piatto (assi + profilo di sorgente) con funzioni: clamp, min, max, abs, round, lerp, pos, neg.",
 
   "intent_defaults": {
@@ -26,7 +26,17 @@
     "window": 3
   },
 
-  "io_defaults": { "declared_latency_ms": 0.0, "true_peak_ceiling_dbfs": -1.0 },
+  "io_defaults": {
+    "declared_latency_ms": 0.0, "true_peak_ceiling_dbfs": -1.0,
+    "level_match": {
+      "window_s": 6.0, "gate_lufs": -70.0, "max_gain_db": 18.0, "ramp_ms": 250.0, "warmup_s": 0.4,
+      "note": "Uscita a volume pareggiato: il plugin confronta la loudness (pesatura K, BS.1770) dell'ingresso grezzo con quella dell'uscita della catena e corregge la differenza. Media esponenziale su window_s secondi, misurata come la norma (blocchi da 400 ms ogni 100 ms, gate assoluto gate_lufs e gate relativo a -10 LU) separatamente su ingresso e uscita, cioè come due meter BS.1770: la coda del riverbero nelle pause conta se si sente, il silenzio no; per i primi warmup_s secondi di segnale il guadagno resta a 0 dB (il gate parte chiuso: il primo blocco da solo direbbe +18 dB); il guadagno si muove a rampa di ramp_ms e non supera ±max_gain_db. È il motivo per cui VOCAL FORGE acceso non suona 'meglio' solo perché suona più forte."
+    },
+    "listen": {
+      "seconds": 6.0, "window_ms": 50.0, "gate_dbfs": -50.0, "peak_percentile": 95.0, "max_windows": 600,
+      "note": "Trim misurato: ASCOLTA registra seconds secondi di voce VERA (finestre da window_ms il cui RMS supera gate_dbfs: il silenzio non conta). Il picco di lavoro è il percentile peak_percentile dei picchi di finestra, non il massimo assoluto: una plosiva da sola non deve decidere il trim. max_windows è la memoria preallocata (30 s a 50 ms)."
+    }
+  },
 
   "pitch_factors": { "low": 0.85, "mid": 1.0, "high": 1.15 },
 
@@ -233,7 +243,7 @@
     "sat_in":     { "expr": "c2_in - gr2_target + c2_makeup", "note": "picco stimato che arriva alla saturazione, dopo i due compressori." },
     "sat_excess": { "expr": "sat_in - work_peak", "note": "di quanto la catena ha alzato (o abbassato) il segnale rispetto al livello di lavoro. Se è positivo la saturazione riceve un segnale più caldo del previsto e il drive va ridotto: è questo il legame che mancava fra saturazione e livello." },
 
-    "chain_out_rms": { "expr": "work_rms + (c1_makeup - gr1_target) + (c2_makeup - gr2_target)", "note": "livello medio stimato in uscita dalla catena, PRIMA dell'output: da qui si calcola quanto manca al target di loudness." }
+    "chain_out_rms": { "expr": "work_rms + (c1_makeup - gr1_target) + (c2_makeup - gr2_target)", "note": "livello medio stimato in uscita dalla catena, PRIMA del level match: serve ai test di gain staging per sapere quanto la catena alza o abbassa prima che il level match lo riporti a pari." }
   },
 
   "chain": [
@@ -243,7 +253,7 @@
       "enabled": "true",
       "why_on": "Il gain della Scarlett viene quasi sempre impostato a occhio: porto il segnale al livello di lavoro prima che qualunque soglia in dB abbia senso.",
       "params": {
-        "inTrim":   { "expr": "clamp(target_peak - assumed_peak, -24, 24)", "round": 1, "unit": "dB", "why": "porta i picchi stimati ({assumed_peak} dBFS) al target di lavoro ({target_peak} dBFS)" },
+        "inTrim":   { "expr": "clamp(target_peak - input_peak, -24, 24)", "round": 1, "unit": "dB", "why": "porta i picchi {trim_source} ({input_peak} dBFS) al target di lavoro ({target_peak} dBFS)" },
         "polarity": { "value": false, "why": "nessun secondo microfono da allineare: la polarità resta dritta" }
       }
     },
@@ -407,9 +417,9 @@
       "id": "out",
       "label": "Output / Mix",
       "enabled": "true",
-      "why_on": "Porta al target di loudness dichiarato; il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
+      "why_on": "La voce esce allo STESSO volume percepito con cui è entrata (level match): così si confronta il suono, non il volume. Il target di loudness è del master, non della traccia vocale. Il MIX è compressione parallela di tutta la catena, la via di fuga quando è 'troppo lavorata'.",
       "params": {
-        "outGain": { "expr": "clamp(loudness_target - chain_out_rms, -24, 4)", "round": 1, "unit": "dB", "why": "quanto manca davvero dal livello stimato in uscita dalla catena ({chain_out_rms} dBFS) al target di {loudness_target} LUFS, con tetto a 4 dB: questo stadio sta PRIMA del limiter, quindi tutto quello che chiede in più se lo mangia il limiter — e un limiter che lavora non è gain staging, è un effetto. Il resto lo fa il meter di loudness" },
+        "outGain": { "expr": "0", "round": 1, "unit": "dB", "why": "ritocco RELATIVO sopra il level match: a 0 dB la voce accesa ha la stessa loudness della voce spenta. Prima qui si spingeva la voce verso {loudness_target} LUFS, che è il volume di un master finito: il plugin acceso suonava più forte, e più forte sembra sempre meglio" },
         "mix":     { "expr": "clamp(100 - 45 * pos(density - 0.3), 78, 100)", "round": 0, "unit": "%", "why": "compressione parallela: già da densità media rientra un po' di segnale non lavorato, ed è la valvola di sfogo contro il suono impastato (dry al massimo 22%)" }
       }
     }

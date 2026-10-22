@@ -5,7 +5,7 @@ del plugin, non il suo suono soltanto. I moduli si accendono e si tarano — non
 
 ```
 in
- 1 ── TRIM + POLARITY          porta il segnale al livello di lavoro (Scarlett gain sbagliato = caso normale)
+ 1 ── TRIM + POLARITY          porta il segnale al livello di lavoro (misurato con ASCOLTA, o stimato dal profilo)
  2 ── GATE (key-filtered)      taglia il noise floor della stanza PRIMA che qualsiasi cosa lo amplifichi
  3 ── HPF                      toglie plosive e modi bassi PRIMA dei detector dinamici
  4 ── ROOM-TAMER (3 notch din.) attenua le risonanze SOLO quando suonano, non sempre
@@ -17,7 +17,7 @@ in
 10 ── EQ TONALE (3 bande + air) qui si AGGIUNGE: corpo, presenza, aria
 11 ── DE-ESSER 2               ripulisce le sibilanti che saturazione e boost hanno rigenerato
 12 ── LIMITER                  tetto di sicurezza, lookahead ≤ 2 ms, dichiarato
-13 ── OUTPUT (+ MIX)           porta al target di loudness; MIX per compressione parallela
+13 ── OUTPUT (+ MIX)           LEVEL MATCH: esce alla loudness con cui è entrata; MIX per compressione parallela
 out
 ```
 
@@ -25,7 +25,7 @@ out
 
 | # | Modulo | Perché proprio qui |
 |---|---|---|
-| 1 | Trim | tutto ciò che segue ha soglie in dB: se il livello d'ingresso non è normalizzato, ogni soglia è a caso. |
+| 1 | Trim | tutto ciò che segue ha soglie in dB: se il livello d'ingresso non è normalizzato, ogni soglia è a caso. Con **ASCOLTA** il picco si misura su qualche secondo di voce vera (percentile dei picchi, il silenzio non conta) invece di presumerlo dal profilo. |
 | 2 | Gate | se il gate stesse dopo la compressione, il rumore sarebbe già stato tirato su di 10 dB e non richiudibile. Il detector è **key-filtered** sulla banda della voce: altrimenti un ronzio a 50 Hz o una ventola a 8 kHz lo aprono. |
 | 3 | HPF | i transienti di plosiva sotto i 100 Hz fanno lavorare il compressore su energia che non è voce. Vanno tolti prima. |
 | 4 | Room-tamer | dinamico e non statico: la risonanza della stanza si eccita solo su certe note. Un notch fisso toglierebbe corpo a tutte le altre. Prima dell'EQ statica perché è correzione, non gusto. |
@@ -37,7 +37,7 @@ out
 | 10 | EQ tonale | qui si aggiunge, su un segnale già pulito e già denso: i boost non riportano su fango o rumore. |
 | 11 | De-esser 2 | saturazione e boost di presenza/aria **rigenerano** sibilanti. Un solo de-esser all'inizio non basta, e uno solo alla fine dovrebbe lavorare troppo. |
 | 12 | Limiter | tetto, non effetto. Se il limiter lavora più di 2–3 dB, sono sbagliati gli stadi prima. |
-| 13 | Output + Mix | il MIX è compressione parallela di tutta la catena: la via di fuga quando "troppo lavorato". |
+| 13 | Output + Mix | **level match**: l'uscita torna alla loudness dell'ingresso grezzo (pesatura K e gate BS.1770, misurati come due meter separati), così acceso e spento si confrontano a pari volume — più forte sembra sempre meglio, e un plugin che alza non si può giudicare. Il target di loudness è del **master**, non della traccia vocale: sta nel preset solo come riferimento. `outGain` è un ritocco relativo sopra il level match. Il MIX è compressione parallela di tutta la catena: la via di fuga quando "troppo lavorato". |
 
 ## I send (riverbero e delay): bus PARALLELI, mai in serie
 

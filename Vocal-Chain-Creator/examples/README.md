@@ -21,3 +21,4 @@ Sono il riferimento per la **parità Python ↔ C++** (vedi CHECKLIST.md).
 - `voce-femminile-acuta-cristallina-con-molte-esse-` — "voce femminile acuta, cristallina, con molte esse da controllare"
 - `voce-sussurrata-intima-per-un-pezzo-lento` — "voce sussurrata intima per un pezzo lento"
 - `edm-voce-compressa-e-luminosa-per-il-club` — "edm, voce compressa e luminosa per il club"
+- `voce-trap-aggressiva-ma-non-stridula-misurata` — "voce trap aggressiva ma non stridula" (trim misurato con ASCOLTA)
