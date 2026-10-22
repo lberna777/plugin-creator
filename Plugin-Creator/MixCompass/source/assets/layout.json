@@ -1,0 +1,30 @@
+{
+  "_comment": "Coordinate NORMALIZZATE 0..1 della finestra (Layout.h). MVP vettoriale: niente foto di riferimento, le posizioni sono una griglia dichiarata qui e non nel .cpp.",
+  "window": { "w": 1040, "h": 660, "minW": 820, "minH": 520, "maxW": 2080, "maxH": 1320 },
+
+  "top": {
+    "title":   { "x0": 0.015, "y0": 0.018, "x1": 0.215, "y1": 0.078 },
+    "load":    { "x0": 0.225, "y0": 0.022, "x1": 0.375, "y1": 0.074 },
+    "refName": { "x0": 0.385, "y0": 0.022, "x1": 0.640, "y1": 0.074 },
+    "ab":      { "x0": 0.650, "y0": 0.022, "x1": 0.800, "y1": 0.074 },
+    "match":   { "x0": 0.808, "y0": 0.022, "x1": 0.895, "y1": 0.074 },
+    "reset":   { "x0": 0.903, "y0": 0.022, "x1": 0.985, "y1": 0.074 }
+  },
+
+  "spectrum": { "x0": 0.015, "y0": 0.095, "x1": 0.665, "y1": 0.610 },
+  "meters":   { "x0": 0.675, "y0": 0.095, "x1": 0.985, "y1": 0.610 },
+  "findings": { "x0": 0.015, "y0": 0.625, "x1": 0.985, "y1": 0.982 },
+
+  "spectrumView": {
+    "_comment": "Curve = livello di banda MENO l'integrated del proprio segnale (confronto a parità di loudness). La parte bassa mostra la differenza mix - riferimento.",
+    "topDb": 0, "bottomDb": -45, "gridStepDb": 15,
+    "diffRangeDb": 9, "diffShare": 0.30,
+    "fMin": 20, "fMax": 20000,
+    "pad": 0.012, "labelH": 0.06, "curveW": 2.0
+  },
+
+  "metersView": { "pad": 0.04, "rowH": 0.074, "colName": 0.0, "colMix": 0.56, "colRef": 0.79, "sectionGap": 0.03 },
+  "findingsView": { "pad": 0.022, "titleH": 0.12, "gap": 0.022 },
+
+  "fonts": { "title": 0.040, "control": 0.024, "body": 0.024, "small": 0.019 }
+}
