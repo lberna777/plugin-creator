@@ -25,8 +25,8 @@ passare lì, dirlo a Lorenzo.
 ## Modelli: chi pensa e chi esegue (advisor pattern)
 
 Deciso da Lorenzo il 2026-10-20. Copia identica nei `CLAUDE.md` di cockpit, Developing,
-plugin-creator, carguy e bibiciclo; l'originale è in cockpit: se lo cambi, ricopialo nelle altre.
-I due subagenti stanno in `.claude/agents/`, identici in tutte e cinque le repo.
+plugin-creator, carguy, bibiciclo e barca-halloween; l'originale è in cockpit: se lo cambi,
+ricopialo nelle altre. I due subagenti stanno in `.claude/agents/`, identici in tutte e sei le repo.
 
 | Livello | Chi | Che cosa fa |
 | --- | --- | --- |

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Hook Stop: al 50% della finestra di contesto ordina a Claude il passaggio di consegne.
 
-Copia identica in cockpit, Developing, plugin-creator, carguy, bibiciclo (.claude/hooks/).
+Copia identica in cockpit, Developing, plugin-creator, carguy, bibiciclo, barca-halloween
+(.claude/hooks/).
 L'originale è quello di cockpit: se lo cambi, ricopialo nelle altre repo.
 
 Legge dalla trascrizione l'ultimo messaggio di Claude e somma i token in ingresso (input +

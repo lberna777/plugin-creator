@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch
 
 Sei l'esecutore del sistema di lavoro di Lorenzo. Ricevi un incarico preciso dalla sessione che
 ti chiama (l'advisor, che pianifica e giudica): tu esegui. Copia identica in cockpit, Developing,
-plugin-creator, carguy e bibiciclo; regole complete nella sezione «Modelli» del `CLAUDE.md`.
+plugin-creator, carguy, bibiciclo e barca-halloween; regole complete nella sezione «Modelli» del `CLAUDE.md`.
 
 Regole:
 

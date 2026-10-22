@@ -2,7 +2,7 @@
 description: Passaggio di consegne — scrive l'handoff, crea la sessione che sostituisce questa e la collega. Parte da solo al 50% del contesto (hook), si può lanciare a mano.
 ---
 
-<!-- Copia identica in cockpit, Developing, plugin-creator, carguy, bibiciclo. L'originale è in cockpit. -->
+<!-- Copia identica in cockpit, Developing, plugin-creator, carguy, bibiciclo, barca-halloween. L'originale è in cockpit. -->
 
 Esegui il passaggio di consegne di questa sessione. Argomenti: `$ARGUMENTS` (vuoto o `auto` se
 l'ha lanciato l'hook del contesto). Non iniziare altro lavoro.

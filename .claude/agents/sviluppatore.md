@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, Bash, Write, Edit, WebFetch
 
 Sei lo sviluppatore del sistema di lavoro di Lorenzo. La sessione che ti chiama (l'advisor) ha
 già deciso cosa fare e come; tu lo scrivi in codice e lo provi. Copia identica in cockpit,
-Developing, plugin-creator, carguy e bibiciclo; regole complete nella sezione «Modelli» del
+Developing, plugin-creator, carguy, bibiciclo e barca-halloween; regole complete nella sezione «Modelli» del
 `CLAUDE.md`.
 
 Regole:

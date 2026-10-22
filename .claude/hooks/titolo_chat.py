@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Hook UserPromptSubmit: allinea titolo ed etichetta della chat al suo gruppo.
 
-Copia identica in cockpit, Developing, plugin-creator, carguy, bibiciclo (.claude/hooks/).
+Copia identica in cockpit, Developing, plugin-creator, carguy, bibiciclo, barca-halloween
+(.claude/hooks/).
 L'originale è quello di cockpit: se lo cambi, ricopialo nelle altre repo. Gruppi e nomi:
 cockpit, Vault/claude/come_lavorare.md.
 
@@ -17,6 +18,8 @@ import tempfile
 
 STUDIO = ("/sessione", "/lab", "/lezione", "/appunti", "/ripassa", "/simula", "/flusso", "/stato",
           "/lacune", "/piano", "/pianifica", "/chiudi", "/verifica", "/pdf-batch")
+# Progetti per divertimento (gruppo Fun): una repo autonoma per progetto.
+FUN = ("barca-halloween",)
 
 
 def repo_corrente():
@@ -47,6 +50,8 @@ def gruppo(repo, testo):
         return "CarGuy · carguy", "carguy"
     if repo == "bibiciclo":
         return "BibiCiclo · bibiciclo", "bibiciclo"
+    if repo in FUN:
+        return f"Fun · {repo}", "fun"
     return None, None
 
 
